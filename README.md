@@ -99,15 +99,14 @@ GitHub Actions deploy uses FTP and requires these repository secrets:
 - `FTP_SERVER`
 - `FTP_USERNAME`
 - `FTP_PASSWORD`
-- `FTP_TARGET_DIR`
 
-`FTP_TARGET_DIR` should point to the server directory that maps to `https://bph.com.ua/db`, for example:
+The workflow deploys to:
 
 ```text
 domains/bph.com.ua/public_html/public/db/
 ```
 
-The deploy workflow excludes `.git`, `.github`, `docs`, `README.md`, local temp files, and `config/config.php`.
+The deploy workflow excludes `.git`, `.github`, `docs`, `README.md`, local temp files, and `config/config.php`. It does deploy `config/.htaccess` to help block public access to manually uploaded config.
 
 After deploy, test:
 

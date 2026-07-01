@@ -20,6 +20,8 @@ Required production setting:
 'base_path' => '/db',
 ```
 
+The workflow deploys `config/.htaccess` but excludes `config/config.php`.
+
 ## Initial CEO Bootstrap Is Manual
 
 At least one user must be manually prepared in the database with:

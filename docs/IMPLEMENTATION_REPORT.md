@@ -9,6 +9,7 @@
 - `assets/app.css`
 - `auth.php`
 - `bootstrap.php`
+- `config/.htaccess`
 - `config/config.example.php`
 - `db.php`
 - `docs/IMPLEMENTATION_REPORT.md`
@@ -34,6 +35,8 @@ Recent update:
 - Added `docs/KNOWN_ISSUES.md`.
 - Updated README deploy notes.
 - Initialized the local Git repository and configured `origin`.
+- Updated deploy workflow to use the fixed `/db` target directory and only the configured FTP secrets.
+- Added `config/.htaccess` to help block public access to manually uploaded config.
 
 ## How Authentication Works
 
@@ -109,12 +112,14 @@ No schema changes, migrations, table creation, table deletion, or destructive qu
 - The real production `config/config.php` must be created and maintained manually outside Git.
 - The first CEO user still needs to be seeded manually in the existing `users` table.
 - `.htaccess` protection depends on hosting configuration; it should be manually checked after deploy.
+- Earlier workflow draft referenced `FTP_TARGET_DIR`; it was replaced with the fixed requested target path.
 
 ## Recommendations
 
 - Run `php -l` on all PHP files before deploy or directly on the hosting server.
 - Confirm the hosting PHP version is PHP 7.4 or newer.
 - Confirm `https://bph.com.ua/db/config/config.php` is not publicly readable after deploy.
+- Confirm `config/.htaccess` was deployed.
 - Use a strong temporary CEO password, then change it through the CEO user access page.
 - Add server-level basic request throttling or a lightweight login throttle before giving access to a wider team.
 
@@ -129,8 +134,9 @@ No schema changes, migrations, table creation, table deletion, or destructive qu
 ## Files To Review Manually
 
 - `config/config.php` on the server, because it is not committed.
-- `.github/workflows/deploy.yml`, especially `FTP_TARGET_DIR`.
+- `.github/workflows/deploy.yml`, especially the fixed target directory.
 - `.htaccess`, after deployment, to confirm config and internal PHP files are blocked.
+- `config/.htaccess`, after deployment, to confirm the config directory is blocked.
 - `users.php`, for CEO-only access behavior.
 - `auth.php`, for login rules.
 
@@ -204,9 +210,8 @@ Then:
    - `FTP_SERVER`
    - `FTP_USERNAME`
    - `FTP_PASSWORD`
-   - `FTP_TARGET_DIR`
 
-2. Set `FTP_TARGET_DIR` to the server folder that maps to `/db`, likely:
+2. Confirm the workflow target maps to `/db`:
 
    ```text
    domains/bph.com.ua/public_html/public/db/
@@ -239,7 +244,7 @@ The workflow uses `SamKirkland/FTP-Deploy-Action@v4.3.5`.
 It deploys from the repository root to:
 
 ```text
-${{ secrets.FTP_TARGET_DIR }}
+domains/bph.com.ua/public_html/public/db/
 ```
 
 It excludes:
@@ -253,6 +258,12 @@ It excludes:
 - local temp/log files
 
 The workflow does not contain FTP credentials or production config.
+
+Exact secrets used:
+
+- `FTP_SERVER`
+- `FTP_USERNAME`
+- `FTP_PASSWORD`
 
 ## Test After Deploy
 

@@ -53,9 +53,14 @@ Deploy with GitHub Actions and FTP using repository secrets:
 - `FTP_SERVER`
 - `FTP_USERNAME`
 - `FTP_PASSWORD`
-- `FTP_TARGET_DIR`
 
 Do not commit or deploy real credentials from Git.
+
+Deploy target is fixed in the workflow:
+
+```text
+domains/bph.com.ua/public_html/public/db/
+```
 
 ## Out Of Scope
 

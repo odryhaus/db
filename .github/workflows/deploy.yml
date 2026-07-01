@@ -1,4 +1,4 @@
-name: Deploy .BRAND DB
+name: Deploy DB
 
 on:
   push:
@@ -22,13 +22,13 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./
-          server-dir: ${{ secrets.FTP_TARGET_DIR }}
+          server-dir: domains/bph.com.ua/public_html/public/db/
           exclude: |
             **/.git*
             **/.git*/**
             **/.github/**
             **/.DS_Store
-            **/docs/**
+            docs/**
             README.md
             config/config.php
             *.log

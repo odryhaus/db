@@ -1,8 +1,40 @@
 # Next Steps
 
+## Deploy Test Checklist
+
+Before testing login, manually create production `config/config.php` on the server.
+
+Checklist:
+
+- GitHub repository secrets exist: `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD`.
+- GitHub Actions workflow finishes successfully.
+- `https://bph.com.ua/db/login.php` loads the login form.
+- `https://bph.com.ua/db/config/config.php` is not publicly readable.
+- Invalid login shows only a generic error.
+- Prepared CEO user can log in.
+- CEO can open `https://bph.com.ua/db/users.php`.
+- Manager/accountant users can open the protected home page but cannot open `users.php`.
+- Logout redirects back to login.
+
+## Production Config Setup Reminder
+
+`config/config.php` is ignored by Git and excluded from deploy. Create it manually on the server from `config/config.example.php`.
+
+Required production app setting:
+
+```php
+'base_path' => '/db',
+```
+
+At least one CEO user must be manually prepared in `users`:
+
+- `db_password_hash`
+- `db_role = 'ceo'`
+- `db_active = 1`
+
 ## Next Milestone
 
-Monthly Sales Dashboard.
+Money Dashboard v0.1.
 
 The next milestone should show:
 
