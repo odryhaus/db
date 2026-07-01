@@ -1,0 +1,11 @@
+Options -Indexes
+DirectoryIndex index.php
+
+<FilesMatch "^(bootstrap|auth|db|helpers)\.php$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^config/ - [F,L]
+</IfModule>
