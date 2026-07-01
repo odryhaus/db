@@ -22,13 +22,23 @@ Required production setting:
 
 The workflow deploys `config/.htaccess` but excludes `config/config.php`.
 
-## Initial CEO Bootstrap Is Manual
+## Setup Tool Removed
 
-At least one user must be manually prepared in the database with:
+`setup-ceo.php` was used only for one-time CEO setup and has been removed from the repository. It is also excluded from deployment.
 
-- `db_password_hash`
-- `db_role = 'ceo'`
-- `db_active = 1`
+If CEO access is lost later, recover access directly through the database or a reviewed temporary recovery tool.
+
+## Dashboard Values Are Placeholders
+
+Money Dashboard v0.1 shows static placeholder values:
+
+- Sales fact: `0 UAH`
+- Paid: `0 UAH`
+- Unpaid: `0 UAH`
+- We owe: `0 UAH`
+- Progress: `0%`
+
+Real order and payment calculations are intentionally not implemented yet.
 
 ## No Audit Log Yet
 

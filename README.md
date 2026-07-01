@@ -50,14 +50,6 @@ Not included yet:
 
 For production deployment at `https://bph.com.ua/db`, set `app.base_path` to `/db`.
 
-For one-time CEO setup, set a long random `app.setup_key` in `config/config.php`, then open:
-
-```text
-https://bph.com.ua/db/setup-ceo.php?key=YOUR_SETUP_KEY
-```
-
-Delete `setup-ceo.php` from the server or disable `setup_key` immediately after the first CEO password is created.
-
 ## Config Setup
 
 Real credentials belong only in:
@@ -85,6 +77,16 @@ Used fields:
 - `db_last_login_at`
 
 Do not use `users.username` or `users.password` for this project.
+
+## Dashboard
+
+Money Dashboard v0.1 is the protected home page. It shows the monthly target and placeholder money values until real order data is connected.
+
+Current monthly target:
+
+```text
+4,000,000 UAH
+```
 
 ## Deploy Notes
 
@@ -132,4 +134,4 @@ https://bph.com.ua/db/login.php
 - Does not show password hashes.
 - Uses CSRF tokens for POST forms.
 - Keeps real DB credentials out of Git.
-- `setup-ceo.php` requires a setup key from `config/config.php` and must be removed or disabled after first use.
+- `setup-ceo.php` was a temporary setup tool and must not remain deployed.

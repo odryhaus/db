@@ -186,6 +186,113 @@ button,
     color: var(--muted);
 }
 
+.dashboard-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.8fr) minmax(260px, .9fr);
+    gap: 24px;
+    align-items: stretch;
+}
+
+.dashboard-hero-main strong {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 18px;
+}
+
+.dashboard-hero-main h2 {
+    margin-bottom: 18px;
+    font-size: clamp(30px, 6vw, 56px);
+    line-height: 1.05;
+}
+
+.dashboard-user {
+    display: grid;
+    align-content: center;
+    gap: 18px;
+    border-left: 1px solid var(--line);
+    padding-left: 24px;
+}
+
+.dashboard-user strong {
+    display: block;
+    font-size: 20px;
+}
+
+.dashboard-user small {
+    color: var(--muted);
+}
+
+.progress-track {
+    height: 12px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e5e7eb;
+}
+
+.progress-track span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+}
+
+.progress-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 10px;
+    color: var(--muted);
+}
+
+.progress-row strong {
+    margin: 0;
+    color: var(--text);
+}
+
+.money-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.money-card {
+    min-height: 132px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 18px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+}
+
+.money-card strong {
+    display: block;
+    margin-top: 14px;
+    font-size: clamp(24px, 4vw, 36px);
+    line-height: 1.05;
+    white-space: nowrap;
+}
+
+.money-card.target {
+    border-color: var(--accent);
+}
+
+.action-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.action-panel h2 {
+    margin-bottom: 6px;
+}
+
+.action-panel p {
+    margin-bottom: 0;
+    color: var(--muted);
+}
+
 .table-panel {
     padding: 0;
     overflow: hidden;
@@ -226,7 +333,9 @@ tr:last-child td {
 
 @media (max-width: 680px) {
     .topbar,
-    .meta-grid {
+    .meta-grid,
+    .dashboard-hero,
+    .money-grid {
         grid-template-columns: 1fr;
         display: grid;
     }
@@ -234,5 +343,20 @@ tr:last-child td {
     .nav {
         justify-content: start;
         flex-wrap: wrap;
+    }
+
+    .dashboard-user {
+        border-left: 0;
+        border-top: 1px solid var(--line);
+        padding-left: 0;
+        padding-top: 18px;
+    }
+
+    .money-card {
+        min-height: 112px;
+    }
+
+    .money-card strong {
+        white-space: normal;
     }
 }

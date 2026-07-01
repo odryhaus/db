@@ -31,5 +31,6 @@ jobs:
             docs/**
             README.md
             config/config.php
+            setup-ceo.php
             *.log
             *.tmp

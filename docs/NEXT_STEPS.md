@@ -2,7 +2,7 @@
 
 ## Deploy Test Checklist
 
-Before testing login, manually create production `config/config.php` on the server.
+Production auth is already live. Use this checklist after each deploy:
 
 Checklist:
 
@@ -10,15 +10,17 @@ Checklist:
 - GitHub Actions workflow finishes successfully.
 - `https://bph.com.ua/db/login.php` loads the login form.
 - `https://bph.com.ua/db/config/config.php` is not publicly readable.
+- `https://bph.com.ua/db/setup-ceo.php` is not available.
 - Invalid login shows only a generic error.
-- Prepared CEO user can log in.
+- CEO user can log in.
 - CEO can open `https://bph.com.ua/db/users.php`.
-- Manager/accountant users can open the protected home page but cannot open `users.php`.
+- CEO, accountant, and manager can open the protected money dashboard.
+- Manager/accountant users cannot see or open `users.php`.
 - Logout redirects back to login.
 
 ## Production Config Setup Reminder
 
-`config/config.php` is ignored by Git and excluded from deploy. Create it manually on the server from `config/config.example.php`.
+`config/config.php` is ignored by Git and excluded from deploy. Do not commit or overwrite production config.
 
 Required production app setting:
 
@@ -26,15 +28,15 @@ Required production app setting:
 'base_path' => '/db',
 ```
 
-At least one CEO user must be manually prepared in `users`:
+The old setup key was disabled manually in production and should remain disabled.
 
-- `db_password_hash`
-- `db_role = 'ceo'`
-- `db_active = 1`
+## Current Dashboard
+
+Money Dashboard v0.1 is now a placeholder dashboard. It shows the 4,000,000 UAH monthly target and zero placeholder values until real order data is connected.
 
 ## Next Milestone
 
-Money Dashboard v0.1.
+Money Dashboard v0.2 — inspect existing orders/managers tables and calculate real monthly sales from the local database if possible.
 
 The next milestone should show:
 
