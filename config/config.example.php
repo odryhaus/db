@@ -15,4 +15,8 @@ return [
         'timezone' => 'Europe/Kiev',
         'debug' => false,
     ],
+    'keycrm' => [
+        'base_url' => 'https://openapi.keycrm.app/v1',
+        'api_key' => 'CHANGE_ME_IN_REAL_CONFIG',
+    ],
 ];

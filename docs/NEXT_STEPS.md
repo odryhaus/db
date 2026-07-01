@@ -38,7 +38,29 @@ Money Dashboard v0.1 is now a placeholder dashboard. It shows the 4,000,000 UAH 
 
 Money Dashboard v0.2 — inspect existing orders/managers tables and calculate real monthly sales from the local database if possible.
 
-The next milestone should show:
+Planning document:
+
+```text
+docs/CRM_SYNC_PLAN.md
+```
+
+Inspection page:
+
+```text
+https://bph.com.ua/db/keycrm_debug_order.php?order_id=9232
+```
+
+The next milestone should:
+
+- Copy back the debug output for order `9232`.
+- Inspect the existing `orders` table and confirm why it is outdated.
+- Inspect any users/managers/order-related local tables.
+- Decide whether to add new additive cache tables.
+- Build server-side sync for current month + previous month only.
+- Keep KeyCRM calls out of the browser.
+- Keep the dashboard reading from local cache only.
+
+The next dashboard should show:
 
 - Selected month.
 - Total order amount for the month.
@@ -47,6 +69,7 @@ The next milestone should show:
 - Number of orders.
 - Progress toward 4,000,000 UAH.
 - List of unpaid orders.
+- Managers if available.
 
 ## Database Tables To Inspect Next
 

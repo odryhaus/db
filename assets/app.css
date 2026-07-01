@@ -293,6 +293,67 @@ button,
     color: var(--muted);
 }
 
+.inline-form {
+    display: flex;
+    align-items: end;
+    gap: 12px;
+}
+
+.inline-form label {
+    flex: 1;
+}
+
+.debug-panel h2 {
+    margin-bottom: 14px;
+}
+
+.debug-list {
+    display: grid;
+    grid-template-columns: minmax(180px, .5fr) minmax(0, 1fr);
+    gap: 10px 16px;
+    margin: 0;
+}
+
+.debug-list dt {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.debug-list dd {
+    margin: 0;
+    word-break: break-word;
+}
+
+.debug-list.compact {
+    grid-template-columns: minmax(160px, .8fr) minmax(0, 1fr);
+    font-size: 14px;
+}
+
+.debug-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.debug-json {
+    max-height: 560px;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #111827;
+    color: #f9fafb;
+    padding: 16px;
+    font-size: 13px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+}
+
+.muted {
+    color: var(--muted);
+}
+
 .table-panel {
     padding: 0;
     overflow: hidden;
@@ -335,7 +396,9 @@ tr:last-child td {
     .topbar,
     .meta-grid,
     .dashboard-hero,
-    .money-grid {
+    .money-grid,
+    .debug-grid,
+    .debug-list {
         grid-template-columns: 1fr;
         display: grid;
     }
@@ -358,5 +421,10 @@ tr:last-child td {
 
     .money-card strong {
         white-space: normal;
+    }
+
+    .inline-form {
+        display: grid;
+        align-items: stretch;
     }
 }
