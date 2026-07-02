@@ -41,6 +41,8 @@ This update fixes invoice numbering, PDF naming, recipient handling, and prepare
 - Generated PDF file names use `INV_<invoice_number>.pdf` for invoices and `DN_<invoice_number>.pdf` for delivery notes.
 - The invoice list and edit header show a `PDF` button instead of `File`; it downloads the real PDF as an attachment.
 - Invoice generation buttons now submit their own action directly, without a hidden `save_invoice` action overriding them.
+- Successful PDF generation now immediately redirects to the authenticated download endpoint.
+- If the server cannot render PDF, the page shows a clear Ukrainian error that `wkhtmltopdf`/PDF rendering is unavailable.
 - Buyer/contact and company/legal recipient are separated:
   - buyer/contact = contact person
   - company/legal entity = invoice recipient/payer

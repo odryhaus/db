@@ -931,7 +931,10 @@ if (is_post()) {
                                 'pdf_file_path' => $generated['path'],
                                 'id' => $invoiceId,
                             ]);
-                            $message = $generated['is_pdf'] ? 'PDF saved.' : 'Printable HTML saved. Install wkhtmltopdf on server for automatic PDF files.';
+                            if ($generated['is_pdf']) {
+                                redirect_to('/invoices.php?download=' . $invoiceId);
+                            }
+                            $error = 'PDF не створено: на сервері не знайдено wkhtmltopdf або PDF-рендер вимкнений. Збережено тільки HTML-шаблон.';
                         }
                     } else {
                         $message = 'Invoice saved.';
@@ -1200,8 +1203,8 @@ foreach ($invoices as $invoiceRow) {
 
                     <div class="invoice-actions">
                         <button type="submit" name="action" value="save_invoice">Зберегти</button>
-                        <button type="submit" name="action" value="generate_invoice">Зберегти і сформувати рахунок</button>
-                        <button type="submit" name="action" value="generate_delivery" class="button-secondary">Зберегти і сформувати видаткову</button>
+                        <button type="submit" name="action" value="generate_invoice">Сформувати і завантажити PDF</button>
+                        <button type="submit" name="action" value="generate_delivery" class="button-secondary">Сформувати видаткову PDF</button>
                         <button type="submit" name="action" value="use_detailed" class="button-secondary">Use detailed CRM products</button>
                         <button type="submit" name="action" value="collapse_one" class="button-secondary">Collapse to one product line</button>
                         <label class="collapse-field">
