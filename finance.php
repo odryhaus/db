@@ -47,6 +47,115 @@ function ensure_finance_tables(): void
     ");
 }
 
+function ensure_invoice_tables(): void
+{
+    $pdo = db();
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_our_companies (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            short_name VARCHAR(100) NOT NULL,
+            legal_name VARCHAR(255) NOT NULL,
+            edrpou VARCHAR(50) NULL,
+            iban VARCHAR(64) NULL,
+            bank VARCHAR(255) NULL,
+            address VARCHAR(255) NULL,
+            email VARCHAR(150) NULL,
+            phone VARCHAR(120) NULL,
+            accountant_email VARCHAR(150) NULL,
+            accountant_phone VARCHAR(120) NULL,
+            tax_mode ENUM('single_tax_no_vat','vat_20') NOT NULL DEFAULT 'single_tax_no_vat',
+            allowed_item_type ENUM('products_only','services_allowed') NOT NULL DEFAULT 'products_only',
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_is_active (is_active),
+            KEY idx_short_name (short_name)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_invoices (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            keycrm_order_id INT UNSIGNED NULL,
+            invoice_number VARCHAR(80) NOT NULL,
+            invoice_date DATE NOT NULL,
+            document_type ENUM('invoice','delivery_note') NOT NULL DEFAULT 'invoice',
+            seller_company_id INT UNSIGNED NULL,
+            buyer_id INT UNSIGNED NULL,
+            buyer_company_id INT UNSIGNED NULL,
+            buyer_display_name VARCHAR(255) NULL,
+            buyer_edrpou VARCHAR(50) NULL,
+            buyer_address VARCHAR(255) NULL,
+            buyer_email VARCHAR(150) NULL,
+            buyer_phone VARCHAR(120) NULL,
+            total_amount_uah DECIMAL(14,2) NOT NULL DEFAULT 0,
+            vat_mode ENUM('no_vat','vat_20') NOT NULL DEFAULT 'no_vat',
+            vat_amount_uah DECIMAL(14,2) NOT NULL DEFAULT 0,
+            total_with_vat_uah DECIMAL(14,2) NOT NULL DEFAULT 0,
+            payment_purpose VARCHAR(255) NULL,
+            status ENUM('draft','sent','paid','docs_sent','docs_closed','canceled') NOT NULL DEFAULT 'draft',
+            sent_at DATETIME NULL,
+            paid_at DATETIME NULL,
+            docs_type ENUM('none','paper','electronic','both') NOT NULL DEFAULT 'none',
+            docs_status ENUM('not_sent','sent','signed','closed','problem') NOT NULL DEFAULT 'not_sent',
+            docs_sent_at DATETIME NULL,
+            docs_closed_at DATETIME NULL,
+            pdf_file_path VARCHAR(255) NULL,
+            keycrm_file_id VARCHAR(80) NULL,
+            note TEXT NULL,
+            created_by_user_id INT UNSIGNED NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_keycrm_order_id (keycrm_order_id),
+            KEY idx_invoice_date (invoice_date),
+            KEY idx_status (status),
+            KEY idx_docs_status (docs_status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_invoice_items (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            invoice_id INT UNSIGNED NOT NULL,
+            source_product_id INT UNSIGNED NULL,
+            title VARCHAR(255) NOT NULL,
+            unit VARCHAR(30) NOT NULL DEFAULT 'шт',
+            quantity DECIMAL(12,3) NOT NULL DEFAULT 1,
+            price_uah DECIMAL(14,2) NOT NULL DEFAULT 0,
+            amount_uah DECIMAL(14,2) NOT NULL DEFAULT 0,
+            sort_order INT UNSIGNED NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_invoice_id (invoice_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $stmt = $pdo->prepare("
+        INSERT INTO db_our_companies
+            (short_name, legal_name, edrpou, iban, bank, address, email, phone, accountant_email,
+             accountant_phone, tax_mode, allowed_item_type, is_active)
+        SELECT
+            'FOP Darchenko A.B.',
+            'ФОП \"Дарченко А.Б.\"',
+            '3032919108',
+            'UA873052990000026008015017458',
+            'АТ КБ \"ПРИВАТБАНК\"',
+            'вул. Машинобудівна, 50А, м. Київ, 03067',
+            'sales@bws.com.ua',
+            '(044) 390-72-80, (093) 390-72-80, (097) 390-72-80, (073) 390-72-80',
+            'b@bws.com.ua',
+            '(044) 390-72-80, (093) 644-62-61',
+            'single_tax_no_vat',
+            'products_only',
+            1
+        WHERE NOT EXISTS (
+            SELECT 1 FROM db_our_companies WHERE short_name = 'FOP Darchenko A.B.' LIMIT 1
+        )
+    ");
+    $stmt->execute();
+}
+
 function expense_types(): array
 {
     return ['one_time', 'monthly_subscription', 'loan_payment', 'operational_debt', 'strategic_debt', 'other'];
@@ -58,6 +167,11 @@ function expense_statuses(): array
 }
 
 function can_manage_expenses(): bool
+{
+    return in_array(user_role(), ['ceo', 'accountant'], true);
+}
+
+function can_manage_invoices(): bool
 {
     return in_array(user_role(), ['ceo', 'accountant'], true);
 }

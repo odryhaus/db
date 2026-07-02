@@ -20,6 +20,12 @@ Checklist:
 - `Нам повинні` shows unpaid client debt across all months.
 - Receivables pagination keeps the selected month parameter.
 - CEO can open `targets.php` and save monthly/manager targets.
+- CEO/accountant can open `https://bph.com.ua/db/invoices.php`.
+- CEO/accountant can create an invoice draft from an existing `db_orders.keycrm_id`.
+- Invoice item titles, quantities, prices, buyer, number, and date can be edited before document generation.
+- Seller `FOP Darchenko A.B.` exists in `db_our_companies` after first invoice page load.
+- Collapsed item title for products-only seller is `Поліграфічна продукція`.
+- Generated invoice/delivery file opens from the invoice page.
 - CEO/accountant can open `expenses.php`.
 - Dashboard shows operational monthly expenses and strategic debt separately.
 - Logout redirects back to login.
@@ -55,7 +61,7 @@ Rules:
 
 ## Next Milestone
 
-Money Dashboard v0.5 — verify targets, expenses, manager mapping, and payment status rules.
+Invoices v0.2 / Money Dashboard v0.5 — verify invoice extraction, targets, expenses, manager mapping, and payment status rules.
 
 Planning document:
 
@@ -72,6 +78,11 @@ https://bph.com.ua/db/keycrm_debug_order.php?order_id=9232
 The next milestone should:
 
 - Run CEO manual sync for current and previous month.
+- Test invoice creation from several real KeyCRM orders in `db_orders`.
+- Compare extracted invoice products, buyer/company data, and totals against KeyCRM.
+- Decide whether production hosting should install `wkhtmltopdf` for automatic PDF generation or use browser print-to-PDF from saved HTML.
+- Add a reviewed file-download policy for generated invoice files if more roles get access.
+- Decide when KeyCRM file attachment should be added.
 - Verify `ordered_at` month assignment.
 - Verify totals against KeyCRM for sample orders.
 - Verify buyer/company extraction.

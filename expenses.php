@@ -259,6 +259,7 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
                 <?php if (user_role() === 'ceo'): ?>
                     <a href="<?= e(base_path('/targets.php?month=' . urlencode($selectedMonth))) ?>">Плани</a>
                 <?php endif; ?>
+                <a href="<?= e(base_path('/invoices.php')) ?>">Рахунки</a>
                 <a class="active" href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">Витрати</a>
                 <?php if (user_role() === 'ceo'): ?>
                     <a href="<?= e(base_path('/sync_orders.php')) ?>">Синхронізація</a>

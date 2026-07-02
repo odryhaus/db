@@ -157,6 +157,23 @@ Decision:
 
 Reason: the CEO-facing money system should feel like one compact internal product, not separate pages with separate layouts.
 
+## Invoice Draft Foundation
+
+Decision:
+
+- Add `invoices.php` as a small finance document tool, not as a full accounting module.
+- Create only project-owned additive tables: `db_our_companies`, `db_invoices`, `db_invoice_items`.
+- Invoice rows and item rows are editable local copies copied from `db_orders.raw_json`.
+- Do not change KeyCRM orders.
+- Do not write payment statuses to KeyCRM.
+- Do not attach generated files to KeyCRM in v0.1.
+- Use no-VAT text for current documents: `Без ПДВ. Платник єдиного податку.`
+- Keep VAT support out of scope until a VAT seller company is explicitly configured.
+- For seller companies with `allowed_item_type = 'products_only'`, default collapsed item wording is `Поліграфічна продукція`; service wording is not generated.
+- Services remain disabled until a FOP 3 group seller company with `allowed_item_type = 'services_allowed'` is configured and reviewed.
+
+Reason: the first invoice milestone should speed up document creation and payment control without turning .BRAND DB into ERP/accounting software.
+
 ## Out Of Scope
 
 The following are intentionally excluded:
@@ -167,4 +184,6 @@ The following are intentionally excluded:
 - Charts.
 - Full payments ledger.
 - Full debt tracking workflow.
+- VAT invoice logic.
+- KeyCRM file attachment.
 - Destructive or broad database migrations.

@@ -363,6 +363,7 @@ try {
                         <a href="<?= e(base_path('/targets.php?month=' . urlencode($selectedMonth))) ?>">Плани</a>
                     <?php endif; ?>
                     <?php if (can_manage_expenses()): ?>
+                        <a href="<?= e(base_path('/invoices.php')) ?>">Рахунки</a>
                         <a href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">Витрати</a>
                     <?php endif; ?>
                     <?php if (user_role() === 'ceo'): ?>

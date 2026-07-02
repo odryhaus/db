@@ -1,6 +1,6 @@
 # .BRAND DB
 
-Simple internal PHP system for `.BRAND` money control. The current MVP contains authentication, CEO user management, a money dashboard, CEO-only manual order sync, sales targets, and expenses planning.
+Simple internal PHP system for `.BRAND` money control. The current MVP contains authentication, CEO user management, a money dashboard, CEO-only manual order sync, sales targets, expenses planning, and invoice draft generation.
 
 ## Purpose
 
@@ -15,6 +15,7 @@ Current milestone:
 - Money dashboard metrics from local `db_orders`.
 - CEO-only sales target management.
 - CEO/accountant expenses foundation.
+- CEO/accountant editable invoice and delivery note drafts from local `db_orders`.
 
 Not included yet:
 
@@ -22,6 +23,8 @@ Not included yet:
 - Charts.
 - Full payments ledger.
 - Full debt workflow.
+- VAT invoices.
+- KeyCRM file attachment.
 
 ## Local Setup
 
@@ -103,9 +106,14 @@ Planning tables are additive and created only if missing:
 ```text
 db_sales_targets
 db_expenses
+db_our_companies
+db_invoices
+db_invoice_items
 ```
 
 `db_sales_targets` is the active source of truth for company and manager targets. The old monthly target tables are kept if they exist but are not used for new dashboard target logic.
+
+Invoice tables store editable local document copies. They do not modify KeyCRM orders.
 
 ## Dashboard
 
@@ -134,6 +142,25 @@ https://bph.com.ua/db/sync_orders.php
 ```
 
 Sync scope is current month and previous month only.
+
+## Invoices
+
+Invoice drafts are managed at:
+
+```text
+https://bph.com.ua/db/invoices.php
+```
+
+Rules:
+
+- Source data comes from local `db_orders` and `db_orders.raw_json`.
+- Invoice items are editable local copies, not live CRM products.
+- FOP 2 group seller companies marked `products_only` use product wording only.
+- Default collapsed title is `Поліграфічна продукція`.
+- Current documents are no-VAT only and include `Без ПДВ. Платник єдиного податку.`
+- Generated files are saved locally under `storage/invoices`.
+- Direct web access to `storage/invoices` is blocked; open files through the authenticated invoice page.
+- KeyCRM file attachment is not implemented yet.
 
 ## Deploy Notes
 

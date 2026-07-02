@@ -11,7 +11,7 @@ Production `/db` authentication is live:
 - Production `setup_key` was disabled manually.
 - Production `setup-ceo.php` was manually deleted.
 
-This update replaces month-only target logic with effective-date sales targets while keeping KeyCRM sync unchanged.
+This update adds Invoices v0.1 as an editable local document foundation while keeping KeyCRM sync unchanged.
 
 ## Files Changed
 
@@ -24,10 +24,95 @@ This update replaces month-only target logic with effective-date sales targets w
 - `docs/NEXT_STEPS.md`
 - `expenses.php`
 - `finance.php`
+- `invoices.php`
 - `index.php`
 - `sync_orders.php`
+- `storage/invoices/.htaccess`
 - `targets.php`
 - `users.php`
+
+## Invoices v0.1
+
+Created:
+
+```text
+invoices.php
+```
+
+Created additive tables only if missing:
+
+```text
+db_our_companies
+db_invoices
+db_invoice_items
+```
+
+Access:
+
+- Requires login.
+- Available to `ceo` and `accountant`.
+- Navigation link was added to the dashboard/admin finance pages.
+
+What it does:
+
+- Lists recent invoices.
+- Creates an editable invoice draft from an existing local `db_orders.keycrm_id`.
+- Copies buyer/company/product/total data best-effort from `db_orders.raw_json` and cached `db_orders` columns.
+- Stores invoice header data in `db_invoices`.
+- Stores editable item lines in `db_invoice_items`.
+- Allows editing invoice number, date, seller, buyer details, payment purpose, note, and item title/unit/quantity/price/amount.
+- Allows restoring detailed CRM product lines from the local cached order.
+- Allows collapsing to one product line.
+- Allows manually setting the collapsed product title.
+- Supports local statuses: sent, paid, docs sent, docs closed, problem, canceled.
+- Generates a clean A4 no-VAT invoice or delivery note document file.
+- Saves generated files under `storage/invoices`.
+- Blocks direct web access to generated files with `storage/invoices/.htaccess`; files should be opened through the authenticated invoice download action.
+
+Seller default:
+
+- `FOP Darchenko A.B.`
+- Legal name: `ФОП "Дарченко А.Б."`
+- IBAN: `UA873052990000026008015017458`
+- ЄДРПОУ: `3032919108`
+- Bank/address/email/phone/accountant contacts copied from the provided old template.
+- Tax mode: `single_tax_no_vat`
+- Allowed item type: `products_only`
+
+Tax/business rule:
+
+- For seller companies with `allowed_item_type = 'products_only'`, default collapsed wording is `Поліграфічна продукція`.
+- The app does not generate `Поліграфічні послуги` for FOP 2 group seller companies.
+- Service wording remains disabled until a reviewed FOP 3 group seller company is configured.
+
+PDF/file generation:
+
+- The document template uses system fonts and compact A4 HTML/CSS.
+- It includes: `Без ПДВ. Платник єдиного податку.`
+- If `wkhtmltopdf` exists on the server, the app saves a real `.pdf`.
+- If `wkhtmltopdf` is not available or `shell_exec` is disabled, the app saves a print-ready `.html` file and shows a message.
+- Generated files can be opened only through authenticated `invoices.php?download=ID`, not by passing an arbitrary path.
+
+What was NOT implemented:
+
+- No VAT calculations.
+- No full accounting/ERP workflow.
+- No KeyCRM order changes.
+- No KeyCRM payment writes.
+- No KeyCRM file attachment.
+- No browser-side KeyCRM calls.
+- No payments ledger.
+- No invoice audit log yet.
+
+Manual setup/checks:
+
+- Open `https://bph.com.ua/db/invoices.php` as CEO/accountant.
+- Create a draft from a known synced KeyCRM order id.
+- Confirm buyer/company/products/totals copied correctly.
+- Confirm collapsed products-only line says `Поліграфічна продукція`.
+- Generate invoice and delivery note.
+- If the app saves HTML instead of PDF, either install `wkhtmltopdf` on hosting or use browser print-to-PDF from the opened document.
+- Treat `storage/invoices` as sensitive document storage.
 
 ## UI Redesign — Compact Money Dashboard
 

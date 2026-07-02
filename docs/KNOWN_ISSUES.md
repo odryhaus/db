@@ -44,6 +44,22 @@ Known limitations:
 - Sync is manual CEO-only; no cron/automatic sync exists yet.
 - Sync scans bounded recent pages only; it does not scan all history.
 
+## Invoices v0.1 Limitations
+
+Invoices are a draft/document foundation only.
+
+Known limitations:
+
+- Invoice data is copied from `db_orders.raw_json`; it is not a live KeyCRM document.
+- Generated status changes stay local in `.BRAND DB` and are not written to KeyCRM.
+- Generated files are not attached to KeyCRM yet.
+- VAT is not implemented; current documents are no-VAT only.
+- Automatic PDF rendering requires `wkhtmltopdf` on the server. Without it, the app saves a print-ready HTML document that can be opened and printed to PDF manually.
+- `storage/invoices` contains generated document files and should be treated as sensitive business data; direct web access is blocked with `.htaccess`, but hosting behavior should be verified after deploy.
+- Buyer/company extraction is best-effort until more real KeyCRM order JSON examples are reviewed.
+- Product item extraction depends on KeyCRM product field names stored in `raw_json`.
+- Services are intentionally not generated for seller companies marked `products_only`.
+
 ## No Audit Log Yet
 
 Changes made on `users.php` are not written to a separate audit table.

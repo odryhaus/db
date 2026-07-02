@@ -511,6 +511,61 @@ button:hover,
     margin-top: var(--space-2);
 }
 
+.invoice-note {
+    margin: var(--space-3) 0 0;
+}
+
+.invoice-form {
+    display: grid;
+    gap: var(--space-4);
+}
+
+.invoice-edit-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-3) var(--space-4);
+}
+
+.invoice-items-heading {
+    margin: var(--space-2) 0 0;
+}
+
+.invoice-items-table {
+    min-width: 920px;
+}
+
+.invoice-items-table td {
+    height: auto;
+    padding: 6px;
+}
+
+.invoice-items-table input {
+    min-width: 0;
+}
+
+.mini-input {
+    width: 76px;
+}
+
+.num-input,
+.money-input {
+    width: 120px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.invoice-actions,
+.invoice-status-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: var(--space-2);
+}
+
+.collapse-field {
+    width: min(260px, 100%);
+}
+
 .action-panel {
     display: flex;
     align-items: center;
@@ -894,6 +949,10 @@ tr:last-child td {
     .expense-form {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    .invoice-edit-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 680px) {
@@ -940,6 +999,10 @@ tr:last-child td {
     }
 
     .expense-form {
+        grid-template-columns: 1fr;
+    }
+
+    .invoice-edit-grid {
         grid-template-columns: 1fr;
     }
 
