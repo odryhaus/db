@@ -43,6 +43,7 @@ This update fixes invoice numbering, PDF naming, recipient handling, and prepare
 - Invoice generation buttons now submit their own action directly, without a hidden `save_invoice` action overriding them.
 - Successful PDF generation now immediately redirects to the authenticated download endpoint.
 - If the server cannot render PDF, the page shows a clear Ukrainian error that `wkhtmltopdf`/PDF rendering is unavailable.
+- If only the fallback HTML template exists, the invoice registry shows `Друк/PDF`, which opens the authenticated print template so the browser can save it as PDF.
 - Buyer/contact and company/legal recipient are separated:
   - buyer/contact = contact person
   - company/legal entity = invoice recipient/payer

@@ -169,6 +169,12 @@ function invoice_pdf_available(array $invoice): bool
         && strtolower(pathinfo((string) $invoice['pdf_file_path'], PATHINFO_EXTENSION)) === 'pdf';
 }
 
+function invoice_print_template_available(array $invoice): bool
+{
+    return !empty($invoice['pdf_file_path'])
+        && strtolower(pathinfo((string) $invoice['pdf_file_path'], PATHINFO_EXTENSION)) === 'html';
+}
+
 function invoice_order_payload(array $dbOrder): array
 {
     $raw = json_decode((string) ($dbOrder['raw_json'] ?? ''), true);
@@ -596,14 +602,19 @@ function invoice_download_file(array $invoice): void
         exit;
     }
 
-    if (strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) !== 'pdf') {
+    $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+    if ($extension === 'pdf') {
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . basename($filePath) . '"');
+    } elseif ($extension === 'html') {
+        header('Content-Type: text/html; charset=utf-8');
+        header('Content-Disposition: inline; filename="' . basename($filePath) . '"');
+    } else {
         http_response_code(404);
-        echo 'PDF file not found. Generate PDF first.';
+        echo 'Document file type is not allowed.';
         exit;
     }
 
-    header('Content-Type: application/pdf');
-    header('Content-Disposition: attachment; filename="' . basename($filePath) . '"');
     header('Content-Length: ' . filesize($filePath));
     readfile($filePath);
     exit;
@@ -1062,6 +1073,8 @@ foreach ($invoices as $invoiceRow) {
                     <div class="row-actions">
                         <?php if (invoice_pdf_available($editInvoice)): ?>
                             <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $editInvoice['id'])) ?>">PDF</a>
+                        <?php elseif (invoice_print_template_available($editInvoice)): ?>
+                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $editInvoice['id'])) ?>" target="_blank">Друк/PDF</a>
                         <?php endif; ?>
                         <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php')) ?>">Закрити</a>
                     </div>
@@ -1262,6 +1275,8 @@ foreach ($invoices as $invoiceRow) {
                                 <td>
                                     <?php if (invoice_pdf_available($invoiceRow)): ?>
                                         <span class="status-badge status-badge--success"><?= e(((string) $invoiceRow['document_type'] === 'delivery_note' ? 'DN_' : 'INV_') . (string) $invoiceRow['invoice_number']) ?></span>
+                                    <?php elseif (invoice_print_template_available($invoiceRow)): ?>
+                                        <span class="status-badge status-badge--warning">HTML</span>
                                     <?php else: ?>
                                         <span class="status-badge status-badge--muted">немає</span>
                                     <?php endif; ?>
@@ -1283,6 +1298,8 @@ foreach ($invoices as $invoiceRow) {
                                         <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?edit=' . (int) $invoiceRow['id'])) ?>">Edit</a>
                                         <?php if (invoice_pdf_available($invoiceRow)): ?>
                                             <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>">PDF</a>
+                                        <?php elseif (invoice_print_template_available($invoiceRow)): ?>
+                                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>" target="_blank">Друк/PDF</a>
                                         <?php endif; ?>
                                     </div>
                                 </td>
