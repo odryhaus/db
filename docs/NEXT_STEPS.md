@@ -88,6 +88,18 @@ The next dashboard should add or improve:
 - Better payment status labels if KeyCRM values are too technical.
 - Expense payment audit/history if needed.
 
+## UI Follow-ups (After Compact Dashboard Redesign)
+
+This environment has no `php` binary or database access, so the redesign in `index.php`/`users.php`/`sync_orders.php` was reviewed by careful re-reading only, not exercised in a browser. Before treating the redesign as final:
+
+- Run it locally (`php -S localhost:8000`) or on staging and click through: month switch, receivables pagination, manager debt drilldown filter, users search/role filter, users `?all=1` toggle, sync run button.
+- Check the sticky topbar and sticky receivables-table header on an actual long scroll — `position: sticky` behavior can differ slightly across browsers when nested inside `overflow` containers.
+- Verify the payment status badge logic (`Оплачено` / `Частково` / `Не оплачено`, computed from `paid = total − unpaid`) against a few real KeyCRM orders — it intentionally ignores the raw `payment_status` string because those values were inconsistent, but that should be confirmed against production data.
+- Have a Ukrainian-speaking reviewer sanity-check the interface copy (labels, empty states, nav) added across `index.php`, `users.php`, `sync_orders.php`.
+- Apply the same panel/table visual patterns to `targets.php` and `expenses.php`, which were intentionally left out of this pass (see `docs/DECISIONS.md`) but already inherit the refreshed CSS tokens.
+- Consider adding client-side search/filter to the receivables table (like the one added to `users.php`) if the CEO wants to scan it without paging.
+- Charts are still explicitly out of scope; revisit only if the CEO asks for trend visuals beyond the compact KPI/progress-bar view.
+
 ## Database Tables To Inspect Next
 
 Inspect existing tables related to:

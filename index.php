@@ -41,6 +41,9 @@ $managerSummary = [];
 $receivablesByManager = [];
 $operationalDueThisMonth = 0;
 $strategicDebtTotal = 0;
+$operationalDueThisWeek = 0;
+$overdueTotal = 0;
+$overdueCount = 0;
 $dashboardError = '';
 $totalDebtPages = 1;
 
@@ -62,7 +65,29 @@ function dashboard_url(array $params = []): string
 function dashboard_manager_key($managerName): string
 {
     $name = trim((string) $managerName);
-    return $name !== '' ? $name : 'No manager';
+    return $name !== '' && $name !== 'No manager' ? $name : 'Без менеджера';
+}
+
+function dashboard_payment_badge(array $order): string
+{
+    $total = (float) ($order['total_amount_uah'] ?? 0);
+    $unpaid = (float) ($order['unpaid_amount_uah'] ?? 0);
+    $paid = $total - $unpaid;
+
+    if ($unpaid <= 0) {
+        return '<span class="status-badge status-badge--success">Оплачено</span>';
+    }
+    if ($paid > 0) {
+        return '<span class="status-badge status-badge--warning">Частково</span>';
+    }
+    return '<span class="status-badge status-badge--danger">Не оплачено</span>';
+}
+
+function dashboard_progress_mini(float $progress): string
+{
+    $width = max(0, min(100, $progress));
+    $cls = $progress >= 100 ? ' over' : '';
+    return '<div class="progress-mini' . $cls . '"><span class="progress-track"><span style="width:' . e((string) $width) . '%"></span></span><span class="progress-pct">' . e((string) round($progress)) . '%</span></div>';
 }
 
 $notCanceledSql = "
@@ -296,6 +321,35 @@ try {
           AND (is_strategic = 1 OR expense_type = 'strategic_debt')
     ");
     $strategicDebtTotal = (float) ($strategicStmt->fetchColumn() ?: 0);
+
+    $weekStart = $today->modify('-' . ((int) $today->format('N') - 1) . ' days');
+    $weekEnd = $weekStart->modify('+6 days');
+    $weeklyStmt = db()->prepare("
+        SELECT COALESCE(SUM(amount_uah), 0)
+        FROM db_expenses
+        WHERE status = 'planned'
+          AND is_strategic = 0
+          AND expense_type <> 'strategic_debt'
+          AND due_date BETWEEN :week_start AND :week_end
+    ");
+    $weeklyStmt->execute([
+        'week_start' => $weekStart->format('Y-m-d'),
+        'week_end' => $weekEnd->format('Y-m-d'),
+    ]);
+    $operationalDueThisWeek = (float) ($weeklyStmt->fetchColumn() ?: 0);
+
+    $overdueStmt = db()->prepare("
+        SELECT COALESCE(SUM(amount_uah), 0) AS overdue_total, COUNT(*) AS overdue_count
+        FROM db_expenses
+        WHERE status = 'planned'
+          AND is_strategic = 0
+          AND expense_type <> 'strategic_debt'
+          AND due_date < :today
+    ");
+    $overdueStmt->execute(['today' => $today->format('Y-m-d')]);
+    $overdueRow = $overdueStmt->fetch() ?: [];
+    $overdueTotal = (float) ($overdueRow['overdue_total'] ?? 0);
+    $overdueCount = (int) ($overdueRow['overdue_count'] ?? 0);
 } catch (Throwable $e) {
     $dashboardError = 'Dashboard data is not available yet. Run CEO sync after production config is ready.';
 }
@@ -305,7 +359,7 @@ try {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>.BRAND DB</title>
+    <title>.BRAND DB — Дашборд</title>
     <link rel="stylesheet" href="<?= e(base_path('/assets/app.css')) ?>">
 </head>
 <body>
@@ -314,7 +368,7 @@ try {
             <div class="brand-block">
                 <p class="eyebrow">Money dashboard</p>
                 <h1>.BRAND DB</h1>
-                <p class="muted">Last sync: <?= e($lastSyncAt ?: 'not synced yet') ?></p>
+                <p class="muted">Синхронізація: <?= e($lastSyncAt ?: 'ще не було') ?></p>
             </div>
             <form class="month-picker" method="get" action="<?= e(base_path('/index.php')) ?>">
                 <label>
@@ -324,20 +378,23 @@ try {
                 <?php if ($debtManager !== ''): ?>
                     <input type="hidden" name="debt_manager" value="<?= e($debtManager) ?>">
                 <?php endif; ?>
-                <button type="submit" class="small-button">Apply</button>
+                <button type="submit" class="small-button">Показати</button>
             </form>
             <div class="header-actions">
                 <span class="sync-pill"><?= e(format_user_name($user)) ?> · <?= e((string) ($user['db_role'] ?? 'none')) ?></span>
                 <nav class="nav">
+                    <a class="active" href="<?= e(base_path('/index.php')) ?>">Дашборд</a>
                     <?php if (user_role() === 'ceo'): ?>
-                        <a href="<?= e(base_path('/targets.php?month=' . urlencode($selectedMonth))) ?>">Targets</a>
-                        <a href="<?= e(base_path('/sync_orders.php')) ?>">Sync Orders</a>
-                        <a href="<?= e(base_path('/users.php')) ?>">Users</a>
+                        <a href="<?= e(base_path('/targets.php?month=' . urlencode($selectedMonth))) ?>">Плани</a>
                     <?php endif; ?>
                     <?php if (can_manage_expenses()): ?>
-                        <a href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">Expenses</a>
+                        <a href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">Витрати</a>
                     <?php endif; ?>
-                    <a href="<?= e(base_path('/logout.php')) ?>">Logout</a>
+                    <?php if (user_role() === 'ceo'): ?>
+                        <a href="<?= e(base_path('/sync_orders.php')) ?>">Синхронізація</a>
+                        <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
+                    <?php endif; ?>
+                    <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>
                 </nav>
             </div>
         </header>
@@ -346,7 +403,7 @@ try {
             <div class="alert"><?= e($dashboardError) ?></div>
         <?php endif; ?>
 
-        <section class="kpi-grid dashboard-kpis" aria-label="Money KPIs">
+        <section class="kpi-grid dashboard-kpis" aria-label="Ключові показники">
             <div class="kpi-card target">
                 <span class="label">План</span>
                 <strong><?= e(money_uah($monthlyTarget)) ?></strong>
@@ -354,7 +411,7 @@ try {
             <div class="kpi-card">
                 <span class="label">Факт</span>
                 <strong><?= e(money_uah($salesFact)) ?></strong>
-                <small><?= e((string) $orderCount) ?> orders · <?= e($monthLabel) ?></small>
+                <small><?= e((string) $orderCount) ?> замовлень</small>
             </div>
             <div class="kpi-card">
                 <span class="label">Оплачено</span>
@@ -367,37 +424,32 @@ try {
             <div class="kpi-card danger">
                 <span class="label">Нам повинні всього</span>
                 <strong><?= e(money_uah($receivablesTotal)) ?></strong>
-                <small><?= e((string) $receivablesCount) ?> orders</small>
+                <small><?= e((string) $receivablesCount) ?> замовлень</small>
             </div>
             <div class="kpi-card">
                 <span class="label">Ми повинні цього місяця</span>
                 <strong><?= e(money_uah($operationalDueThisMonth)) ?></strong>
-                <small>operational only</small>
-            </div>
-            <div class="kpi-card danger">
-                <span class="label">Стратегічні борги</span>
-                <strong><?= e(money_uah($strategicDebtTotal)) ?></strong>
-                <small>shown separately</small>
+                <small>операційні</small>
             </div>
             <div class="kpi-card progress-card">
-                <span class="label">Progress</span>
+                <span class="label">Прогрес</span>
                 <strong><?= e((string) $progress) ?>%</strong>
-                <small>remaining <?= e(money_uah($remaining)) ?></small>
+                <small>залишилось <?= e(money_uah($remaining)) ?></small>
             </div>
         </section>
 
         <section class="panel dashboard-section">
             <div class="section-heading">
                 <div>
-                    <span class="label">Target / fact / progress first</span>
+                    <span class="label"><?= e($monthLabel) ?></span>
                     <h2>План продажів</h2>
                 </div>
                 <strong><?= e((string) $progress) ?>%</strong>
             </div>
-            <div class="progress-track" aria-label="Progress toward monthly target">
+            <div class="progress-track" aria-label="Прогрес виконання плану">
                 <span style="width: <?= e((string) $progress) ?>%"></span>
             </div>
-            <dl class="plan-list tight-plan">
+            <dl class="plan-list">
                 <div>
                     <dt>План</dt>
                     <dd><?= e(money_uah($monthlyTarget)) ?></dd>
@@ -420,55 +472,41 @@ try {
         <section class="panel table-panel dashboard-section">
             <div class="section-heading padded">
                 <div>
-                    <span class="label">Receivables second</span>
-                    <h2>Нам повинні</h2>
-                    <?php if ($debtManager !== ''): ?>
-                        <p class="muted">Filter: <?= e($debtManager) ?> · <?= e(money_uah($filteredReceivablesTotal)) ?></p>
-                    <?php endif; ?>
+                    <span class="label">Менеджери</span>
+                    <h2>План продажів по менеджерах</h2>
                 </div>
-                <div class="pagination">
-                    <?php if ($debtManager !== ''): ?>
-                        <a href="<?= e(dashboard_url(['month' => $selectedMonth])) ?>">All managers</a>
-                    <?php endif; ?>
-                    <?php if ($debtPage > 1): ?>
-                        <a href="<?= e(dashboard_url(['month' => $selectedMonth, 'debt_manager' => $debtManager, 'debt_page' => $debtPage - 1])) ?>">Prev</a>
-                    <?php endif; ?>
-                    <span>Page <?= e((string) $debtPage) ?> / <?= e((string) $totalDebtPages) ?></span>
-                    <?php if ($debtPage < $totalDebtPages): ?>
-                        <a href="<?= e(dashboard_url(['month' => $selectedMonth, 'debt_manager' => $debtManager, 'debt_page' => $debtPage + 1])) ?>">Next</a>
-                    <?php endif; ?>
-                </div>
+                <?php if (user_role() === 'ceo'): ?>
+                    <a class="button-secondary small-button" href="<?= e(base_path('/targets.php?month=' . urlencode($selectedMonth))) ?>">Редагувати плани</a>
+                <?php endif; ?>
             </div>
             <div class="table-wrap">
                 <table>
                     <thead>
                         <tr>
-                            <th>Order</th>
-                            <th>Ordered</th>
-                            <th>Client / buyer / company</th>
-                            <th>Manager</th>
-                            <th>Total</th>
-                            <th>Paid</th>
-                            <th>Unpaid</th>
-                            <th>Payment</th>
-                            <th>Status</th>
+                            <th>Менеджер</th>
+                            <th class="num">План</th>
+                            <th class="num">Факт</th>
+                            <th>%</th>
+                            <th class="num">Оплачено</th>
+                            <th class="num">Борг</th>
+                            <th class="num">Залишилось</th>
+                            <th class="num">Замовлень</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php if (!$receivableOrders): ?>
-                            <tr><td colspan="9">No unpaid client debt found.</td></tr>
+                        <?php if (!$managerSummary): ?>
+                            <tr><td colspan="8">Немає даних по менеджерах за <?= e($monthLabel) ?>.</td></tr>
                         <?php endif; ?>
-                        <?php foreach ($receivableOrders as $order): ?>
+                        <?php foreach ($managerSummary as $manager): ?>
                             <tr>
-                                <td><?= e((string) ($order['order_number'] ?: '—')) ?></td>
-                                <td><?= e((string) ($order['ordered_at'] ?: '—')) ?></td>
-                                <td><?= e(dashboard_client_name($order)) ?></td>
-                                <td><?= e(dashboard_manager_key($order['manager_name'] ?? '')) ?></td>
-                                <td><?= e(money_uah($order['total_amount_uah'] ?? 0)) ?></td>
-                                <td><?= e(money_uah($order['paid_amount_uah'] ?? 0)) ?></td>
-                                <td><strong><?= e(money_uah($order['unpaid_amount_uah'] ?? 0)) ?></strong></td>
-                                <td><?= e((string) ($order['payment_status'] ?: '—')) ?></td>
-                                <td><?= e((string) ($order['status_name'] ?: '—')) ?></td>
+                                <td><?= e(dashboard_manager_key($manager['manager_name'] ?? '')) ?></td>
+                                <td class="num"><?= e(money_uah($manager['target_amount_uah'] ?? 0)) ?></td>
+                                <td class="num"><?= e(money_uah($manager['sales_fact'] ?? 0)) ?></td>
+                                <td><?= dashboard_progress_mini((float) ($manager['progress'] ?? 0)) ?></td>
+                                <td class="num"><?= e(money_uah($manager['paid'] ?? 0)) ?></td>
+                                <td class="num"><?= e(money_uah($manager['unpaid'] ?? 0)) ?></td>
+                                <td class="num"><?= e(money_uah($manager['remaining_to_target'] ?? 0)) ?></td>
+                                <td class="num"><?= e((string) $manager['order_count']) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -476,119 +514,123 @@ try {
             </div>
         </section>
 
-        <section class="dashboard-grid lower-grid">
-            <div class="panel table-panel">
-                <div class="section-heading padded">
-                    <div>
-                        <span class="label">Receivables by manager</span>
-                        <h2>Debt drilldown</h2>
-                    </div>
+        <section class="panel table-panel dashboard-section">
+            <div class="section-heading padded">
+                <div>
+                    <span class="label">Усі місяці · <?= e((string) $receivablesCount) ?> замовлень · найбільше <?= e(money_uah($largestReceivable)) ?></span>
+                    <h2>Нам повинні — <?= e(money_uah($receivablesTotal)) ?></h2>
+                    <?php if ($debtManager !== ''): ?>
+                        <p class="muted">Фільтр: <?= e(dashboard_manager_key($debtManager)) ?> · <?= e(money_uah($filteredReceivablesTotal)) ?> (<?= e((string) $filteredReceivablesCount) ?>)</p>
+                    <?php endif; ?>
                 </div>
+                <div class="pagination">
+                    <?php if ($debtManager !== ''): ?>
+                        <a href="<?= e(dashboard_url(['month' => $selectedMonth])) ?>">Усі менеджери</a>
+                    <?php endif; ?>
+                    <?php if ($debtPage > 1): ?>
+                        <a href="<?= e(dashboard_url(['month' => $selectedMonth, 'debt_manager' => $debtManager, 'debt_page' => $debtPage - 1])) ?>">Назад</a>
+                    <?php endif; ?>
+                    <span><?= e((string) $debtPage) ?> / <?= e((string) $totalDebtPages) ?></span>
+                    <?php if ($debtPage < $totalDebtPages): ?>
+                        <a href="<?= e(dashboard_url(['month' => $selectedMonth, 'debt_manager' => $debtManager, 'debt_page' => $debtPage + 1])) ?>">Далі</a>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <?php if ($receivablesByManager): ?>
                 <div class="table-wrap">
                     <table class="compact-table">
                         <thead>
                             <tr>
-                                <th>Manager</th>
-                                <th>Total unpaid</th>
-                                <th>Orders</th>
-                                <th>Largest</th>
+                                <th>Менеджер</th>
+                                <th class="num">Борг всього</th>
+                                <th class="num">Замовлень</th>
+                                <th class="num">Найбільше</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php if (!$receivablesByManager): ?>
-                                <tr><td colspan="4">No receivables by manager.</td></tr>
-                            <?php endif; ?>
                             <?php foreach ($receivablesByManager as $manager): ?>
                                 <?php $managerName = (string) $manager['manager_name']; ?>
                                 <tr>
                                     <td>
                                         <a href="<?= e(dashboard_url(['month' => $selectedMonth, 'debt_manager' => $managerName])) ?>">
-                                            <?= e($managerName) ?>
+                                            <?= e(dashboard_manager_key($managerName)) ?>
                                         </a>
                                     </td>
-                                    <td><?= e(money_uah($manager['total_unpaid'] ?? 0)) ?></td>
-                                    <td><?= e((string) $manager['unpaid_count']) ?></td>
-                                    <td><?= e(money_uah($manager['largest_unpaid'] ?? 0)) ?></td>
+                                    <td class="num"><?= e(money_uah($manager['total_unpaid'] ?? 0)) ?></td>
+                                    <td class="num"><?= e((string) $manager['unpaid_count']) ?></td>
+                                    <td class="num"><?= e(money_uah($manager['largest_unpaid'] ?? 0)) ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
                 </div>
-            </div>
+            <?php endif; ?>
 
-            <div class="panel table-panel">
-                <div class="section-heading padded">
-                    <div>
-                        <span class="label">Selected month</span>
-                        <h2>Top unpaid orders</h2>
-                    </div>
-                </div>
-                <div class="table-wrap">
-                    <table class="compact-table">
-                        <thead>
+            <div class="table-wrap table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>№</th>
+                            <th>Дата</th>
+                            <th>Клієнт</th>
+                            <th>Менеджер</th>
+                            <th class="num">Сума</th>
+                            <th class="num">Оплачено</th>
+                            <th class="num">Борг</th>
+                            <th>Оплата</th>
+                            <th>Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (!$receivableOrders): ?>
+                            <tr><td colspan="9">Несплачених замовлень не знайдено.</td></tr>
+                        <?php endif; ?>
+                        <?php foreach ($receivableOrders as $order): ?>
                             <tr>
-                                <th>Order</th>
-                                <th>Client</th>
-                                <th>Manager</th>
-                                <th>Unpaid</th>
+                                <td><?= e((string) ($order['order_number'] ?: '—')) ?></td>
+                                <td><?= e((string) ($order['ordered_at'] ?: '—')) ?></td>
+                                <td><?= e(dashboard_client_name($order)) ?></td>
+                                <td><?= e(dashboard_manager_key($order['manager_name'] ?? '')) ?></td>
+                                <td class="num"><?= e(money_uah($order['total_amount_uah'] ?? 0)) ?></td>
+                                <td class="num"><?= e(money_uah($order['paid_amount_uah'] ?? 0)) ?></td>
+                                <td class="num"><strong><?= e(money_uah($order['unpaid_amount_uah'] ?? 0)) ?></strong></td>
+                                <td><?= dashboard_payment_badge($order) ?></td>
+                                <td><span class="status-badge status-badge--muted"><?= e((string) ($order['status_name'] ?: '—')) ?></span></td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (!$monthlyUnpaidOrders): ?>
-                                <tr><td colspan="4">No unpaid orders found for <?= e($monthLabel) ?>.</td></tr>
-                            <?php endif; ?>
-                            <?php foreach ($monthlyUnpaidOrders as $order): ?>
-                                <tr>
-                                    <td><?= e((string) ($order['order_number'] ?: '—')) ?></td>
-                                    <td><?= e(dashboard_client_name($order)) ?></td>
-                                    <td><?= e(dashboard_manager_key($order['manager_name'] ?? '')) ?></td>
-                                    <td><strong><?= e(money_uah($order['unpaid_amount_uah'] ?? 0)) ?></strong></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
         </section>
 
         <section class="panel table-panel dashboard-section">
             <div class="section-heading padded">
                 <div>
-                    <span class="label">Manager performance third</span>
-                    <h2>Manager targets</h2>
+                    <span class="label"><?= e($monthLabel) ?></span>
+                    <h2>Топ несплачених за місяць</h2>
                 </div>
-                <?php if (user_role() === 'ceo'): ?>
-                    <a class="button secondary" href="<?= e(base_path('/targets.php?month=' . urlencode($selectedMonth))) ?>">Edit targets</a>
-                <?php endif; ?>
             </div>
             <div class="table-wrap">
-                <table>
+                <table class="compact-table">
                     <thead>
                         <tr>
-                            <th>Manager</th>
-                            <th>Target</th>
-                            <th>Sales fact</th>
-                            <th>Paid</th>
-                            <th>Unpaid</th>
-                            <th>Remaining</th>
-                            <th>Progress</th>
-                            <th>Orders</th>
+                            <th>№</th>
+                            <th>Клієнт</th>
+                            <th>Менеджер</th>
+                            <th class="num">Борг</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php if (!$managerSummary): ?>
-                            <tr><td colspan="8">No manager data for <?= e($monthLabel) ?>.</td></tr>
+                        <?php if (!$monthlyUnpaidOrders): ?>
+                            <tr><td colspan="4">Немає несплачених замовлень за <?= e($monthLabel) ?>.</td></tr>
                         <?php endif; ?>
-                        <?php foreach ($managerSummary as $manager): ?>
+                        <?php foreach ($monthlyUnpaidOrders as $order): ?>
                             <tr>
-                                <td><?= e((string) $manager['manager_name']) ?></td>
-                                <td><?= e(money_uah($manager['target_amount_uah'] ?? 0)) ?></td>
-                                <td><?= e(money_uah($manager['sales_fact'] ?? 0)) ?></td>
-                                <td><?= e(money_uah($manager['paid'] ?? 0)) ?></td>
-                                <td><?= e(money_uah($manager['unpaid'] ?? 0)) ?></td>
-                                <td><?= e(money_uah($manager['remaining_to_target'] ?? 0)) ?></td>
-                                <td><?= e((string) ($manager['progress'] ?? 0)) ?>%</td>
-                                <td><?= e((string) $manager['order_count']) ?></td>
+                                <td><?= e((string) ($order['order_number'] ?: '—')) ?></td>
+                                <td><?= e(dashboard_client_name($order)) ?></td>
+                                <td><?= e(dashboard_manager_key($order['manager_name'] ?? '')) ?></td>
+                                <td class="num"><strong><?= e(money_uah($order['unpaid_amount_uah'] ?? 0)) ?></strong></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -599,17 +641,25 @@ try {
         <section class="panel dashboard-section">
             <div class="section-heading">
                 <div>
-                    <span class="label">Expenses fourth</span>
-                    <h2>Upcoming expenses foundation</h2>
+                    <span class="label">Операційний тиск окремо від стратегічного</span>
+                    <h2>Ми повинні</h2>
                 </div>
                 <?php if (can_manage_expenses()): ?>
-                    <a class="button secondary" href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">Manage expenses</a>
+                    <a class="button-secondary small-button" href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">Керувати витратами</a>
                 <?php endif; ?>
             </div>
-            <dl class="plan-list tight-plan">
+            <dl class="plan-list">
                 <div>
-                    <dt>Ми повинні цього місяця</dt>
+                    <dt>Операційні платежі цього місяця</dt>
                     <dd><?= e(money_uah($operationalDueThisMonth)) ?></dd>
+                </div>
+                <div>
+                    <dt>Платежі цього тижня</dt>
+                    <dd><?= e(money_uah($operationalDueThisWeek)) ?></dd>
+                </div>
+                <div>
+                    <dt>Прострочені платежі</dt>
+                    <dd><?= e(money_uah($overdueTotal)) ?><?php if ($overdueCount > 0): ?> <small>· <?= e((string) $overdueCount) ?></small><?php endif; ?></dd>
                 </div>
                 <div>
                     <dt>Стратегічні борги</dt>

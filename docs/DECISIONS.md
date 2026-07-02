@@ -118,6 +118,40 @@ Decision:
 - Do not change KeyCRM sync logic.
 - Do not call KeyCRM from the browser.
 
+## Compact UI Design System
+
+Redesign the interface into a calm, dense, executive dashboard (Linear/GitHub/Vercel/Notion-table style) without introducing a framework or build step.
+
+Decision:
+
+- One near-black `--accent` for primary actions/active nav state; color is reserved for semantic status badges (success/warning/danger), never for large fills or decoration.
+- Reuse every existing CSS class name (`.panel`, `.kpi-grid`, `.section-heading`, `.table-panel`, `.plan-list`, etc.) rather than renaming them, so pages outside this pass's scope (`targets.php`, `expenses.php`) keep rendering correctly on the new tokens without being touched.
+- Add the specific reusable classes requested in the design brief (`.app-shell`, `.panel-header`, `.data-table`, `.status-badge`, `.toolbar`, `.form-control`, `.button-primary`, `.button-secondary`, `.split-grid`) as additive classes, not replacements.
+- Sticky topbar and sticky table headers implemented with plain `position: sticky` inside the existing constrained-width container, avoiding a full-bleed header rework.
+- Interface copy is Ukrainian throughout the pages touched in this pass (`index.php`, `users.php`, `sync_orders.php`).
+
+Reason: the CEO needs a fast, scannable dashboard, not a new framework or a full-repo rewrite; reusing class names keeps the change low-risk and keeps untouched pages visually consistent for free.
+
+## Two New Read-Only Expense Aggregates
+
+Added `operationalDueThisWeek` and `overdueTotal`/`overdueCount` queries to `index.php`, scoped to `db_expenses` with `is_strategic = 0 AND expense_type <> 'strategic_debt'`, mirroring the existing `operationalDueThisMonth` query already in the file.
+
+Decision:
+
+- These are additive `SELECT` aggregates only — no new tables, no schema change, no write paths, no change to existing queries.
+- Scoped to operational expenses only, so strategic debt still cannot leak into the weekly/overdue operational pressure view.
+
+Reason: the design brief's "Ми повинні" block explicitly lists "платежі цього тижня" and "прострочені платежі" as required cards; the data was one read-only query away using the table that already exists (`db_expenses`), so it was safer to add the two aggregates than to ship a placeholder card wired to nothing.
+
+## UI Redesign Left `targets.php` / `expenses.php` Untouched
+
+Decision:
+
+- This pass restructures `index.php` fully and gives `users.php`/`sync_orders.php` light cleanup, per the task brief's explicit deliverable list.
+- `targets.php` and `expenses.php` are functional and already use classes now defined in the refreshed stylesheet, but were not restructured to the new panel/table patterns in this pass.
+
+Reason: keep the change reviewable and scoped to what was asked; a second pass can apply the same panel/table patterns once this one is confirmed in a real browser.
+
 ## Out Of Scope
 
 The following are intentionally excluded:

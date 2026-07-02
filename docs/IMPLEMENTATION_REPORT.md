@@ -29,6 +29,46 @@ This update adds sales targets, manager targets, receivables drilldown, and an e
 - `targets.php`
 - `users.php`
 
+## UI Redesign — Compact Money Dashboard
+
+This pass is UI/UX only. No database schema changed, no KeyCRM sync logic changed, no access rules changed.
+
+### Design system (`assets/app.css`)
+
+- Rewrote the token set: `--bg`, `--panel`, `--surface-muted`, `--line`/`--line-strong`, `--text`/`--muted`/`--faint`, one near-black `--accent`, and three semantic status colors (`--danger`, `--warning`, `--success`) each with a soft background + border variant for badges only — never large color fills.
+- Added a spacing scale (`--space-1`…`--space-6`), radius scale, and a `--row-h: 40px` table density token.
+- Added reusable component classes requested in the design brief: `.app-shell`, `.panel-header`, `.data-table`, `.status-badge` (+ `--success`/`--warning`/`--danger`/`--muted` modifiers), `.progress-bar`/`.progress-mini`, `.toolbar`, `.form-control`, `.button-primary`, `.button-secondary`, `.split-grid`.
+- Kept every pre-existing class name (`.panel`, `.kpi-grid`, `.section-heading`, `.table-panel`, `.compact-table`, `.plan-list`, `.debug-*`, `.button.secondary`, etc.) so `targets.php` and `expenses.php` — not in this pass's scope — keep rendering correctly without edits, just with the refreshed tokens.
+- Made `.topbar`/`.dashboard-header` `position: sticky; top: 0` with a solid `--bg` background and bottom border, so the header stays visible while scrolling long tables without a full-bleed layout rework.
+- Table `<thead>` is `position: sticky` inside `.table-wrap`; the receivables table additionally uses `.table-scroll` (max-height + overflow) so its own header stays pinned during a long scroll.
+
+### `index.php` (full restructure, same PHP data logic)
+
+- KPI strip now shows exactly the 7 cards from the brief: План, Факт, Оплачено, Не оплачено за місяць, Нам повинні всього, Ми повинні цього місяця, Прогрес. Strategic debt was moved out of the KPI strip into the "Ми повинні" block so it doesn't visually compete with monthly operational cash pressure.
+- Manager performance table columns reordered to Менеджер / План / Факт / % (mini progress bar) / Оплачено / Борг / Залишилось / Замовлень.
+- Receivables ("Нам повинні") is one panel: header summary (total, count, largest), manager drilldown table, then the paginated (25/page) order table with a `.table-scroll` pinned header. Rows use a payment status badge computed from `paid = total − unpaid` (Оплачено / Частково / Не оплачено) instead of raw KeyCRM `payment_status` strings, which are inconsistent; the raw `status_name` (order status) is shown as a plain muted badge since its values aren't reliably classifiable.
+- Added two small read-only aggregates to the existing `db_expenses` try-block, mirroring the pattern already used for `operationalDueThisMonth`/`strategicDebtTotal`: `operationalDueThisWeek` (planned, operational, due this ISO week) and `overdueTotal`/`overdueCount` (planned, operational, `due_date < today`). These power the "Ми повинні" block's "платежі цього тижня" / "прострочені платежі" cards from the design brief. No new tables, no write logic — same scope and shape as the existing operational query.
+- All interface copy switched to Ukrainian (headers, buttons, empty states, nav).
+- `dashboard_manager_key()` now also normalizes the SQL-side `'No manager'` fallback label to `Без менеджера` for display, while the underlying filter URLs still use the raw value so `?debt_manager=` filtering keeps working unchanged.
+
+### `users.php` (light cleanup)
+
+- Compact single "Ім'я" column instead of separate first/last name columns, Ukrainian labels, `.toolbar` search input + role `<select>` filtered entirely client-side with ~15 lines of vanilla JS (no framework, no build step).
+- Server-side default changed to show only `db_active = 1` users, with a `?all=1` link to show everyone — this is a `WHERE` clause addition, not a change to how access/roles are evaluated.
+
+### `sync_orders.php` (light cleanup)
+
+- Ukrainian labels, run status rendered as a `.status-badge` (success/failed/warning), numeric columns right-aligned. No change to the sync request/response handling.
+
+### Left untouched in this pass
+
+- `targets.php`, `expenses.php` — functional already, out of this pass's explicit deliverable scope (see task brief section 12). They inherit the refreshed CSS tokens automatically but were not restructured; their markup is a natural next pass since the classes they use (`.form-section`, `.expense-form`, `.compact-field`, `.wide-field`, `.checkbox-field`) are already defined in the new stylesheet.
+- `keycrm_debug_order.php` — internal debug tool, not part of the CEO-facing design brief; `.debug-*` classes were re-tokenized but not restructured.
+
+### Testing limitation
+
+No `php` binary or database credentials are available in this environment (see Problems Found), so this pass could not be exercised in a live browser. Everything was reviewed by re-reading the full diff of each changed file for tag balance, PHP syntax, and class-name consistency against the new stylesheet. Manual browser verification is required before treating this as done — see `docs/NEXT_STEPS.md`.
+
 ## Manual KeyCRM Sync
 
 Created:

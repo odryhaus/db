@@ -348,22 +348,23 @@ try {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Sync Orders | .BRAND DB</title>
+    <title>Синхронізація | .BRAND DB</title>
     <link rel="stylesheet" href="<?= e(base_path('/assets/app.css')) ?>">
 </head>
 <body>
     <main class="page">
         <header class="topbar">
-            <div>
-                <p class="eyebrow">CEO only</p>
-                <h1>Sync Orders</h1>
+            <div class="brand-block">
+                <p class="eyebrow">Тільки CEO</p>
+                <h1>Синхронізація замовлень</h1>
             </div>
             <nav class="nav">
-                <a href="<?= e(base_path('/index.php')) ?>">Dashboard</a>
-                <a href="<?= e(base_path('/targets.php')) ?>">Targets</a>
-                <a href="<?= e(base_path('/expenses.php')) ?>">Expenses</a>
-                <a href="<?= e(base_path('/users.php')) ?>">Users</a>
-                <a href="<?= e(base_path('/logout.php')) ?>">Logout</a>
+                <a href="<?= e(base_path('/index.php')) ?>">Дашборд</a>
+                <a href="<?= e(base_path('/targets.php')) ?>">Плани</a>
+                <a href="<?= e(base_path('/expenses.php')) ?>">Витрати</a>
+                <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
+                <a class="active" href="<?= e(base_path('/sync_orders.php')) ?>">Синхронізація</a>
+                <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>
             </nav>
         </header>
 
@@ -373,9 +374,9 @@ try {
 
         <?php if ($summary): ?>
             <div class="notice">
-                Sync <?= e($summary['status']) ?>:
-                <?= e((string) $summary['orders_seen']) ?> seen,
-                <?= e((string) $summary['orders_upserted']) ?> upserted.
+                Синхронізація <?= e($summary['status']) ?>:
+                знайдено <?= e((string) $summary['orders_seen']) ?>,
+                оновлено <?= e((string) $summary['orders_upserted']) ?>.
                 <?php if (!empty($summary['error_message'])): ?>
                     <?= e((string) $summary['error_message']) ?>
                 <?php endif; ?>
@@ -384,46 +385,56 @@ try {
 
         <section class="panel action-panel">
             <div>
-                <span class="label">Sync scope</span>
-                <h2><?= e($monthFrom) ?> to <?= e($monthTo) ?></h2>
-                <p>Manual server-side KeyCRM sync. Current month and previous month only.</p>
+                <span class="label">Діапазон синхронізації</span>
+                <h2><?= e($monthFrom) ?> — <?= e($monthTo) ?></h2>
+                <p>Ручна серверна синхронізація з KeyCRM. Тільки поточний і попередній місяць.</p>
             </div>
             <form method="post" action="<?= e(base_path('/sync_orders.php')) ?>">
                 <?= csrf_field() ?>
-                <button type="submit">Run sync</button>
+                <button type="submit">Запустити синхронізацію</button>
             </form>
         </section>
 
         <section class="panel table-panel">
+            <div class="section-heading padded">
+                <div>
+                    <span class="label">Останні 10 запусків</span>
+                    <h2>Історія синхронізацій</h2>
+                </div>
+            </div>
             <div class="table-wrap">
                 <table>
                     <thead>
                         <tr>
                             <th>ID</th>
-                            <th>Type</th>
-                            <th>Started</th>
-                            <th>Finished</th>
-                            <th>Status</th>
-                            <th>Months</th>
-                            <th>Seen</th>
-                            <th>Upserted</th>
-                            <th>Error</th>
+                            <th>Тип</th>
+                            <th>Початок</th>
+                            <th>Кінець</th>
+                            <th>Статус</th>
+                            <th>Місяці</th>
+                            <th class="num">Знайдено</th>
+                            <th class="num">Оновлено</th>
+                            <th>Помилка</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (!$runs): ?>
-                            <tr><td colspan="9">No sync runs yet.</td></tr>
+                            <tr><td colspan="9">Синхронізацій ще не було.</td></tr>
                         <?php endif; ?>
                         <?php foreach ($runs as $run): ?>
+                            <?php
+                                $runStatus = (string) $run['status'];
+                                $badgeClass = $runStatus === 'success' ? 'status-badge--success' : ($runStatus === 'failed' ? 'status-badge--danger' : 'status-badge--warning');
+                            ?>
                             <tr>
                                 <td><?= e((string) $run['id']) ?></td>
                                 <td><?= e((string) $run['sync_type']) ?></td>
                                 <td><?= e((string) $run['started_at']) ?></td>
                                 <td><?= e((string) ($run['finished_at'] ?: '—')) ?></td>
-                                <td><?= e((string) $run['status']) ?></td>
+                                <td><span class="status-badge <?= e($badgeClass) ?>"><?= e($runStatus) ?></span></td>
                                 <td><?= e((string) $run['month_from']) ?> – <?= e((string) $run['month_to']) ?></td>
-                                <td><?= e((string) $run['orders_seen']) ?></td>
-                                <td><?= e((string) $run['orders_upserted']) ?></td>
+                                <td class="num"><?= e((string) $run['orders_seen']) ?></td>
+                                <td class="num"><?= e((string) $run['orders_upserted']) ?></td>
                                 <td><?= e((string) ($run['error_message'] ?: '—')) ?></td>
                             </tr>
                         <?php endforeach; ?>
