@@ -38,7 +38,7 @@ This pass is UI/UX only. No database schema changed, no KeyCRM sync logic change
 - Rewrote the token set: `--bg`, `--panel`, `--surface-muted`, `--line`/`--line-strong`, `--text`/`--muted`/`--faint`, one near-black `--accent`, and three semantic status colors (`--danger`, `--warning`, `--success`) each with a soft background + border variant for badges only — never large color fills.
 - Added a spacing scale (`--space-1`…`--space-6`), radius scale, and a `--row-h: 40px` table density token.
 - Added reusable component classes requested in the design brief: `.app-shell`, `.panel-header`, `.data-table`, `.status-badge` (+ `--success`/`--warning`/`--danger`/`--muted` modifiers), `.progress-bar`/`.progress-mini`, `.toolbar`, `.form-control`, `.button-primary`, `.button-secondary`, `.split-grid`.
-- Kept every pre-existing class name (`.panel`, `.kpi-grid`, `.section-heading`, `.table-panel`, `.compact-table`, `.plan-list`, `.debug-*`, `.button.secondary`, etc.) so `targets.php` and `expenses.php` — not in this pass's scope — keep rendering correctly without edits, just with the refreshed tokens.
+- Kept every pre-existing class name (`.panel`, `.kpi-grid`, `.section-heading`, `.table-panel`, `.compact-table`, `.plan-list`, `.debug-*`, `.button.secondary`, etc.) so page-specific markup can reuse the same primitives safely.
 - Made `.topbar`/`.dashboard-header` `position: sticky; top: 0` with a solid `--bg` background and bottom border, so the header stays visible while scrolling long tables without a full-bleed layout rework.
 - Table `<thead>` is `position: sticky` inside `.table-wrap`; the receivables table additionally uses `.table-scroll` (max-height + overflow) so its own header stays pinned during a long scroll.
 
@@ -60,9 +60,10 @@ This pass is UI/UX only. No database schema changed, no KeyCRM sync logic change
 
 - Ukrainian labels, run status rendered as a `.status-badge` (success/failed/warning), numeric columns right-aligned. No change to the sync request/response handling.
 
-### Left untouched in this pass
+### Follow-up UI pass
 
-- `targets.php`, `expenses.php` — functional already, out of this pass's explicit deliverable scope (see task brief section 12). They inherit the refreshed CSS tokens automatically but were not restructured; their markup is a natural next pass since the classes they use (`.form-section`, `.expense-form`, `.compact-field`, `.wide-field`, `.checkbox-field`) are already defined in the new stylesheet.
+- `targets.php` now follows the dashboard design system: sticky topbar, active nav, KPI strip, month toolbar, compact monthly target panel, manager target table, numeric alignment, and mini progress bars.
+- `expenses.php` now follows the dashboard design system: sticky topbar, active nav, KPI strip, filter toolbar, compact expense form, upcoming payments table, filter summary panel, expense register with status/type badges and scrollable table.
 - `keycrm_debug_order.php` — internal debug tool, not part of the CEO-facing design brief; `.debug-*` classes were re-tokenized but not restructured.
 
 ### Testing limitation

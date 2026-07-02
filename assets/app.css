@@ -545,6 +545,10 @@ button:hover,
     margin-bottom: var(--space-4);
 }
 
+.compact-kpis {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
 .kpi-card {
     border: 1px solid var(--line);
     border-radius: var(--radius-md);

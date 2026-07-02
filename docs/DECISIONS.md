@@ -125,7 +125,7 @@ Redesign the interface into a calm, dense, executive dashboard (Linear/GitHub/Ve
 Decision:
 
 - One near-black `--accent` for primary actions/active nav state; color is reserved for semantic status badges (success/warning/danger), never for large fills or decoration.
-- Reuse every existing CSS class name (`.panel`, `.kpi-grid`, `.section-heading`, `.table-panel`, `.plan-list`, etc.) rather than renaming them, so pages outside this pass's scope (`targets.php`, `expenses.php`) keep rendering correctly on the new tokens without being touched.
+- Reuse every existing CSS class name (`.panel`, `.kpi-grid`, `.section-heading`, `.table-panel`, `.plan-list`, etc.) rather than renaming them, so all PHP pages can share the same tokens and layout primitives.
 - Add the specific reusable classes requested in the design brief (`.app-shell`, `.panel-header`, `.data-table`, `.status-badge`, `.toolbar`, `.form-control`, `.button-primary`, `.button-secondary`, `.split-grid`) as additive classes, not replacements.
 - Sticky topbar and sticky table headers implemented with plain `position: sticky` inside the existing constrained-width container, avoiding a full-bleed header rework.
 - Interface copy is Ukrainian throughout the pages touched in this pass (`index.php`, `users.php`, `sync_orders.php`).
@@ -143,14 +143,15 @@ Decision:
 
 Reason: the design brief's "Ми повинні" block explicitly lists "платежі цього тижня" and "прострочені платежі" as required cards; the data was one read-only query away using the table that already exists (`db_expenses`), so it was safer to add the two aggregates than to ship a placeholder card wired to nothing.
 
-## UI Redesign Left `targets.php` / `expenses.php` Untouched
+## Targets / Expenses Use The Same UI System
 
 Decision:
 
-- This pass restructures `index.php` fully and gives `users.php`/`sync_orders.php` light cleanup, per the task brief's explicit deliverable list.
-- `targets.php` and `expenses.php` are functional and already use classes now defined in the refreshed stylesheet, but were not restructured to the new panel/table patterns in this pass.
+- `targets.php` and `expenses.php` should follow `index.php` as the design reference.
+- Use the same sticky topbar, `.brand-block`, active `.nav` state, KPI cards, `.toolbar`, `.panel`, `.section-heading.padded`, `.table-panel`, `.table-scroll`, `.status-badge`, and `.progress-mini` patterns.
+- Keep page-specific logic unchanged while making the presentation consistent.
 
-Reason: keep the change reviewable and scoped to what was asked; a second pass can apply the same panel/table patterns once this one is confirmed in a real browser.
+Reason: the CEO-facing money system should feel like one compact internal product, not separate pages with separate layouts.
 
 ## Out Of Scope
 

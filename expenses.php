@@ -38,6 +38,31 @@ function expense_money($value): string
     return number_format((float) $value, 0, '.', ' ') . ' UAH';
 }
 
+function expense_type_label(string $type): string
+{
+    $labels = [
+        'one_time' => 'Разовий',
+        'monthly_subscription' => 'Щомісячний',
+        'loan_payment' => 'Кредит',
+        'operational_debt' => 'Операційний борг',
+        'strategic_debt' => 'Стратегічний борг',
+        'other' => 'Інше',
+    ];
+
+    return $labels[$type] ?? $type;
+}
+
+function expense_status_badge(string $status): string
+{
+    if ($status === 'paid') {
+        return '<span class="status-badge status-badge--success">Оплачено</span>';
+    }
+    if ($status === 'canceled') {
+        return '<span class="status-badge status-badge--muted">Скасовано</span>';
+    }
+    return '<span class="status-badge status-badge--warning">План</span>';
+}
+
 if (is_post()) {
     $action = (string) ($_POST['action'] ?? 'save');
 
@@ -175,6 +200,7 @@ $upcomingStmt = db()->query("
     LIMIT 12
 ");
 $upcoming = $upcomingStmt->fetchAll();
+$upcomingCount = count($upcoming);
 
 $monthlyStmt = db()->prepare("
     SELECT
@@ -217,23 +243,28 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Expenses | .BRAND DB</title>
+    <title>Витрати | .BRAND DB</title>
     <link rel="stylesheet" href="<?= e(base_path('/assets/app.css')) ?>">
 </head>
 <body>
     <main class="page">
         <header class="topbar">
-            <div>
+            <div class="brand-block">
                 <p class="eyebrow">Money control</p>
-                <h1>Expenses</h1>
+                <h1>Витрати</h1>
+                <p class="muted">Планові платежі, операційні витрати і стратегічні борги</p>
             </div>
             <nav class="nav">
-                <a href="<?= e(base_path('/index.php?month=' . urlencode($selectedMonth))) ?>">Dashboard</a>
+                <a href="<?= e(base_path('/index.php?month=' . urlencode($selectedMonth))) ?>">Дашборд</a>
                 <?php if (user_role() === 'ceo'): ?>
-                    <a href="<?= e(base_path('/targets.php?month=' . urlencode($selectedMonth))) ?>">Targets</a>
-                    <a href="<?= e(base_path('/users.php')) ?>">Users</a>
+                    <a href="<?= e(base_path('/targets.php?month=' . urlencode($selectedMonth))) ?>">Плани</a>
                 <?php endif; ?>
-                <a href="<?= e(base_path('/logout.php')) ?>">Logout</a>
+                <a class="active" href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">Витрати</a>
+                <?php if (user_role() === 'ceo'): ?>
+                    <a href="<?= e(base_path('/sync_orders.php')) ?>">Синхронізація</a>
+                    <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
+                <?php endif; ?>
+                <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>
             </nav>
         </header>
 
@@ -246,25 +277,56 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
 
         <section class="kpi-grid compact-kpis">
             <div class="kpi-card">
-                <span class="label">Monthly planned</span>
+                <span class="label">План на місяць</span>
                 <strong><?= e(expense_money($monthlyPlanned['planned_total'] ?? 0)) ?></strong>
-                <small><?= e((string) ($monthlyPlanned['planned_count'] ?? 0)) ?> planned items</small>
+                <small><?= e((string) ($monthlyPlanned['planned_count'] ?? 0)) ?> планових платежів</small>
             </div>
             <div class="kpi-card danger">
-                <span class="label">Strategic debt</span>
+                <span class="label">Стратегічні борги</span>
                 <strong><?= e(expense_money($strategicDebt['strategic_total'] ?? 0)) ?></strong>
-                <small><?= e((string) ($strategicDebt['strategic_count'] ?? 0)) ?> records</small>
+                <small><?= e((string) ($strategicDebt['strategic_count'] ?? 0)) ?> записів</small>
+            </div>
+            <div class="kpi-card">
+                <span class="label">Найближчі платежі</span>
+                <strong><?= e((string) $upcomingCount) ?></strong>
+                <small>у списку нижче</small>
             </div>
         </section>
 
-        <section class="panel form-section">
+        <section class="panel dashboard-section">
+            <form class="toolbar" method="get" action="<?= e(base_path('/expenses.php')) ?>">
+                <label>
+                    <span>Місяць</span>
+                    <input type="month" name="month" value="<?= e($selectedMonth) ?>">
+                </label>
+                <label>
+                    <span>Статус</span>
+                    <select name="status">
+                        <?php foreach (array_merge(['all'], expense_statuses()) as $status): ?>
+                            <option value="<?= e($status) ?>" <?= $statusFilter === $status ? 'selected' : '' ?>><?= e($status === 'all' ? 'усі' : $status) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <label>
+                    <span>Тип</span>
+                    <select name="scope">
+                        <option value="all" <?= $scopeFilter === 'all' ? 'selected' : '' ?>>усі</option>
+                        <option value="operational" <?= $scopeFilter === 'operational' ? 'selected' : '' ?>>операційні</option>
+                        <option value="strategic" <?= $scopeFilter === 'strategic' ? 'selected' : '' ?>>стратегічні</option>
+                    </select>
+                </label>
+                <button type="submit">Фільтрувати</button>
+            </form>
+        </section>
+
+        <section class="panel form-section dashboard-section">
             <div class="section-heading">
                 <div>
-                    <span class="label"><?= $editExpense ? 'Edit' : 'Add' ?></span>
-                    <h2><?= $editExpense ? e((string) $editExpense['title']) : 'New expense' ?></h2>
+                    <span class="label"><?= $editExpense ? 'Редагування' : 'Новий платіж' ?></span>
+                    <h2><?= $editExpense ? e((string) $editExpense['title']) : 'Додати витрату' ?></h2>
                 </div>
                 <?php if ($editExpense): ?>
-                    <a class="button secondary" href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">New</a>
+                    <a class="button-secondary small-button" href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">Новий запис</a>
                 <?php endif; ?>
             </div>
             <form method="post" action="<?= e(base_path('/expenses.php')) ?>" class="expense-form">
@@ -273,31 +335,31 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
                 <input type="hidden" name="id" value="<?= e((string) ($editExpense['id'] ?? 0)) ?>">
                 <input type="hidden" name="month" value="<?= e($selectedMonth) ?>">
                 <label>
-                    <span>Title</span>
+                    <span>Назва</span>
                     <input name="title" required value="<?= e($editExpense['title'] ?? '') ?>">
                 </label>
                 <label>
-                    <span>Category</span>
+                    <span>Категорія</span>
                     <input name="category" value="<?= e($editExpense['category'] ?? '') ?>">
                 </label>
                 <label>
-                    <span>Amount, UAH</span>
+                    <span>Сума, UAH</span>
                     <input type="number" step="0.01" min="0" name="amount_uah" value="<?= e((string) ($editExpense['amount_uah'] ?? '')) ?>">
                 </label>
                 <label>
-                    <span>Currency</span>
+                    <span>Валюта</span>
                     <input name="currency" value="<?= e($editExpense['currency'] ?? 'UAH') ?>">
                 </label>
                 <label>
-                    <span>Type</span>
+                    <span>Тип</span>
                     <select name="expense_type">
                         <?php foreach (expense_types() as $type): ?>
-                            <option value="<?= e($type) ?>" <?= (string) ($editExpense['expense_type'] ?? 'other') === $type ? 'selected' : '' ?>><?= e($type) ?></option>
+                            <option value="<?= e($type) ?>" <?= (string) ($editExpense['expense_type'] ?? 'other') === $type ? 'selected' : '' ?>><?= e(expense_type_label($type)) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </label>
                 <label>
-                    <span>Status</span>
+                    <span>Статус</span>
                     <select name="status">
                         <?php foreach (expense_statuses() as $status): ?>
                             <option value="<?= e($status) ?>" <?= (string) ($editExpense['status'] ?? 'planned') === $status ? 'selected' : '' ?>><?= e($status) ?></option>
@@ -305,34 +367,34 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
                     </select>
                 </label>
                 <label>
-                    <span>Due date</span>
+                    <span>Дата платежу</span>
                     <input type="date" name="due_date" value="<?= e($editExpense['due_date'] ?? '') ?>">
                 </label>
                 <label>
-                    <span>Repeat day</span>
+                    <span>День повтору</span>
                     <input type="number" min="1" max="31" name="repeat_day" value="<?= e((string) ($editExpense['repeat_day'] ?? '')) ?>">
                 </label>
                 <label>
-                    <span>Repeat until</span>
+                    <span>Повторювати до</span>
                     <input type="date" name="repeat_until" value="<?= e($editExpense['repeat_until'] ?? '') ?>">
                 </label>
                 <label>
-                    <span>Total debt, UAH</span>
+                    <span>Загальний борг, UAH</span>
                     <input type="number" step="0.01" min="0" name="total_debt_amount_uah" value="<?= e((string) ($editExpense['total_debt_amount_uah'] ?? '')) ?>">
                 </label>
                 <label>
-                    <span>Paid, UAH</span>
+                    <span>Оплачено, UAH</span>
                     <input type="number" step="0.01" min="0" name="paid_amount_uah" value="<?= e((string) ($editExpense['paid_amount_uah'] ?? '0')) ?>">
                 </label>
                 <label class="checkbox-field">
                     <input type="checkbox" name="is_strategic" value="1" <?= (int) ($editExpense['is_strategic'] ?? 0) === 1 ? 'checked' : '' ?>>
-                    <span>Strategic debt</span>
+                    <span>Стратегічний борг</span>
                 </label>
                 <label class="wide-field">
-                    <span>Note</span>
+                    <span>Нотатка</span>
                     <textarea name="note" rows="3"><?= e($editExpense['note'] ?? '') ?></textarea>
                 </label>
-                <button type="submit">Save expense</button>
+                <button type="submit">Зберегти</button>
             </form>
         </section>
 
@@ -340,30 +402,30 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
             <div class="panel table-panel">
                 <div class="section-heading padded">
                     <div>
-                        <span class="label">Next due</span>
-                        <h2>Upcoming payments</h2>
+                        <span class="label">Найближчі дати</span>
+                        <h2>Майбутні платежі</h2>
                     </div>
                 </div>
                 <div class="table-wrap">
                     <table class="compact-table">
                         <thead>
                             <tr>
-                                <th>Due</th>
-                                <th>Title</th>
-                                <th>Type</th>
-                                <th>Amount</th>
+                                <th>Дата</th>
+                                <th>Назва</th>
+                                <th>Тип</th>
+                                <th class="num">Сума</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (!$upcoming): ?>
-                                <tr><td colspan="4">No upcoming planned payments.</td></tr>
+                                <tr><td colspan="4">Немає майбутніх планових платежів.</td></tr>
                             <?php endif; ?>
                             <?php foreach ($upcoming as $expense): ?>
                                 <tr>
                                     <td><?= e((string) $expense['due_date']) ?></td>
                                     <td><?= e((string) $expense['title']) ?></td>
-                                    <td><?= e((string) $expense['expense_type']) ?></td>
-                                    <td><?= e(expense_money($expense['amount_uah'] ?? 0)) ?></td>
+                                    <td><span class="status-badge status-badge--muted"><?= e(expense_type_label((string) $expense['expense_type'])) ?></span></td>
+                                    <td class="num"><?= e(expense_money($expense['amount_uah'] ?? 0)) ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -372,68 +434,64 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
             </div>
 
             <div class="panel">
-                <form class="form" method="get" action="<?= e(base_path('/expenses.php')) ?>">
-                    <input type="hidden" name="month" value="<?= e($selectedMonth) ?>">
-                    <label>
-                        <span>Status</span>
-                        <select name="status">
-                            <?php foreach (array_merge(['all'], expense_statuses()) as $status): ?>
-                                <option value="<?= e($status) ?>" <?= $statusFilter === $status ? 'selected' : '' ?>><?= e($status) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </label>
-                    <label>
-                        <span>Scope</span>
-                        <select name="scope">
-                            <?php foreach (['all', 'operational', 'strategic'] as $scope): ?>
-                                <option value="<?= e($scope) ?>" <?= $scopeFilter === $scope ? 'selected' : '' ?>><?= e($scope) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </label>
-                    <button type="submit">Filter</button>
-                </form>
+                <div class="section-heading">
+                    <div>
+                        <span class="label">Поточний фільтр</span>
+                        <h2><?= e($statusFilter === 'all' ? 'Усі статуси' : $statusFilter) ?></h2>
+                    </div>
+                </div>
+                <dl class="plan-list">
+                    <div>
+                        <dt>Місяць</dt>
+                        <dd><?= e($selectedMonth) ?></dd>
+                    </div>
+                    <div>
+                        <dt>Тип</dt>
+                        <dd><?= e($scopeFilter) ?></dd>
+                    </div>
+                </dl>
             </div>
         </section>
 
         <section class="panel table-panel">
             <div class="section-heading padded">
                 <div>
-                    <span class="label">Expense register</span>
-                    <h2>Planned, paid, canceled</h2>
+                    <span class="label">Реєстр витрат</span>
+                    <h2>Планові, оплачені, скасовані</h2>
                 </div>
             </div>
-            <div class="table-wrap">
+            <div class="table-wrap table-scroll">
                 <table>
                     <thead>
                         <tr>
-                            <th>Title</th>
-                            <th>Category</th>
-                            <th>Type</th>
-                            <th>Due</th>
-                            <th>Amount</th>
-                            <th>Paid</th>
-                            <th>Status</th>
-                            <th>Strategic</th>
+                            <th>Назва</th>
+                            <th>Категорія</th>
+                            <th>Тип</th>
+                            <th>Дата</th>
+                            <th class="num">Сума</th>
+                            <th class="num">Оплачено</th>
+                            <th>Статус</th>
+                            <th>Стратегічний</th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (!$expenses): ?>
-                            <tr><td colspan="9">No expenses for selected filters.</td></tr>
+                            <tr><td colspan="9">За обраними фільтрами витрат немає.</td></tr>
                         <?php endif; ?>
                         <?php foreach ($expenses as $expense): ?>
                             <tr>
                                 <td><?= e((string) $expense['title']) ?></td>
                                 <td><?= e((string) ($expense['category'] ?: '—')) ?></td>
-                                <td><?= e((string) $expense['expense_type']) ?></td>
+                                <td><span class="status-badge status-badge--muted"><?= e(expense_type_label((string) $expense['expense_type'])) ?></span></td>
                                 <td><?= e((string) ($expense['due_date'] ?: '—')) ?></td>
-                                <td><?= e(expense_money($expense['amount_uah'] ?? 0)) ?></td>
-                                <td><?= e(expense_money($expense['paid_amount_uah'] ?? 0)) ?></td>
-                                <td><?= e((string) $expense['status']) ?></td>
-                                <td><?= (int) $expense['is_strategic'] === 1 ? 'yes' : 'no' ?></td>
+                                <td class="num"><?= e(expense_money($expense['amount_uah'] ?? 0)) ?></td>
+                                <td class="num"><?= e(expense_money($expense['paid_amount_uah'] ?? 0)) ?></td>
+                                <td><?= expense_status_badge((string) $expense['status']) ?></td>
+                                <td><?= (int) $expense['is_strategic'] === 1 ? '<span class="status-badge status-badge--danger">Так</span>' : '<span class="status-badge status-badge--muted">Ні</span>' ?></td>
                                 <td>
                                     <div class="row-actions">
-                                        <a class="button secondary small-button" href="<?= e(base_path('/expenses.php?' . http_build_query(['month' => $selectedMonth, 'status' => $statusFilter, 'scope' => $scopeFilter, 'edit' => (int) $expense['id']]))) ?>">Edit</a>
+                                        <a class="button-secondary small-button" href="<?= e(base_path('/expenses.php?' . http_build_query(['month' => $selectedMonth, 'status' => $statusFilter, 'scope' => $scopeFilter, 'edit' => (int) $expense['id']]))) ?>">Edit</a>
                                         <?php if ((string) $expense['status'] !== 'paid'): ?>
                                             <form method="post" action="<?= e(base_path('/expenses.php')) ?>">
                                                 <?= csrf_field() ?>
