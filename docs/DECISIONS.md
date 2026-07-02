@@ -182,6 +182,12 @@ Decision:
 - Keep VAT support out of scope until a VAT seller company is explicitly configured.
 - For seller companies with `allowed_item_type = 'products_only'`, default collapsed item wording is `Поліграфічна продукція`; service wording is not generated.
 - Services remain disabled until a FOP 3 group seller company with `allowed_item_type = 'services_allowed'` is configured and reviewed.
+- Invoice number defaults to the KeyCRM order number, not an internal `INV-YYYYMM-0001` sequence.
+- PDF file names use `INV_<invoice_number>.pdf` for invoices and `DN_<invoice_number>.pdf` for delivery notes.
+- Buyer/contact is treated as the contact person.
+- Company/legal entity is treated as the invoice recipient/payer.
+- Multiple legal entities per client company are supported locally through `db_client_legal_entities`.
+- Legal entities are built gradually from edited invoices.
 
 Reason: the first invoice milestone should speed up document creation and payment control without turning .BRAND DB into ERP/accounting software.
 

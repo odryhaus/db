@@ -22,10 +22,14 @@ Checklist:
 - CEO can open `targets.php` and save monthly/manager targets.
 - CEO/accountant can open `https://bph.com.ua/db/invoices.php`.
 - CEO/accountant can create an invoice draft from an existing `db_orders.keycrm_id`.
-- Invoice item titles, quantities, prices, buyer, number, and date can be edited before document generation.
+- Invoice number defaults to the KeyCRM order number.
+- Invoice item titles, quantities, prices, recipient, contact, number, and date can be edited before document generation.
+- PDF download button is labeled `PDF` and downloads `INV_<number>.pdf` or `DN_<number>.pdf`.
+- Buyer/contact is separate from company/legal recipient.
+- Saved client legal entities can be selected on future invoices.
 - Seller `FOP Darchenko A.B.` exists in `db_our_companies` after first invoice page load.
 - Collapsed item title for products-only seller is `Поліграфічна продукція`.
-- Generated invoice/delivery file opens from the invoice page.
+- Generated invoice/delivery PDF downloads from the invoice page.
 - CEO/accountant can open `expenses.php`.
 - Dashboard shows operational monthly expenses and strategic debt separately.
 - Logout redirects back to login.

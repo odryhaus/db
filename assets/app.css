@@ -566,6 +566,18 @@ button:hover,
     width: min(260px, 100%);
 }
 
+.field-warning {
+    display: block;
+    margin-top: 5px;
+    color: var(--warning);
+    font-weight: 600;
+}
+
+td small {
+    display: block;
+    margin-top: 2px;
+}
+
 .action-panel {
     display: flex;
     align-items: center;

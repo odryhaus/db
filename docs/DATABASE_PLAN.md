@@ -266,9 +266,12 @@ Main fields:
 - `invoice_date`
 - `document_type`
 - `seller_company_id`
+- `client_company_id`
+- `client_legal_entity_id`
 - `buyer_id`
 - `buyer_company_id`
 - `buyer_display_name`
+- `buyer_contact_name`
 - `buyer_edrpou`
 - `buyer_address`
 - `buyer_email`
@@ -319,6 +322,98 @@ Main fields:
 - `price_uah`
 - `amount_uah`
 - `sort_order`
+- `created_at`
+- `updated_at`
+
+Pages:
+
+- `invoices.php`
+
+### db_client_companies
+
+Purpose:
+
+- Local cache/model for client companies from KeyCRM.
+- Used to group one or more local legal entities for invoices.
+
+Source of data:
+
+- Best-effort copy from `db_orders.raw_json`.
+- Later can be expanded by company sync from KeyCRM.
+
+Main fields:
+
+- `id`
+- `keycrm_company_id`
+- `name`
+- `title`
+- `manager_id`
+- `raw_json`
+- `synced_at`
+- `created_at`
+- `updated_at`
+
+Pages:
+
+- `invoices.php`
+
+### db_client_contacts
+
+Purpose:
+
+- Local cache/model for buyer/contact person from KeyCRM.
+- Buyer/contact is not the same as the invoice legal recipient.
+
+Source of data:
+
+- Best-effort copy from `db_orders.raw_json`.
+- Later can be expanded by buyer/contact sync from KeyCRM.
+
+Main fields:
+
+- `id`
+- `keycrm_buyer_id`
+- `client_company_id`
+- `full_name`
+- `email`
+- `phone`
+- `position`
+- `raw_json`
+- `synced_at`
+- `created_at`
+- `updated_at`
+
+Pages:
+
+- `invoices.php`
+
+### db_client_legal_entities
+
+Purpose:
+
+- Local editable legal recipient/payer records for invoices.
+- Supports multiple legal entities per client company.
+
+Source of data:
+
+- Created gradually from edited invoice recipient fields.
+- KeyCRM remains the raw buyer/company source, but final invoice recipient is an editable local snapshot.
+
+Main fields:
+
+- `id`
+- `client_company_id`
+- `legal_name`
+- `short_name`
+- `edrpou`
+- `tax_number`
+- `iban`
+- `bank`
+- `legal_address`
+- `email`
+- `phone`
+- `is_default`
+- `note`
 - `created_at`
 - `updated_at`
 
@@ -494,6 +589,59 @@ Fields:
 - `raw_json`
 - `synced_at`
 
+### db_client_companies
+
+Local company model used by invoices.
+
+Fields:
+
+- `keycrm_company_id`
+- `name`
+- `title`
+- `manager_id`
+- `raw_json`
+- `synced_at`
+
+### db_client_contacts
+
+Local contact person model used by invoices.
+
+Fields:
+
+- `keycrm_buyer_id`
+- `client_company_id`
+- `full_name`
+- `email`
+- `phone`
+- `position`
+- `raw_json`
+- `synced_at`
+
+### db_client_legal_entities
+
+Local invoice recipient/payer model.
+
+Fields:
+
+- `client_company_id`
+- `legal_name`
+- `short_name`
+- `edrpou`
+- `tax_number`
+- `iban`
+- `bank`
+- `legal_address`
+- `email`
+- `phone`
+- `is_default`
+- `note`
+
+Rules:
+
+- Several legal entities can belong to one client company.
+- Legal entities are built gradually from edited invoices.
+- KeyCRM company/buyer data is raw source data; invoice recipient is an editable snapshot.
+
 ### db_sales_targets
 
 Effective-date targets.
@@ -573,6 +721,9 @@ Fields:
 - `invoice_date`
 - `document_type`
 - `seller_company_id`
+- `client_company_id`
+- `client_legal_entity_id`
+- `buyer_contact_name`
 - buyer/company data snapshot
 - `total_amount_uah`
 - VAT mode
@@ -585,6 +736,15 @@ Fields:
 - `pdf_file_path`
 - `keycrm_file_id`
 - `note`
+
+Rules:
+
+- `invoice_number` must default to the KeyCRM order number.
+- Invoice PDF file name must be `INV_<invoice_number>.pdf`.
+- Delivery note PDF file name must be `DN_<invoice_number>.pdf`.
+- Buyer/contact is the contact person.
+- Company/legal entity is the invoice recipient/payer.
+- Recipient should prefer KeyCRM `company.title`, then `company.name`, then buyer/contact name, then remain editable with warning.
 
 ### db_invoice_items
 

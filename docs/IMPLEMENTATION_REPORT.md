@@ -11,7 +11,7 @@ Production `/db` authentication is live:
 - Production `setup_key` was disabled manually.
 - Production `setup-ceo.php` was manually deleted.
 
-This update adds Invoices v0.1 as an editable local document foundation while keeping KeyCRM sync unchanged.
+This update fixes invoice numbering, PDF naming, recipient handling, and prepares a simple local client legal entities model while keeping KeyCRM sync unchanged.
 
 ## Files Changed
 
@@ -32,6 +32,44 @@ This update adds Invoices v0.1 as an editable local document foundation while ke
 - `users.php`
 
 ## Invoices v0.1
+
+### Invoice fixes
+
+- Invoice number now defaults to the KeyCRM order number (`db_orders.order_number`) and falls back to `keycrm_order_id`.
+- PDF title uses `РАХУНОК НА ОПЛАТУ № <invoice_number>`.
+- Delivery note title uses `ВИДАТКОВА НАКЛАДНА № <invoice_number>`.
+- Generated PDF file names use `INV_<invoice_number>.pdf` for invoices and `DN_<invoice_number>.pdf` for delivery notes.
+- The invoice list and edit header show a `PDF` button instead of `File`; it downloads the real PDF as an attachment.
+- Buyer/contact and company/legal recipient are separated:
+  - buyer/contact = contact person
+  - company/legal entity = invoice recipient/payer
+- Recipient extraction prefers `company.title`, then `company.name`, then `buyer.full_name`.
+- If recipient is missing, the UI shows `Одержувач не підтягнувся` and keeps the field editable.
+- Payment purpose defaults to `за продукцію згідно рахунку № <invoice_number> від <date>`.
+
+Created additive client tables only if missing:
+
+```text
+db_client_companies
+db_client_contacts
+db_client_legal_entities
+```
+
+Added safe nullable invoice snapshot columns if missing:
+
+```text
+db_invoices.client_company_id
+db_invoices.client_legal_entity_id
+db_invoices.buyer_contact_name
+```
+
+Client legal entity behavior:
+
+- Legal entities are stored locally and built gradually from edited invoices.
+- Several legal entities can belong to one client company.
+- `invoices.php` shows `Юрособа для рахунку` when saved legal entities exist for the client company.
+- `Зберегти як юрособу клієнта` saves current recipient fields to `db_client_legal_entities`.
+- KeyCRM remains the raw source for buyer/company data, but the invoice recipient is an editable local snapshot.
 
 Created:
 
@@ -91,7 +129,8 @@ PDF/file generation:
 - It includes: `Без ПДВ. Платник єдиного податку.`
 - If `wkhtmltopdf` exists on the server, the app saves a real `.pdf`.
 - If `wkhtmltopdf` is not available or `shell_exec` is disabled, the app saves a print-ready `.html` file and shows a message.
-- Generated files can be opened only through authenticated `invoices.php?download=ID`, not by passing an arbitrary path.
+- The `PDF` button is shown only when the generated file is a real `.pdf`.
+- Generated PDFs can be downloaded only through authenticated `invoices.php?download=ID`, not by passing an arbitrary path.
 
 What was NOT implemented:
 

@@ -15,6 +15,7 @@ $message = '';
 $error = '';
 $editInvoice = null;
 $editItems = [];
+$editLegalEntities = [];
 $companies = [];
 
 function invoice_money($value): string
@@ -40,6 +41,31 @@ function invoice_date_label(?string $date): string
 
     $time = strtotime($date);
     return $time ? date('d.m.Y', $time) : $date;
+}
+
+function invoice_ua_date_label(?string $date): string
+{
+    $time = $date ? strtotime($date) : time();
+    if (!$time) {
+        return invoice_date_label($date);
+    }
+
+    $months = [
+        1 => 'січня',
+        2 => 'лютого',
+        3 => 'березня',
+        4 => 'квітня',
+        5 => 'травня',
+        6 => 'червня',
+        7 => 'липня',
+        8 => 'серпня',
+        9 => 'вересня',
+        10 => 'жовтня',
+        11 => 'листопада',
+        12 => 'грудня',
+    ];
+
+    return date('j', $time) . ' ' . $months[(int) date('n', $time)] . ' ' . date('Y', $time);
 }
 
 function invoice_status_label(string $status): string
@@ -130,6 +156,19 @@ function invoice_safe_item_title(string $title, array $seller): string
     return substr($title, 0, 255);
 }
 
+function invoice_safe_file_number(string $number): string
+{
+    $safe = preg_replace('/[^A-Za-z0-9_-]+/', '_', trim($number));
+    $safe = trim((string) $safe, '_-');
+    return $safe !== '' ? $safe : 'document';
+}
+
+function invoice_pdf_available(array $invoice): bool
+{
+    return !empty($invoice['pdf_file_path'])
+        && strtolower(pathinfo((string) $invoice['pdf_file_path'], PATHINFO_EXTENSION)) === 'pdf';
+}
+
 function invoice_order_payload(array $dbOrder): array
 {
     $raw = json_decode((string) ($dbOrder['raw_json'] ?? ''), true);
@@ -138,24 +177,131 @@ function invoice_order_payload(array $dbOrder): array
     $company = is_array($raw['company'] ?? null) ? $raw['company'] : [];
     $products = is_array($raw['products'] ?? null) ? $raw['products'] : [];
 
-    $buyerName = (string) (($dbOrder['company_name'] ?? '') ?: ($company['title'] ?? ($company['name'] ?? '')));
-    if ($buyerName === '') {
-        $buyerName = (string) (($dbOrder['buyer_name'] ?? '') ?: ($buyer['full_name'] ?? ($buyer['name'] ?? '')));
-    }
-    if ($buyerName === '') {
-        $buyerName = (string) (($dbOrder['client_name'] ?? '') ?: 'Покупець');
+    $companyTitle = trim((string) (($company['title'] ?? '') ?: ''));
+    $companyName = trim((string) (($dbOrder['company_name'] ?? '') ?: ($company['name'] ?? '')));
+    $contactName = trim((string) (($dbOrder['buyer_name'] ?? '') ?: ($buyer['full_name'] ?? ($buyer['name'] ?? ($dbOrder['client_name'] ?? '')))));
+    $recipientName = $companyTitle !== '' ? $companyTitle : $companyName;
+    if ($recipientName === '') {
+        $recipientName = $contactName;
     }
 
     return [
         'buyer_id' => (int) (($dbOrder['buyer_id'] ?? 0) ?: ($buyer['id'] ?? 0)),
         'buyer_company_id' => (int) (($dbOrder['company_id'] ?? 0) ?: ($company['id'] ?? 0)),
-        'buyer_display_name' => $buyerName,
+        'buyer_display_name' => $recipientName,
+        'buyer_contact_name' => $contactName,
+        'company_name' => $companyName,
+        'company_title' => $companyTitle,
+        'company_raw_json' => $company ? json_encode($company, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+        'buyer_raw_json' => $buyer ? json_encode($buyer, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+        'manager_id' => (int) (($dbOrder['manager_id'] ?? 0) ?: invoice_get_path($raw, ['manager.id'])),
         'buyer_edrpou' => (string) invoice_get_path($raw, ['company.edrpou', 'company.code', 'buyer.edrpou', 'buyer.code']),
         'buyer_address' => (string) invoice_get_path($raw, ['company.address', 'company.legal_address', 'buyer.address']),
         'buyer_email' => (string) (($dbOrder['buyer_email'] ?? '') ?: invoice_get_path($raw, ['buyer.email', 'company.email'])),
         'buyer_phone' => (string) (($dbOrder['buyer_phone'] ?? '') ?: invoice_get_path($raw, ['buyer.phone', 'company.phone'])),
         'total_amount_uah' => invoice_number_value($dbOrder['total_amount_uah'] ?? invoice_get_path($raw, ['grand_total', 'total'])),
         'products' => $products,
+        'order_number' => (string) (($dbOrder['order_number'] ?? '') ?: ($dbOrder['keycrm_id'] ?? '')),
+    ];
+}
+
+function invoice_store_client_snapshot(array $payload): array
+{
+    $clientCompanyId = null;
+    $contactId = null;
+    $keycrmCompanyId = (int) ($payload['buyer_company_id'] ?? 0);
+
+    if ($keycrmCompanyId > 0 || (string) ($payload['company_name'] ?? '') !== '' || (string) ($payload['company_title'] ?? '') !== '') {
+        if ($keycrmCompanyId > 0) {
+            $stmt = db()->prepare('SELECT id FROM db_client_companies WHERE keycrm_company_id = :keycrm_company_id ORDER BY id DESC LIMIT 1');
+            $stmt->execute(['keycrm_company_id' => $keycrmCompanyId]);
+            $clientCompanyId = $stmt->fetchColumn() ?: null;
+        }
+
+        if ($clientCompanyId) {
+            $stmt = db()->prepare("
+                UPDATE db_client_companies
+                SET name = :name,
+                    title = :title,
+                    manager_id = :manager_id,
+                    raw_json = :raw_json,
+                    synced_at = NOW()
+                WHERE id = :id
+            ");
+            $stmt->execute([
+                'name' => $payload['company_name'] ?: null,
+                'title' => $payload['company_title'] ?: null,
+                'manager_id' => !empty($payload['manager_id']) ? (int) $payload['manager_id'] : null,
+                'raw_json' => $payload['company_raw_json'] ?: null,
+                'id' => (int) $clientCompanyId,
+            ]);
+        } else {
+            $stmt = db()->prepare("
+                INSERT INTO db_client_companies
+                    (keycrm_company_id, name, title, manager_id, raw_json, synced_at)
+                VALUES
+                    (:keycrm_company_id, :name, :title, :manager_id, :raw_json, NOW())
+            ");
+            $stmt->execute([
+                'keycrm_company_id' => $keycrmCompanyId > 0 ? $keycrmCompanyId : null,
+                'name' => $payload['company_name'] ?: null,
+                'title' => $payload['company_title'] ?: null,
+                'manager_id' => !empty($payload['manager_id']) ? (int) $payload['manager_id'] : null,
+                'raw_json' => $payload['company_raw_json'] ?: null,
+            ]);
+            $clientCompanyId = (int) db()->lastInsertId();
+        }
+    }
+
+    $keycrmBuyerId = (int) ($payload['buyer_id'] ?? 0);
+    if ($keycrmBuyerId > 0 || (string) ($payload['buyer_contact_name'] ?? '') !== '') {
+        if ($keycrmBuyerId > 0) {
+            $stmt = db()->prepare('SELECT id FROM db_client_contacts WHERE keycrm_buyer_id = :keycrm_buyer_id ORDER BY id DESC LIMIT 1');
+            $stmt->execute(['keycrm_buyer_id' => $keycrmBuyerId]);
+            $contactId = $stmt->fetchColumn() ?: null;
+        }
+
+        if ($contactId) {
+            $stmt = db()->prepare("
+                UPDATE db_client_contacts
+                SET client_company_id = :client_company_id,
+                    full_name = :full_name,
+                    email = :email,
+                    phone = :phone,
+                    raw_json = :raw_json,
+                    synced_at = NOW()
+                WHERE id = :id
+            ");
+            $stmt->execute([
+                'client_company_id' => $clientCompanyId ?: null,
+                'full_name' => $payload['buyer_contact_name'] ?: null,
+                'email' => $payload['buyer_email'] ?: null,
+                'phone' => $payload['buyer_phone'] ?: null,
+                'raw_json' => $payload['buyer_raw_json'] ?: null,
+                'id' => (int) $contactId,
+            ]);
+        } else {
+            $stmt = db()->prepare("
+                INSERT INTO db_client_contacts
+                    (keycrm_buyer_id, client_company_id, full_name, email, phone, raw_json, synced_at)
+                VALUES
+                    (:keycrm_buyer_id, :client_company_id, :full_name, :email, :phone, :raw_json, NOW())
+            ");
+            $stmt->execute([
+                'keycrm_buyer_id' => $keycrmBuyerId > 0 ? $keycrmBuyerId : null,
+                'client_company_id' => $clientCompanyId ?: null,
+                'full_name' => $payload['buyer_contact_name'] ?: null,
+                'email' => $payload['buyer_email'] ?: null,
+                'phone' => $payload['buyer_phone'] ?: null,
+                'raw_json' => $payload['buyer_raw_json'] ?: null,
+            ]);
+            $contactId = (int) db()->lastInsertId();
+        }
+    }
+
+    return [
+        'client_company_id' => $clientCompanyId ? (int) $clientCompanyId : null,
+        'contact_id' => $contactId ? (int) $contactId : null,
     ];
 }
 
@@ -218,14 +364,6 @@ function invoice_collapsed_item(float $total, array $seller, string $title = '')
     ];
 }
 
-function invoice_next_number(PDO $pdo): string
-{
-    $prefix = 'INV-' . date('Ym') . '-';
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM db_invoices WHERE invoice_number LIKE :prefix");
-    $stmt->execute(['prefix' => $prefix . '%']);
-    return $prefix . str_pad((string) ((int) $stmt->fetchColumn() + 1), 4, '0', STR_PAD_LEFT);
-}
-
 function invoice_insert_items(PDO $pdo, int $invoiceId, array $items): void
 {
     $stmt = $pdo->prepare("
@@ -271,12 +409,29 @@ function invoice_items(int $invoiceId): array
     return $stmt->fetchAll();
 }
 
+function invoice_legal_entities(?int $clientCompanyId): array
+{
+    if (!$clientCompanyId) {
+        return [];
+    }
+
+    $stmt = db()->prepare("
+        SELECT *
+        FROM db_client_legal_entities
+        WHERE client_company_id = :client_company_id
+        ORDER BY is_default DESC, legal_name ASC, id DESC
+    ");
+    $stmt->execute(['client_company_id' => $clientCompanyId]);
+    return $stmt->fetchAll();
+}
+
 function invoice_document_html(array $invoice, array $items, string $documentType): string
 {
     $isDelivery = $documentType === 'delivery_note';
-    $title = $isDelivery ? 'ВИДАТКОВА НАКЛАДНА' : 'РАХУНОК-ФАКТУРА';
+    $title = $isDelivery ? 'ВИДАТКОВА НАКЛАДНА' : 'РАХУНОК НА ОПЛАТУ';
     $seller = (string) ($invoice['legal_name'] ?: $invoice['short_name']);
-    $buyer = (string) ($invoice['buyer_display_name'] ?: 'Покупець');
+    $buyer = (string) ($invoice['buyer_display_name'] ?: 'Одержувач не підтягнувся');
+    $contact = (string) ($invoice['buyer_contact_name'] ?? '');
     $total = (float) ($invoice['total_with_vat_uah'] ?: $invoice['total_amount_uah']);
 
     ob_start();
@@ -311,7 +466,7 @@ function invoice_document_html(array $invoice, array $items, string $documentTyp
     <div class="doc-header">
         <div>
             <div class="brand">.BRAND</div>
-            <div class="muted">Документ сформовано з .BRAND DB</div>
+            <div class="muted">bws.com.ua</div>
         </div>
         <div class="muted">Без ПДВ. Платник єдиного податку.</div>
     </div>
@@ -329,6 +484,7 @@ function invoice_document_html(array $invoice, array $items, string $documentTyp
         </div>
         <div class="box">
             <strong>Одержувач: <?= e($buyer) ?></strong><br>
+            <?php if ($contact !== ''): ?>Контактна особа: <?= e($contact) ?><br><?php endif; ?>
             <?php if (!empty($invoice['buyer_edrpou'])): ?>ЄДРПОУ: <?= e((string) $invoice['buyer_edrpou']) ?><br><?php endif; ?>
             <?php if (!empty($invoice['buyer_address'])): ?>Адреса: <?= e((string) $invoice['buyer_address']) ?><br><?php endif; ?>
             <?php if (!empty($invoice['buyer_email'])): ?>E-mail: <?= e((string) $invoice['buyer_email']) ?><br><?php endif; ?>
@@ -338,7 +494,7 @@ function invoice_document_html(array $invoice, array $items, string $documentTyp
     </div>
 
     <h1><?= e($title) ?> № <?= e((string) $invoice['invoice_number']) ?></h1>
-    <div class="date">від <?= e(invoice_date_label((string) $invoice['invoice_date'])) ?></div>
+    <div class="date">від <?= e(invoice_ua_date_label((string) $invoice['invoice_date'])) ?></div>
 
     <table>
         <thead>
@@ -404,8 +560,8 @@ function invoice_generate_document(array $invoice, array $items, string $documen
         throw new RuntimeException('Cannot create invoice storage directory.');
     }
 
-    $safeNumber = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) $invoice['invoice_number']);
-    $base = ($documentType === 'delivery_note' ? 'delivery' : 'invoice') . '-' . (int) $invoice['id'] . '-' . $safeNumber;
+    $safeNumber = invoice_safe_file_number((string) $invoice['invoice_number']);
+    $base = ($documentType === 'delivery_note' ? 'DN_' : 'INV_') . $safeNumber;
     $htmlPath = $dir . '/' . $base . '.html';
     $pdfPath = $dir . '/' . $base . '.pdf';
     $html = invoice_document_html($invoice, $items, $documentType);
@@ -440,9 +596,14 @@ function invoice_download_file(array $invoice): void
         exit;
     }
 
-    $isPdf = strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) === 'pdf';
-    header('Content-Type: ' . ($isPdf ? 'application/pdf' : 'text/html; charset=utf-8'));
-    header('Content-Disposition: inline; filename="' . basename($filePath) . '"');
+    if (strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) !== 'pdf') {
+        http_response_code(404);
+        echo 'PDF file not found. Generate PDF first.';
+        exit;
+    }
+
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: attachment; filename="' . basename($filePath) . '"');
     header('Content-Length: ' . filesize($filePath));
     readfile($filePath);
     exit;
@@ -482,18 +643,21 @@ if (is_post()) {
             $error = 'Order not found in local db_orders. Run sync first or check KeyCRM order id.';
         } else {
             $payload = invoice_order_payload($dbOrder);
+            $clientSnapshot = invoice_store_client_snapshot($payload);
             $total = invoice_number_value($payload['total_amount_uah']);
-            $number = invoice_next_number(db());
-            $purpose = 'за продукцію згідно рахунку № ' . $number . ' від ' . date('d.m.Y');
+            $number = trim((string) ($payload['order_number'] ?: $orderId));
+            $purpose = 'за продукцію згідно рахунку № ' . $number . ' від ' . invoice_ua_date_label(date('Y-m-d'));
 
             $stmt = db()->prepare("
                 INSERT INTO db_invoices
                     (keycrm_order_id, invoice_number, invoice_date, document_type, seller_company_id, buyer_id,
-                     buyer_company_id, buyer_display_name, buyer_edrpou, buyer_address, buyer_email, buyer_phone,
+                     buyer_company_id, client_company_id, buyer_display_name, buyer_contact_name,
+                     buyer_edrpou, buyer_address, buyer_email, buyer_phone,
                      total_amount_uah, vat_mode, vat_amount_uah, total_with_vat_uah, payment_purpose, created_by_user_id)
                 VALUES
                     (:keycrm_order_id, :invoice_number, CURDATE(), 'invoice', :seller_company_id, :buyer_id,
-                     :buyer_company_id, :buyer_display_name, :buyer_edrpou, :buyer_address, :buyer_email, :buyer_phone,
+                     :buyer_company_id, :client_company_id, :buyer_display_name, :buyer_contact_name,
+                     :buyer_edrpou, :buyer_address, :buyer_email, :buyer_phone,
                      :total_amount_uah, 'no_vat', 0, :total_with_vat_uah, :payment_purpose, :created_by_user_id)
             ");
             $stmt->execute([
@@ -502,7 +666,9 @@ if (is_post()) {
                 'seller_company_id' => $sellerId,
                 'buyer_id' => $payload['buyer_id'] ?: null,
                 'buyer_company_id' => $payload['buyer_company_id'] ?: null,
-                'buyer_display_name' => $payload['buyer_display_name'],
+                'client_company_id' => $clientSnapshot['client_company_id'] ?: null,
+                'buyer_display_name' => $payload['buyer_display_name'] ?: '',
+                'buyer_contact_name' => $payload['buyer_contact_name'] ?: null,
                 'buyer_edrpou' => $payload['buyer_edrpou'] ?: null,
                 'buyer_address' => $payload['buyer_address'] ?: null,
                 'buyer_email' => $payload['buyer_email'] ?: null,
@@ -553,7 +719,7 @@ if (is_post()) {
                 db()->prepare('UPDATE db_invoices SET ' . implode(', ', $sets) . ' WHERE id = :id')->execute($params);
                 redirect_to('/invoices.php?edit=' . $invoiceId);
             }
-        } elseif (in_array($action, ['save_invoice', 'collapse_one', 'collapse_manual', 'use_detailed', 'generate_invoice', 'generate_delivery'], true)) {
+        } elseif (in_array($action, ['save_invoice', 'save_legal_entity', 'collapse_one', 'collapse_manual', 'use_detailed', 'generate_invoice', 'generate_delivery'], true)) {
             $sellerId = (int) ($_POST['seller_company_id'] ?? $invoice['seller_company_id']);
             $seller = $defaultCompany;
             foreach ($companies as $company) {
@@ -563,7 +729,78 @@ if (is_post()) {
                 }
             }
 
-            if ($action === 'use_detailed') {
+            if ($action === 'save_legal_entity') {
+                $legalName = trim((string) ($_POST['buyer_display_name'] ?? ''));
+                $clientCompanyId = (int) ($_POST['client_company_id'] ?? ($invoice['client_company_id'] ?? 0));
+                if ($legalName === '') {
+                    $error = 'Одержувач не підтягнувся. Вкажіть повну назву компанії перед збереженням юрособи.';
+                } else {
+                    if ($clientCompanyId <= 0) {
+                        $stmt = db()->prepare("
+                            INSERT INTO db_client_companies
+                                (keycrm_company_id, name, title, synced_at)
+                            VALUES
+                                (:keycrm_company_id, :name, :title, NOW())
+                        ");
+                        $stmt->execute([
+                            'keycrm_company_id' => !empty($invoice['buyer_company_id']) ? (int) $invoice['buyer_company_id'] : null,
+                            'name' => $legalName,
+                            'title' => $legalName,
+                        ]);
+                        $clientCompanyId = (int) db()->lastInsertId();
+                    }
+
+                    $stmt = db()->prepare("
+                        INSERT INTO db_client_legal_entities
+                            (client_company_id, legal_name, short_name, edrpou, legal_address, email, phone, is_default, note)
+                        VALUES
+                            (:client_company_id, :legal_name, :short_name, :edrpou, :legal_address, :email, :phone, 1, :note)
+                    ");
+                    $stmt->execute([
+                        'client_company_id' => $clientCompanyId,
+                        'legal_name' => $legalName,
+                        'short_name' => $legalName,
+                        'edrpou' => trim((string) ($_POST['buyer_edrpou'] ?? '')) ?: null,
+                        'legal_address' => trim((string) ($_POST['buyer_address'] ?? '')) ?: null,
+                        'email' => trim((string) ($_POST['buyer_email'] ?? '')) ?: null,
+                        'phone' => trim((string) ($_POST['buyer_phone'] ?? '')) ?: null,
+                        'note' => trim((string) ($_POST['note'] ?? '')) ?: null,
+                    ]);
+                    $legalEntityId = (int) db()->lastInsertId();
+
+                    db()->prepare("
+                        UPDATE db_client_legal_entities
+                        SET is_default = CASE WHEN id = :id THEN 1 ELSE 0 END
+                        WHERE client_company_id = :client_company_id
+                    ")->execute([
+                        'id' => $legalEntityId,
+                        'client_company_id' => $clientCompanyId,
+                    ]);
+
+                    db()->prepare("
+                        UPDATE db_invoices
+                        SET client_company_id = :client_company_id,
+                            client_legal_entity_id = :client_legal_entity_id,
+                            buyer_display_name = :buyer_display_name,
+                            buyer_edrpou = :buyer_edrpou,
+                            buyer_address = :buyer_address,
+                            buyer_email = :buyer_email,
+                            buyer_phone = :buyer_phone
+                        WHERE id = :id
+                    ")->execute([
+                        'client_company_id' => $clientCompanyId,
+                        'client_legal_entity_id' => $legalEntityId,
+                        'buyer_display_name' => $legalName,
+                        'buyer_edrpou' => trim((string) ($_POST['buyer_edrpou'] ?? '')) ?: null,
+                        'buyer_address' => trim((string) ($_POST['buyer_address'] ?? '')) ?: null,
+                        'buyer_email' => trim((string) ($_POST['buyer_email'] ?? '')) ?: null,
+                        'buyer_phone' => trim((string) ($_POST['buyer_phone'] ?? '')) ?: null,
+                        'id' => $invoiceId,
+                    ]);
+
+                    redirect_to('/invoices.php?edit=' . $invoiceId);
+                }
+            } elseif ($action === 'use_detailed') {
                 $stmt = db()->prepare('SELECT * FROM db_orders WHERE keycrm_id = :keycrm_id LIMIT 1');
                 $stmt->execute(['keycrm_id' => (int) $invoice['keycrm_order_id']]);
                 $dbOrder = $stmt->fetch();
@@ -585,8 +822,13 @@ if (is_post()) {
                 $invoiceDate = trim((string) ($_POST['invoice_date'] ?? $invoice['invoice_date']));
                 $buyerName = substr(trim((string) ($_POST['buyer_display_name'] ?? '')), 0, 255);
                 $paymentPurpose = substr(trim((string) ($_POST['payment_purpose'] ?? '')), 0, 255);
+                if ($paymentPurpose === '') {
+                    $paymentPurpose = 'за продукцію згідно рахунку № ' . $invoiceNumber . ' від ' . invoice_ua_date_label($invoiceDate);
+                }
                 $note = trim((string) ($_POST['note'] ?? ''));
                 $docsType = (string) ($_POST['docs_type'] ?? 'none');
+                $clientCompanyId = (int) ($_POST['client_company_id'] ?? ($invoice['client_company_id'] ?? 0));
+                $clientLegalEntityId = (int) ($_POST['client_legal_entity_id'] ?? ($invoice['client_legal_entity_id'] ?? 0));
                 if (!in_array($docsType, ['none', 'paper', 'electronic', 'both'], true)) {
                     $docsType = 'none';
                 }
@@ -628,8 +870,8 @@ if (is_post()) {
                     $total = (float) $invoice['total_amount_uah'];
                 }
 
-                if ($invoiceNumber === '' || $buyerName === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $invoiceDate)) {
-                    $error = 'Invoice number, date, and buyer are required.';
+                if ($invoiceNumber === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $invoiceDate)) {
+                    $error = 'Invoice number and date are required.';
                 } else {
                     db()->beginTransaction();
                     $stmt = db()->prepare("
@@ -637,7 +879,10 @@ if (is_post()) {
                         SET invoice_number = :invoice_number,
                             invoice_date = :invoice_date,
                             seller_company_id = :seller_company_id,
+                            client_company_id = :client_company_id,
+                            client_legal_entity_id = :client_legal_entity_id,
                             buyer_display_name = :buyer_display_name,
+                            buyer_contact_name = :buyer_contact_name,
                             buyer_edrpou = :buyer_edrpou,
                             buyer_address = :buyer_address,
                             buyer_email = :buyer_email,
@@ -655,7 +900,10 @@ if (is_post()) {
                         'invoice_number' => $invoiceNumber,
                         'invoice_date' => $invoiceDate,
                         'seller_company_id' => $sellerId,
+                        'client_company_id' => $clientCompanyId > 0 ? $clientCompanyId : null,
+                        'client_legal_entity_id' => $clientLegalEntityId > 0 ? $clientLegalEntityId : null,
                         'buyer_display_name' => $buyerName,
+                        'buyer_contact_name' => trim((string) ($_POST['buyer_contact_name'] ?? '')) ?: null,
                         'buyer_edrpou' => trim((string) ($_POST['buyer_edrpou'] ?? '')) ?: null,
                         'buyer_address' => trim((string) ($_POST['buyer_address'] ?? '')) ?: null,
                         'buyer_email' => trim((string) ($_POST['buyer_email'] ?? '')) ?: null,
@@ -699,6 +947,7 @@ if ($editId > 0) {
     $editInvoice = invoice_load($editId);
     if ($editInvoice) {
         $editItems = invoice_items($editId);
+        $editLegalEntities = invoice_legal_entities(!empty($editInvoice['client_company_id']) ? (int) $editInvoice['client_company_id'] : null);
     }
 }
 
@@ -808,8 +1057,8 @@ foreach ($invoices as $invoiceRow) {
                         <h2><?= e((string) $editInvoice['invoice_number']) ?> · <?= invoice_status_badge((string) $editInvoice['status']) ?> <?= invoice_docs_badge((string) $editInvoice['docs_status']) ?></h2>
                     </div>
                     <div class="row-actions">
-                        <?php if (!empty($editInvoice['pdf_file_path'])): ?>
-                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $editInvoice['id'])) ?>" target="_blank">Відкрити файл</a>
+                        <?php if (invoice_pdf_available($editInvoice)): ?>
+                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $editInvoice['id'])) ?>">PDF</a>
                         <?php endif; ?>
                         <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php')) ?>">Закрити</a>
                     </div>
@@ -819,6 +1068,7 @@ foreach ($invoices as $invoiceRow) {
                     <?= csrf_field() ?>
                     <input type="hidden" name="id" value="<?= e((string) $editInvoice['id']) ?>">
                     <input type="hidden" name="action" value="save_invoice">
+                    <input type="hidden" name="client_company_id" value="<?= e((string) ($editInvoice['client_company_id'] ?? '')) ?>">
 
                     <div class="invoice-edit-grid">
                         <label>
@@ -847,9 +1097,42 @@ foreach ($invoices as $invoiceRow) {
                                 <?php endforeach; ?>
                             </select>
                         </label>
+                        <?php if ($editLegalEntities): ?>
+                            <label class="wide-field">
+                                <span>Юрособа для рахунку</span>
+                                <select name="client_legal_entity_id" id="legal-entity-select">
+                                    <option value="">Поточні поля вручну</option>
+                                    <?php foreach ($editLegalEntities as $entity): ?>
+                                        <option
+                                            value="<?= e((string) $entity['id']) ?>"
+                                            <?= (int) ($editInvoice['client_legal_entity_id'] ?? 0) === (int) $entity['id'] ? 'selected' : '' ?>
+                                            data-legal-name="<?= e((string) $entity['legal_name']) ?>"
+                                            data-edrpou="<?= e((string) ($entity['edrpou'] ?? '')) ?>"
+                                            data-address="<?= e((string) ($entity['legal_address'] ?? '')) ?>"
+                                            data-email="<?= e((string) ($entity['email'] ?? '')) ?>"
+                                            data-phone="<?= e((string) ($entity['phone'] ?? '')) ?>"
+                                        >
+                                            <?= e((string) $entity['legal_name']) ?><?= !empty($entity['edrpou']) ? ' · ' . e((string) $entity['edrpou']) : '' ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </label>
+                        <?php else: ?>
+                            <input type="hidden" name="client_legal_entity_id" value="<?= e((string) ($editInvoice['client_legal_entity_id'] ?? '')) ?>">
+                        <?php endif; ?>
+                        <div class="wide-field">
+                            <span class="label">Компанія / платник</span>
+                        </div>
                         <label class="wide-field">
-                            <span>Покупець</span>
-                            <input name="buyer_display_name" required value="<?= e((string) $editInvoice['buyer_display_name']) ?>">
+                            <span>Повна назва компанії</span>
+                            <input name="buyer_display_name" value="<?= e((string) $editInvoice['buyer_display_name']) ?>" placeholder="Одержувач не підтягнувся">
+                            <?php if (trim((string) ($editInvoice['buyer_display_name'] ?? '')) === ''): ?>
+                                <small class="field-warning">Одержувач не підтягнувся</small>
+                            <?php endif; ?>
+                        </label>
+                        <label class="wide-field">
+                            <span>Контактна особа</span>
+                            <input name="buyer_contact_name" value="<?= e((string) ($editInvoice['buyer_contact_name'] ?? '')) ?>">
                         </label>
                         <label>
                             <span>ЄДРПОУ покупця</span>
@@ -867,6 +1150,9 @@ foreach ($invoices as $invoiceRow) {
                             <span>Адреса покупця</span>
                             <input name="buyer_address" value="<?= e((string) $editInvoice['buyer_address']) ?>">
                         </label>
+                        <div class="wide-field row-actions">
+                            <button type="submit" name="action" value="save_legal_entity" class="button-secondary">Зберегти як юрособу клієнта</button>
+                        </div>
                         <label class="wide-field">
                             <span>Призначення платежу</span>
                             <input name="payment_purpose" value="<?= e((string) $editInvoice['payment_purpose']) ?>">
@@ -953,9 +1239,10 @@ foreach ($invoices as $invoiceRow) {
                     <thead>
                         <tr>
                             <th>Номер</th>
+                            <th>PDF</th>
                             <th>Дата</th>
                             <th>KeyCRM</th>
-                            <th>Покупець</th>
+                            <th>Одержувач / контакт</th>
                             <th>Постачальник</th>
                             <th class="num">Сума</th>
                             <th>Статус</th>
@@ -965,14 +1252,26 @@ foreach ($invoices as $invoiceRow) {
                     </thead>
                     <tbody>
                         <?php if (!$invoices): ?>
-                            <tr><td colspan="9">Рахунків ще немає.</td></tr>
+                            <tr><td colspan="10">Рахунків ще немає.</td></tr>
                         <?php endif; ?>
                         <?php foreach ($invoices as $invoiceRow): ?>
                             <tr>
                                 <td><?= e((string) $invoiceRow['invoice_number']) ?></td>
+                                <td>
+                                    <?php if (invoice_pdf_available($invoiceRow)): ?>
+                                        <span class="status-badge status-badge--success"><?= e(((string) $invoiceRow['document_type'] === 'delivery_note' ? 'DN_' : 'INV_') . (string) $invoiceRow['invoice_number']) ?></span>
+                                    <?php else: ?>
+                                        <span class="status-badge status-badge--muted">немає</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= e((string) $invoiceRow['invoice_date']) ?></td>
                                 <td><?= e((string) ($invoiceRow['keycrm_order_id'] ?: '—')) ?></td>
-                                <td class="wrap"><?= e((string) ($invoiceRow['buyer_display_name'] ?: '—')) ?></td>
+                                <td class="wrap">
+                                    <?= e((string) ($invoiceRow['buyer_display_name'] ?: '—')) ?>
+                                    <?php if (!empty($invoiceRow['buyer_contact_name'])): ?>
+                                        <small><?= e((string) $invoiceRow['buyer_contact_name']) ?></small>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= e((string) ($invoiceRow['seller_short_name'] ?: '—')) ?></td>
                                 <td class="num"><?= e(invoice_money($invoiceRow['total_with_vat_uah'] ?? 0)) ?></td>
                                 <td><?= invoice_status_badge((string) $invoiceRow['status']) ?></td>
@@ -980,8 +1279,8 @@ foreach ($invoices as $invoiceRow) {
                                 <td>
                                     <div class="row-actions">
                                         <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?edit=' . (int) $invoiceRow['id'])) ?>">Edit</a>
-                                        <?php if (!empty($invoiceRow['pdf_file_path'])): ?>
-                                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>" target="_blank">File</a>
+                                        <?php if (invoice_pdf_available($invoiceRow)): ?>
+                                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>">PDF</a>
                                         <?php endif; ?>
                                     </div>
                                 </td>
@@ -992,5 +1291,33 @@ foreach ($invoices as $invoiceRow) {
             </div>
         </section>
     </main>
+    <script>
+        (function () {
+            var select = document.getElementById('legal-entity-select');
+            if (!select) {
+                return;
+            }
+
+            var fields = {
+                legalName: document.querySelector('[name="buyer_display_name"]'),
+                edrpou: document.querySelector('[name="buyer_edrpou"]'),
+                address: document.querySelector('[name="buyer_address"]'),
+                email: document.querySelector('[name="buyer_email"]'),
+                phone: document.querySelector('[name="buyer_phone"]')
+            };
+
+            select.addEventListener('change', function () {
+                var option = select.options[select.selectedIndex];
+                if (!option || !option.value) {
+                    return;
+                }
+                if (fields.legalName) fields.legalName.value = option.dataset.legalName || '';
+                if (fields.edrpou) fields.edrpou.value = option.dataset.edrpou || '';
+                if (fields.address) fields.address.value = option.dataset.address || '';
+                if (fields.email) fields.email.value = option.dataset.email || '';
+                if (fields.phone) fields.phone.value = option.dataset.phone || '';
+            });
+        })();
+    </script>
 </body>
 </html>

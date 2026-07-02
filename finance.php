@@ -114,6 +114,10 @@ function ensure_invoice_tables(): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    invoice_add_column_if_missing('db_invoices', 'client_company_id', 'INT UNSIGNED NULL');
+    invoice_add_column_if_missing('db_invoices', 'client_legal_entity_id', 'INT UNSIGNED NULL');
+    invoice_add_column_if_missing('db_invoices', 'buyer_contact_name', 'VARCHAR(255) NULL');
+
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS db_invoice_items (
             id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -128,6 +132,61 @@ function ensure_invoice_tables(): void
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             KEY idx_invoice_id (invoice_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_client_companies (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            keycrm_company_id INT UNSIGNED NULL,
+            name VARCHAR(255) NULL,
+            title VARCHAR(255) NULL,
+            manager_id INT UNSIGNED NULL,
+            raw_json LONGTEXT NULL,
+            synced_at DATETIME NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_keycrm_company_id (keycrm_company_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_client_contacts (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            keycrm_buyer_id INT UNSIGNED NULL,
+            client_company_id INT UNSIGNED NULL,
+            full_name VARCHAR(255) NULL,
+            email VARCHAR(190) NULL,
+            phone VARCHAR(80) NULL,
+            position VARCHAR(120) NULL,
+            raw_json LONGTEXT NULL,
+            synced_at DATETIME NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_keycrm_buyer_id (keycrm_buyer_id),
+            KEY idx_client_company_id (client_company_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_client_legal_entities (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            client_company_id INT UNSIGNED NULL,
+            legal_name VARCHAR(255) NOT NULL,
+            short_name VARCHAR(255) NULL,
+            edrpou VARCHAR(20) NULL,
+            tax_number VARCHAR(50) NULL,
+            iban VARCHAR(80) NULL,
+            bank VARCHAR(255) NULL,
+            legal_address TEXT NULL,
+            email VARCHAR(190) NULL,
+            phone VARCHAR(80) NULL,
+            is_default TINYINT(1) NOT NULL DEFAULT 0,
+            note TEXT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_client_company_id (client_company_id),
+            KEY idx_is_default (is_default)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
@@ -154,6 +213,25 @@ function ensure_invoice_tables(): void
         )
     ");
     $stmt->execute();
+}
+
+function invoice_add_column_if_missing(string $table, string $column, string $definition): void
+{
+    $stmt = db()->prepare("
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = :table_name
+          AND COLUMN_NAME = :column_name
+    ");
+    $stmt->execute([
+        'table_name' => $table,
+        'column_name' => $column,
+    ]);
+
+    if ((int) $stmt->fetchColumn() === 0) {
+        db()->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
+    }
 }
 
 function expense_types(): array
