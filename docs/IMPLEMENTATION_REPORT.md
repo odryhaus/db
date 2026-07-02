@@ -131,10 +131,19 @@ PDF/file generation:
 
 - The document template uses system fonts and compact A4 HTML/CSS.
 - It includes: `Без ПДВ. Платник єдиного податку.`
-- If `wkhtmltopdf` exists on the server, the app saves a real `.pdf`.
-- If `wkhtmltopdf` is not available or `shell_exec` is disabled, the app saves a print-ready `.html` file and shows a message.
+- Primary PDF rendering uses `dompdf/dompdf`, installed by GitHub Actions with Composer and deployed in `vendor/`.
+- If Dompdf is unavailable but `wkhtmltopdf` exists on the server, the app saves a real `.pdf`.
+- If neither renderer is available, the app saves a print-ready `.html` file and shows a message.
 - The `PDF` button is shown only when the generated file is a real `.pdf`.
+- If only the fallback HTML template exists, the registry shows `Друк/PDF`.
 - Generated PDFs can be downloaded only through authenticated `invoices.php?download=ID`, not by passing an arbitrary path.
+
+Invoice editor layout:
+
+- The editor now uses a denser grid for number/date/seller/document type and payer fields.
+- Recipient fields are grouped under `Компанія / платник`.
+- Item actions are grouped in a compact action bar.
+- English utility labels were replaced with Ukrainian action labels.
 
 What was NOT implemented:
 
@@ -154,7 +163,7 @@ Manual setup/checks:
 - Confirm buyer/company/products/totals copied correctly.
 - Confirm collapsed products-only line says `Поліграфічна продукція`.
 - Generate invoice and delivery note.
-- If the app saves HTML instead of PDF, either install `wkhtmltopdf` on hosting or use browser print-to-PDF from the opened document.
+- If the app saves HTML instead of PDF, check that `vendor/dompdf` was deployed by GitHub Actions or use browser print-to-PDF from the opened document.
 - Treat `storage/invoices` as sensitive document storage.
 
 ## UI Redesign — Compact Money Dashboard

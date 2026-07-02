@@ -160,6 +160,7 @@ Rules:
 - Current documents are no-VAT only and include `Без ПДВ. Платник єдиного податку.`
 - Generated files are saved locally under `storage/invoices`.
 - Direct web access to `storage/invoices` is blocked; open files through the authenticated invoice page.
+- Server-side PDF rendering uses `dompdf/dompdf`, installed during GitHub Actions deploy.
 - KeyCRM file attachment is not implemented yet.
 
 ## Deploy Notes

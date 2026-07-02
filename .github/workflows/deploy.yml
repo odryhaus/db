@@ -15,6 +15,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install PHP dependencies
+        run: composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+
       - name: Deploy to bph.com.ua /db
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:

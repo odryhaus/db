@@ -3,6 +3,11 @@
 require_once __DIR__ . '/bootstrap.php';
 require_login();
 
+$autoloadPath = __DIR__ . '/vendor/autoload.php';
+if (is_file($autoloadPath)) {
+    require_once $autoloadPath;
+}
+
 if (!can_manage_invoices()) {
     http_response_code(403);
     include __DIR__ . '/partials_forbidden.php';
@@ -449,7 +454,7 @@ function invoice_document_html(array $invoice, array $items, string $documentTyp
     <title><?= e($title . ' № ' . $invoice['invoice_number']) ?></title>
     <style>
         @page { size: A4; margin: 16mm; }
-        body { margin: 0; color: #111; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; font-size: 11px; line-height: 1.35; }
+        body { margin: 0; color: #111; font-family: DejaVu Sans, Arial, sans-serif; font-size: 10.5px; line-height: 1.35; }
         .doc-header { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #111; padding-bottom: 14px; margin-bottom: 18px; }
         .brand { font-size: 20px; font-weight: 800; letter-spacing: .03em; }
         .muted { color: #555; }
@@ -575,6 +580,20 @@ function invoice_generate_document(array $invoice, array $items, string $documen
 
     $relativeHtml = 'storage/invoices/' . basename($htmlPath);
     $relativePdf = 'storage/invoices/' . basename($pdfPath);
+
+    if (class_exists('\\Dompdf\\Dompdf')) {
+        $options = new \Dompdf\Options();
+        $options->set('defaultFont', 'DejaVu Sans');
+        $options->set('isRemoteEnabled', false);
+        $dompdf = new \Dompdf\Dompdf($options);
+        $dompdf->loadHtml($html, 'UTF-8');
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+        file_put_contents($pdfPath, $dompdf->output());
+        if (is_file($pdfPath) && filesize($pdfPath) > 0) {
+            return ['path' => $relativePdf, 'is_pdf' => true];
+        }
+    }
 
     $wkhtmltopdf = function_exists('shell_exec') ? trim((string) shell_exec('command -v wkhtmltopdf 2>/dev/null')) : '';
     if ($wkhtmltopdf !== '' && function_exists('shell_exec')) {
@@ -1135,7 +1154,7 @@ foreach ($invoices as $invoiceRow) {
                         <?php else: ?>
                             <input type="hidden" name="client_legal_entity_id" value="<?= e((string) ($editInvoice['client_legal_entity_id'] ?? '')) ?>">
                         <?php endif; ?>
-                        <div class="wide-field">
+                        <div class="section-label">
                             <span class="label">Компанія / платник</span>
                         </div>
                         <label class="wide-field">
@@ -1161,18 +1180,18 @@ foreach ($invoices as $invoiceRow) {
                             <span>Телефон покупця</span>
                             <input name="buyer_phone" value="<?= e((string) $editInvoice['buyer_phone']) ?>">
                         </label>
-                        <label class="wide-field">
+                        <label class="full-field">
                             <span>Адреса покупця</span>
                             <input name="buyer_address" value="<?= e((string) $editInvoice['buyer_address']) ?>">
                         </label>
                         <div class="wide-field row-actions">
                             <button type="submit" name="action" value="save_legal_entity" class="button-secondary">Зберегти як юрособу клієнта</button>
                         </div>
-                        <label class="wide-field">
+                        <label class="full-field">
                             <span>Призначення платежу</span>
                             <input name="payment_purpose" value="<?= e((string) $editInvoice['payment_purpose']) ?>">
                         </label>
-                        <label class="wide-field">
+                        <label class="full-field">
                             <span>Нотатка</span>
                             <textarea name="note" rows="2"><?= e((string) $editInvoice['note']) ?></textarea>
                         </label>
@@ -1218,13 +1237,13 @@ foreach ($invoices as $invoiceRow) {
                         <button type="submit" name="action" value="save_invoice">Зберегти</button>
                         <button type="submit" name="action" value="generate_invoice">Сформувати і завантажити PDF</button>
                         <button type="submit" name="action" value="generate_delivery" class="button-secondary">Сформувати видаткову PDF</button>
-                        <button type="submit" name="action" value="use_detailed" class="button-secondary">Use detailed CRM products</button>
-                        <button type="submit" name="action" value="collapse_one" class="button-secondary">Collapse to one product line</button>
+                        <button type="submit" name="action" value="use_detailed" class="button-secondary">Детальні товари CRM</button>
+                        <button type="submit" name="action" value="collapse_one" class="button-secondary">Один рядок</button>
                         <label class="collapse-field">
-                            <span>Manual collapse title</span>
+                            <span>Назва згорнутого рядка</span>
                             <input name="collapse_title" value="Поліграфічна продукція">
                         </label>
-                        <button type="submit" name="action" value="collapse_manual" class="button-secondary">Collapse selected product type manually</button>
+                        <button type="submit" name="action" value="collapse_manual" class="button-secondary">Згорнути з цією назвою</button>
                     </div>
                 </form>
 
