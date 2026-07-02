@@ -11,19 +11,17 @@ Production `/db` authentication is live:
 - Production `setup_key` was disabled manually.
 - Production `setup-ceo.php` was manually deleted.
 
-This update adds CEO-only manual KeyCRM sync into `db_orders` and switches Money Dashboard to read local cache metrics.
+This update redesigns Money Dashboard v0.3 so selected-month sales metrics and all-month unpaid receivables are visible on the first dashboard screen.
 
 ## Files Changed
 
+- `README.md`
 - `assets/app.css`
-- `docs/CRM_SYNC_PLAN.md`
 - `docs/DECISIONS.md`
 - `docs/IMPLEMENTATION_REPORT.md`
 - `docs/KNOWN_ISSUES.md`
 - `docs/NEXT_STEPS.md`
 - `index.php`
-- `sync_orders.php`
-- `users.php`
 
 ## Manual KeyCRM Sync
 
@@ -84,13 +82,14 @@ Money mapping:
 
 Buyer/company extraction is best-effort until KeyCRM include support is fully confirmed.
 
-## Money Dashboard Cache Read
+## Money Dashboard v0.3
 
-`index.php` now reads from `db_orders` for the selected month.
+`index.php` now reads only from `db_orders`.
 
-Default:
+Important business rule:
 
-- current month
+- selected month controls sales plan/fact metrics
+- all unpaid client debt is shown across all months
 
 Optional simple filter:
 
@@ -101,14 +100,20 @@ Optional simple filter:
 Dashboard metrics:
 
 - monthly target: `4,000,000 UAH`
-- sales fact: `SUM(total_amount_uah)`
-- paid: `SUM(paid_amount_uah)`
-- unpaid: `SUM(unpaid_amount_uah)`
-- order count: `COUNT(*)`
+- selected-month sales fact: `SUM(total_amount_uah)`
+- selected-month paid: `SUM(paid_amount_uah)`
+- selected-month unpaid: `SUM(unpaid_amount_uah)`
+- selected-month order count: `COUNT(*)`
+- total receivables / `Нам повинні всього` across all months
+- unpaid receivables count across all months
+- largest unpaid order across all months
 - remaining to target
 - progress percent
+- daily required sales until selected month end, or `month closed` for past months
 - last successful sync time
-- top unpaid orders, latest 10
+- all-month receivables table, 25 rows per page using `debt_page`
+- top 10 unpaid orders for selected month
+- selected-month manager summary
 
 Canceled/deleted handling:
 
@@ -237,42 +242,22 @@ was added to the GitHub Actions FTP exclude list.
 
 Production already has `setup_key` disabled and `setup-ceo.php` deleted manually. Do not restore it.
 
-## Money Dashboard
+## Dashboard Access
 
-`index.php` now shows a money-focused dashboard after login and reads real metrics from local `db_orders` when sync data exists.
-
-Visible content:
-
-- Project name: `.BRAND DB`
-- Logged-in user name/email
-- User role
-- Selected month
-- Monthly target: `4,000,000 UAH`
-- Sales fact from `SUM(total_amount_uah)`
-- Paid from `SUM(paid_amount_uah)`
-- Unpaid from `SUM(unpaid_amount_uah)`
-- Order count from `COUNT(*)`
-- We owe: `0 UAH` placeholder
-- Remaining to target
-- Progress percent
-- Last successful sync time
-- Top 10 unpaid orders
-- Main next action: `Review synced order data`
-
-Access remains unchanged:
+Access remains unchanged for this milestone:
 
 - `ceo`, `accountant`, and `manager` can view `index.php`.
-- Only `ceo` sees the `users.php` link.
+- Only `ceo` sees `Sync Orders` and `Users` links.
+- Manager-only filtering is not enabled yet because reliable local user-to-KeyCRM manager mapping still needs verification.
 
 ## What Remains Placeholder
 
-- We owe.
 - Planned outgoing payments.
 - Debts/outgoing payments workflow.
 - Charts.
 - Automatic/cron sync.
 
-No payments UI, debts UI, charts, automatic sync, or database schema changes were added.
+No payments UI, outgoing payments UI, charts, automatic sync, sync logic changes, or database schema changes were added.
 
 ## Authentication Review
 
@@ -298,22 +283,23 @@ It does not use:
 - The deploy workflow did not explicitly exclude `setup-ceo.php`; it now does.
 - PHP linting still cannot be run in this local Codex environment because no `php` binary is installed.
 - Old local `orders` table is outdated and ignored.
-- Buyer/company include support may vary; sync retries without it.
 - Canceled/deleted exclusion is text-based and should be verified.
+- Manager role currently sees the same dashboard data as accountant/CEO except CEO-only links are hidden; manager-specific filtering is open until mapping is confirmed.
 
 ## Recommendations
 
 - Confirm GitHub Actions deploy completes after push.
 - Confirm `https://bph.com.ua/db/sync_orders.php` opens only for CEO.
 - Run manual sync and verify `db_sync_runs` summary.
-- Confirm dashboard totals update from `db_orders`.
+- Confirm selected-month dashboard totals update from `db_orders`.
+- Confirm total receivables include unpaid orders across all months.
 - Confirm browser never calls KeyCRM directly.
 - Run `php -l` on the server if available.
 
 ## Technical Debt
 
-- `We owe` is still placeholder.
-- No payment/debt calculations exist.
+- No outgoing payment calculations exist.
+- No payment event logic exists beyond cached KeyCRM order amounts.
 - No dashboard audit or data freshness metadata exists.
 - No login rate limiting exists.
 - No automated PHP lint/test pipeline exists.
@@ -322,12 +308,8 @@ It does not use:
 
 ## Files To Review Manually
 
-- `sync_orders.php`
 - `index.php`
-- `keycrm_debug_order.php`
 - `assets/app.css`
-- `config/config.example.php`
-- Production `config/config.php`, only to add `keycrm.api_key`.
 - `docs/NEXT_STEPS.md`
 
 ## Deploy Workflow
@@ -365,23 +347,21 @@ Files excluded from deploy:
 
 ## How To Test After Deploy
 
-1. Add real KeyCRM API key to production `config/config.php`.
-2. Open `https://bph.com.ua/db/login.php`.
-3. Log in as CEO.
-4. Open `https://bph.com.ua/db/sync_orders.php`.
-5. Run manual sync.
-6. Confirm sync summary shows status, month range, orders seen, and orders upserted.
-7. Open dashboard.
-8. Confirm current month metrics read from `db_orders`.
-9. Confirm CEO sees `Sync Orders` link.
-10. Confirm manager/accountant do not see `Sync Orders`.
-11. Confirm no schema changes were made by code.
+1. Open `https://bph.com.ua/db/login.php`.
+2. Log in as CEO.
+3. Open dashboard.
+4. Change `month=YYYY-MM` and confirm monthly sales/paid/unpaid/order count changes.
+5. Confirm `Нам повинні всього` and receivables table include unpaid orders across all months.
+6. Use `debt_page` pagination if more than 25 unpaid orders exist.
+7. Confirm selected-month manager summary renders.
+8. Confirm CEO sees `Sync Orders` and `Users`.
+9. Confirm accountant/manager do not see `Sync Orders` or `Users`.
+10. Confirm no schema changes were made by code.
 
 ## Risks / Open Questions
 
 - GitHub Actions deploy status must be checked after push.
 - PHP lint has not been run locally.
-- Need to verify KeyCRM pagination order is descending by recent orders.
 - Need to verify canceled/deleted statuses against real data.
-- Need to verify buyer/company fields from real sync results.
+- Need to verify manager mapping before filtering manager dashboard data.
 - Need to decide whether cron sync is needed after manual sync is trusted.

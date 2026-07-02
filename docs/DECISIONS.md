@@ -86,6 +86,20 @@ Decision:
 - Start with CEO-only manual sync for current month and previous month.
 - Do not build a full historical sync or ERP workflow.
 
+## Money Dashboard v0.3 Metrics
+
+Selected month controls monthly sales plan/fact metrics.
+
+Decision:
+
+- Monthly sales, paid, unpaid, order count, remaining target, progress, manager summary, and daily required sales use `order_month = YYYY-MM`.
+- Total receivables / `Нам повинні` uses all unpaid orders across all months.
+- Receivables are paginated at 25 rows per page.
+- Old `orders` table remains ignored.
+- No charts are added yet.
+- No outgoing payments are added yet.
+- Manager-specific filtering is deferred until KeyCRM manager mapping to local users is confirmed.
+
 ## Out Of Scope
 
 The following are intentionally excluded:

@@ -34,10 +34,11 @@ Money Dashboard now reads from `db_orders`, but values depend on manual sync bei
 
 Known limitations:
 
-- `We owe` is still `0 UAH`; outgoing payment logic is not implemented.
 - Month picker is simple `YYYY-MM` only.
 - Canceled/deleted orders are excluded by simple status/payment-status text matching.
 - Buyer/company data is best-effort and depends on KeyCRM include support.
+- Manager users currently see the shared dashboard because reliable local manager mapping has not been confirmed.
+- Outgoing payments / `we owe` logic is not implemented.
 - Sync is manual CEO-only; no cron/automatic sync exists yet.
 - Sync scans bounded recent pages only; it does not scan all history.
 

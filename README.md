@@ -98,7 +98,13 @@ The old `orders` table is outdated and ignored.
 
 ## Dashboard
 
-Money Dashboard is the protected home page. It reads monthly metrics from local `db_orders` after CEO manual sync. It does not call KeyCRM from the browser.
+Money Dashboard is the protected home page. It reads from local `db_orders` after CEO manual sync. It does not call KeyCRM from the browser.
+
+Dashboard rule:
+
+- Selected month controls monthly sales plan/fact.
+- `Нам повинні` shows all unpaid client debt across all months.
+- Old `orders` table is ignored.
 
 Current monthly target:
 

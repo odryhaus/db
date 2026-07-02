@@ -15,7 +15,10 @@ Checklist:
 - CEO user can log in.
 - CEO can open `https://bph.com.ua/db/users.php`.
 - CEO, accountant, and manager can open the protected money dashboard.
-- Manager/accountant users cannot see or open `users.php`.
+- Manager/accountant users cannot see `users.php` or `sync_orders.php` links.
+- Dashboard selected-month metrics update when `?month=YYYY-MM` changes.
+- `Нам повинні` shows unpaid client debt across all months.
+- Receivables pagination keeps the selected month parameter.
 - Logout redirects back to login.
 
 ## Production Config Setup Reminder
@@ -32,11 +35,19 @@ The old setup key was disabled manually in production and should remain disabled
 
 ## Current Dashboard
 
-Money Dashboard v0.1 reads current-month metrics from `db_orders` after CEO manual sync. It shows the 4,000,000 UAH monthly target, synced sales/paid/unpaid/order count, and latest unpaid orders.
+Money Dashboard v0.3 reads only from `db_orders`.
+
+Rules:
+
+- Selected month controls sales plan/fact metrics.
+- Total receivables / `Нам повинні` shows all unpaid orders across all months.
+- Old `orders` table is ignored.
+- No browser KeyCRM calls are made.
+- No charts or outgoing payments exist yet.
 
 ## Next Milestone
 
-Money Dashboard v0.2 — verify synced data quality and refine real monthly sales from `db_orders`.
+Money Dashboard v0.4 — verify synced data quality, manager mapping, and payment status rules.
 
 Planning document:
 
@@ -58,18 +69,15 @@ The next milestone should:
 - Verify buyer/company extraction.
 - Decide final canceled/deleted status exclusion rules.
 - Decide whether cron/automatic sync is needed.
+- Confirm whether managers can be safely filtered by local `users.keycrm_id`.
 - Add data freshness display and sync error handling improvements if needed.
 
-The next dashboard should show:
+The next dashboard should add or improve:
 
-- Selected month.
-- Total order amount for the month.
-- Paid amount.
-- Unpaid amount.
-- Number of orders.
-- Progress toward 4,000,000 UAH.
-- List of unpaid orders.
-- Managers if available.
+- Reliable manager-only data filtering.
+- Clear canceled/deleted/refunded status rules.
+- Better payment status labels if KeyCRM values are too technical.
+- Outgoing planned payments after the receivables side is trusted.
 
 ## Database Tables To Inspect Next
 
