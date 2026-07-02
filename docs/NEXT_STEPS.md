@@ -32,11 +32,11 @@ The old setup key was disabled manually in production and should remain disabled
 
 ## Current Dashboard
 
-Money Dashboard v0.1 is now a placeholder dashboard. It shows the 4,000,000 UAH monthly target and zero placeholder values until real order data is connected.
+Money Dashboard v0.1 reads current-month metrics from `db_orders` after CEO manual sync. It shows the 4,000,000 UAH monthly target, synced sales/paid/unpaid/order count, and latest unpaid orders.
 
 ## Next Milestone
 
-Money Dashboard v0.2 — inspect existing orders/managers tables and calculate real monthly sales from the local database if possible.
+Money Dashboard v0.2 — verify synced data quality and refine real monthly sales from `db_orders`.
 
 Planning document:
 
@@ -52,13 +52,13 @@ https://bph.com.ua/db/keycrm_debug_order.php?order_id=9232
 
 The next milestone should:
 
-- Copy back the debug output for order `9232`.
-- Inspect the existing `orders` table and confirm why it is outdated.
-- Inspect any users/managers/order-related local tables.
-- Decide whether to add new additive cache tables.
-- Build server-side sync for current month + previous month only.
-- Keep KeyCRM calls out of the browser.
-- Keep the dashboard reading from local cache only.
+- Run CEO manual sync for current and previous month.
+- Verify `ordered_at` month assignment.
+- Verify totals against KeyCRM for sample orders.
+- Verify buyer/company extraction.
+- Decide final canceled/deleted status exclusion rules.
+- Decide whether cron/automatic sync is needed.
+- Add data freshness display and sync error handling improvements if needed.
 
 The next dashboard should show:
 

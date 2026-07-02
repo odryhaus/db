@@ -11,16 +11,109 @@ Production `/db` authentication is live:
 - Production `setup_key` was disabled manually.
 - Production `setup-ceo.php` was manually deleted.
 
-This update adds a CEO-only KeyCRM order debug inspector for reading one real order JSON before designing `db_orders` / cache tables.
+This update adds CEO-only manual KeyCRM sync into `db_orders` and switches Money Dashboard to read local cache metrics.
 
 ## Files Changed
 
 - `assets/app.css`
-- `config/config.example.php`
 - `docs/CRM_SYNC_PLAN.md`
+- `docs/DECISIONS.md`
 - `docs/IMPLEMENTATION_REPORT.md`
+- `docs/KNOWN_ISSUES.md`
 - `docs/NEXT_STEPS.md`
-- `keycrm_debug_order.php`
+- `index.php`
+- `sync_orders.php`
+- `users.php`
+
+## Manual KeyCRM Sync
+
+Created:
+
+```text
+sync_orders.php
+```
+
+Access:
+
+- Requires login.
+- CEO-only.
+- GET shows sync page and last 10 sync runs.
+- POST runs sync.
+- Uses CSRF token for POST.
+
+Config:
+
+- Uses `keycrm.base_url` from `config/config.php`.
+- Uses `keycrm.api_key` from `config/config.php`.
+- Does not expose the API key to the browser.
+
+Scope:
+
+- Current month.
+- Previous month.
+- No historical full sync.
+- Bounded scan: `50` orders per page, max `20` pages.
+
+KeyCRM include:
+
+```text
+products,products.offer,status,shipping,manager,buyer,company
+```
+
+If buyer/company include fails, sync retries without unsupported buyer/company includes and stores a warning in `db_sync_runs.error_message`.
+
+Local writes:
+
+- Upserts into `db_orders` by `keycrm_id`.
+- Creates/updates a `db_sync_runs` record.
+- Does not create tables or modify schema.
+
+Monthly turnover rule:
+
+- Uses `ordered_at`.
+- Saves `order_month` as `YYYY-MM` from `ordered_at`.
+
+Money mapping:
+
+- `total_amount_uah = grand_total`
+- `paid_amount_uah = payments_total`
+- `unpaid_amount_uah = max(grand_total - payments_total, 0)`
+- `products_total_uah = products_total`
+- `expenses_sum_uah = expenses_sum`
+- `margin_sum_uah = margin_sum`
+
+Buyer/company extraction is best-effort until KeyCRM include support is fully confirmed.
+
+## Money Dashboard Cache Read
+
+`index.php` now reads from `db_orders` for the selected month.
+
+Default:
+
+- current month
+
+Optional simple filter:
+
+```text
+?month=YYYY-MM
+```
+
+Dashboard metrics:
+
+- monthly target: `4,000,000 UAH`
+- sales fact: `SUM(total_amount_uah)`
+- paid: `SUM(paid_amount_uah)`
+- unpaid: `SUM(unpaid_amount_uah)`
+- order count: `COUNT(*)`
+- remaining to target
+- progress percent
+- last successful sync time
+- top unpaid orders, latest 10
+
+Canceled/deleted handling:
+
+- Dashboard excludes rows where `status_name` or `payment_status` text contains common canceled/deleted markers.
+- This is a first-pass rule and should be reviewed against real statuses.
 
 ## KeyCRM Debug Inspector
 
@@ -144,24 +237,27 @@ was added to the GitHub Actions FTP exclude list.
 
 Production already has `setup_key` disabled and `setup-ceo.php` deleted manually. Do not restore it.
 
-## Money Dashboard v0.1
+## Money Dashboard
 
-`index.php` now shows a money-focused placeholder dashboard after login.
+`index.php` now shows a money-focused dashboard after login and reads real metrics from local `db_orders` when sync data exists.
 
 Visible content:
 
 - Project name: `.BRAND DB`
 - Logged-in user name/email
 - User role
-- Current month
+- Selected month
 - Monthly target: `4,000,000 UAH`
-- Sales fact: `0 UAH`
-- Paid: `0 UAH`
-- Unpaid: `0 UAH`
-- We owe: `0 UAH`
-- Remaining to target: `4,000,000 UAH`
-- Progress: `0%`
-- Main next action: `Connect orders data source`
+- Sales fact from `SUM(total_amount_uah)`
+- Paid from `SUM(paid_amount_uah)`
+- Unpaid from `SUM(unpaid_amount_uah)`
+- Order count from `COUNT(*)`
+- We owe: `0 UAH` placeholder
+- Remaining to target
+- Progress percent
+- Last successful sync time
+- Top 10 unpaid orders
+- Main next action: `Review synced order data`
 
 Access remains unchanged:
 
@@ -170,15 +266,13 @@ Access remains unchanged:
 
 ## What Remains Placeholder
 
-- Sales fact.
-- Paid amount.
-- Unpaid amount.
 - We owe.
-- Remaining to target.
-- Progress percentage.
-- Current month calculations beyond display label.
+- Planned outgoing payments.
+- Debts/outgoing payments workflow.
+- Charts.
+- Automatic/cron sync.
 
-No CRM sync, payments, debts, charts, dashboard calculations, or database schema changes were added.
+No payments UI, debts UI, charts, automatic sync, or database schema changes were added.
 
 ## Authentication Review
 
@@ -203,28 +297,33 @@ It does not use:
 - `setup-ceo.php` still existed locally even though production setup was complete. It has now been removed.
 - The deploy workflow did not explicitly exclude `setup-ceo.php`; it now does.
 - PHP linting still cannot be run in this local Codex environment because no `php` binary is installed.
-- Real KeyCRM money/payment field names are unknown until order `9232` is inspected.
+- Old local `orders` table is outdated and ignored.
+- Buyer/company include support may vary; sync retries without it.
+- Canceled/deleted exclusion is text-based and should be verified.
 
 ## Recommendations
 
 - Confirm GitHub Actions deploy completes after push.
-- Confirm `https://bph.com.ua/db/keycrm_debug_order.php?order_id=9232` opens only for CEO.
-- Confirm non-CEO users cannot open the debug inspector.
-- Confirm the debug page does not expose the API key.
+- Confirm `https://bph.com.ua/db/sync_orders.php` opens only for CEO.
+- Run manual sync and verify `db_sync_runs` summary.
+- Confirm dashboard totals update from `db_orders`.
+- Confirm browser never calls KeyCRM directly.
 - Run `php -l` on the server if available.
 
 ## Technical Debt
 
-- Money values are static placeholders.
-- No real order source is connected.
+- `We owe` is still placeholder.
 - No payment/debt calculations exist.
 - No dashboard audit or data freshness metadata exists.
 - No login rate limiting exists.
 - No automated PHP lint/test pipeline exists.
 - Debug candidate detection is heuristic and exists only to guide schema design.
+- Sync is manual only.
 
 ## Files To Review Manually
 
+- `sync_orders.php`
+- `index.php`
 - `keycrm_debug_order.php`
 - `assets/app.css`
 - `config/config.example.php`
@@ -269,18 +368,20 @@ Files excluded from deploy:
 1. Add real KeyCRM API key to production `config/config.php`.
 2. Open `https://bph.com.ua/db/login.php`.
 3. Log in as CEO.
-4. Open `https://bph.com.ua/db/keycrm_debug_order.php?order_id=9232`.
-5. Confirm HTTP status and endpoint used are visible.
-6. Confirm detected fields and candidate money fields are visible.
-7. Confirm raw JSON is visible in the collapsible block.
-8. Confirm API key and Authorization header are not visible.
-9. Confirm no database tables were created or changed.
+4. Open `https://bph.com.ua/db/sync_orders.php`.
+5. Run manual sync.
+6. Confirm sync summary shows status, month range, orders seen, and orders upserted.
+7. Open dashboard.
+8. Confirm current month metrics read from `db_orders`.
+9. Confirm CEO sees `Sync Orders` link.
+10. Confirm manager/accountant do not see `Sync Orders`.
+11. Confirm no schema changes were made by code.
 
 ## Risks / Open Questions
 
 - GitHub Actions deploy status must be checked after push.
 - PHP lint has not been run locally.
-- Real dashboard calculations depend on inspecting existing local database tables.
-- The next milestone should avoid CRM/API work until local order data is understood.
-- KeyCRM direct `/order/{id}` may fail; fallback filter behavior must be verified from the debug page.
-- Need copied debug output for order `9232` before designing final cache columns.
+- Need to verify KeyCRM pagination order is descending by recent orders.
+- Need to verify canceled/deleted statuses against real data.
+- Need to verify buyer/company fields from real sync results.
+- Need to decide whether cron sync is needed after manual sync is trusted.

@@ -1,5 +1,7 @@
 # CRM Sync Plan For Money Dashboard v0.2
 
+Status: CEO-only manual sync has been implemented against the manually created `db_orders` and `db_sync_runs` tables. This document remains the architecture reference for verifying and improving that sync.
+
 ## 1. What Old Brand Dashboard Does
 
 The old `/brand-dashboard` is a production workflow dashboard. It is not a money dashboard.
@@ -162,39 +164,57 @@ Copy back these sections for architecture review:
 - currency candidates
 - raw JSON if it does not contain sensitive customer data beyond what is needed for schema design
 
-Use this inspection result to decide final cache fields. Do not create `db_orders` until the real money/payment field names are confirmed.
+Use this inspection result to verify the manually created `db_orders` mapping and adjust extraction rules if real KeyCRM data differs.
 
-## 5. Proposed Local Cache Table Structure
+## 5. Local Cache Tables
 
-Do not use the existing outdated `orders` table for the new dashboard unless its structure is verified and intentionally migrated later.
+Production tables were manually created:
 
-Recommended additive cache tables:
+- `db_orders`
+- `db_sync_runs`
 
-### `crm_order_cache`
+Do not use the existing outdated `orders` table.
 
-Purpose: local fast monthly order cache.
+### `db_orders`
 
-Suggested columns:
+Purpose: local fast monthly order cache for Money Dashboard.
+
+Expected columns:
 
 ```text
 id
-crm_order_id
+keycrm_id
 order_number
-order_date
+ordered_at
 order_month
+source_created_at
+source_updated_at
+closed_at
+status_changed_at
 status_id
+status_group_id
 status_name
 payment_status
 manager_id
 manager_name
+manager_email
 client_id
 client_name
+buyer_id
+buyer_name
+buyer_email
+buyer_phone
+company_id
+company_name
 total_amount_uah
 paid_amount_uah
 unpaid_amount_uah
-currency
-source_created_at
-source_updated_at
+products_total_uah
+expenses_sum_uah
+margin_sum_uah
+shipping_date_actual
+shipping_status
+tracking_code
 synced_at
 raw_json
 created_at
@@ -204,18 +224,18 @@ updated_at
 Indexes:
 
 ```text
-UNIQUE crm_order_id
+UNIQUE keycrm_id
 INDEX order_month
 INDEX source_updated_at
 INDEX manager_id
 INDEX unpaid_amount_uah
 ```
 
-### `crm_sync_runs`
+### `db_sync_runs`
 
 Purpose: track sync attempts and failures.
 
-Suggested columns:
+Expected columns:
 
 ```text
 id
@@ -231,30 +251,12 @@ error_message
 created_by_user_id
 ```
 
-### Optional later: `crm_status_cache`
-
-Purpose: cache status dictionaries if they are needed for labels/filtering.
-
-Suggested columns:
-
-```text
-id
-dictionary_type
-crm_status_id
-name
-raw_json
-synced_at
-```
-
-Important: these are proposed tables only. Do not create them until approved.
-
 ## 6. Proposed Sync Strategy
 
 ### Phase 1: Manual Sync Button
 
-First implementation after approval:
+Implemented:
 
-- Add a CEO-only or admin-only manual sync action.
 - Sync only current month and previous month.
 - Run sync server-side in PHP.
 - Store results in local cache.
@@ -269,7 +271,7 @@ If KeyCRM supports `updated_after` reliably:
 
 - Store last successful sync timestamp.
 - Request only orders updated after that timestamp.
-- Upsert changed orders into `crm_order_cache`.
+- Upsert changed orders into `db_orders`.
 - Keep a fallback manual full sync for current + previous month.
 
 If `updated_after` is not reliable:
@@ -284,7 +286,7 @@ After manual sync is verified:
 - Add cron or hosting scheduler.
 - Suggested interval: every 10-30 minutes during work hours.
 - Keep manual sync button for emergency refresh.
-- Log all automatic sync attempts in `crm_sync_runs`.
+- Log all automatic sync attempts in `db_sync_runs`.
 
 ## 7. How To Avoid Loading All CRM Orders In Browser
 
@@ -297,7 +299,7 @@ Browser never calls KeyCRM.
 Instead:
 
 - Browser opens `.BRAND DB`.
-- PHP reads local `crm_order_cache`.
+- PHP reads local `db_orders`.
 - Dashboard query filters by selected month.
 - Unpaid list comes from local cache.
 - Manual sync button calls a local PHP endpoint.
@@ -340,14 +342,13 @@ Do not add this to real config until implementation is approved.
 
 ## 9. Recommended First Implementation Task After Approval
 
-Recommended first task:
+Recommended next task:
 
-1. Ask user to inspect current database tables and confirm whether a new cache table can be added.
-2. Add approved additive cache tables.
-3. Add server-side KeyCRM config placeholders to `config/config.example.php`.
-4. Build a CLI/admin-only sync script for current + previous month.
-5. Save raw order JSON and extracted money fields into `crm_order_cache`.
-6. Update dashboard to read placeholder metrics from cache.
+1. Run CEO manual sync in production.
+2. Compare several synced rows against KeyCRM order pages.
+3. Verify `grand_total`, `payments_total`, `payment_status`, buyer/company, and manager fields.
+4. Confirm canceled/deleted status names.
+5. Decide whether automatic cron sync is needed.
 
 Do not start with UI polish. Start with reliable local data.
 

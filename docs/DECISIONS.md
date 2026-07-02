@@ -73,12 +73,26 @@ Decision:
 - Do not ask production to restore it.
 - Use the CEO users page for ongoing password and role management.
 
+## Local Order Cache
+
+Money Dashboard must read from `db_orders`, not from the old `orders` table and not directly from KeyCRM.
+
+Decision:
+
+- Ignore the old `orders` table because it is outdated.
+- Use `ordered_at` as the monthly turnover date.
+- Store `order_month` as `YYYY-MM` from `ordered_at`.
+- Keep KeyCRM calls server-side only.
+- Start with CEO-only manual sync for current month and previous month.
+- Do not build a full historical sync or ERP workflow.
+
 ## Out Of Scope
 
 The following are intentionally excluded:
 
-- CRM integration.
-- Monthly sales dashboard.
+- Full CRM integration.
+- Browser-side CRM loading.
+- Full historical order sync.
 - Charts.
 - Payments.
 - Debt tracking.

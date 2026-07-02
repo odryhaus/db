@@ -28,17 +28,18 @@ The workflow deploys `config/.htaccess` but excludes `config/config.php`.
 
 If CEO access is lost later, recover access directly through the database or a reviewed temporary recovery tool.
 
-## Dashboard Values Are Placeholders
+## Dashboard Values Depend On Sync
 
-Money Dashboard v0.1 shows static placeholder values:
+Money Dashboard now reads from `db_orders`, but values depend on manual sync being run successfully and on the manually created cache tables matching the expected columns.
 
-- Sales fact: `0 UAH`
-- Paid: `0 UAH`
-- Unpaid: `0 UAH`
-- We owe: `0 UAH`
-- Progress: `0%`
+Known limitations:
 
-Real order and payment calculations are intentionally not implemented yet.
+- `We owe` is still `0 UAH`; outgoing payment logic is not implemented.
+- Month picker is simple `YYYY-MM` only.
+- Canceled/deleted orders are excluded by simple status/payment-status text matching.
+- Buyer/company data is best-effort and depends on KeyCRM include support.
+- Sync is manual CEO-only; no cron/automatic sync exists yet.
+- Sync scans bounded recent pages only; it does not scan all history.
 
 ## No Audit Log Yet
 

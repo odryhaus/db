@@ -1,6 +1,6 @@
 # .BRAND DB
 
-Simple internal PHP system for `.BRAND` money control. The first MVP contains authentication only.
+Simple internal PHP system for `.BRAND` money control. The current MVP contains authentication, CEO user management, a money dashboard, and CEO-only manual order sync.
 
 ## Purpose
 
@@ -11,11 +11,12 @@ Current milestone:
 - Login and logout.
 - Protected home page.
 - CEO-only user access management.
+- CEO-only manual KeyCRM order sync into local `db_orders`.
+- Money dashboard metrics from local `db_orders`.
 
 Not included yet:
 
-- CRM integration.
-- Monthly sales dashboard.
+- Automatic CRM sync.
 - Charts.
 - Payments or debt screens.
 - Database migrations.
@@ -64,6 +65,15 @@ That file is ignored by Git. Commit only:
 config/config.example.php
 ```
 
+Real KeyCRM credentials also belong only in `config/config.php`:
+
+```php
+'keycrm' => [
+    'base_url' => 'https://openapi.keycrm.app/v1',
+    'api_key' => 'REAL_KEYCRM_API_KEY',
+],
+```
+
 ## Database
 
 The app uses the existing `qkbbstge_dashboard.users` table. It does not modify schema.
@@ -78,15 +88,31 @@ Used fields:
 
 Do not use `users.username` or `users.password` for this project.
 
+Money dashboard source:
+
+```text
+db_orders
+```
+
+The old `orders` table is outdated and ignored.
+
 ## Dashboard
 
-Money Dashboard v0.1 is the protected home page. It shows the monthly target and placeholder money values until real order data is connected.
+Money Dashboard is the protected home page. It reads monthly metrics from local `db_orders` after CEO manual sync. It does not call KeyCRM from the browser.
 
 Current monthly target:
 
 ```text
 4,000,000 UAH
 ```
+
+CEO sync page:
+
+```text
+https://bph.com.ua/db/sync_orders.php
+```
+
+Sync scope is current month and previous month only.
 
 ## Deploy Notes
 

@@ -69,6 +69,7 @@ $users = $stmt->fetchAll();
             </div>
             <nav class="nav">
                 <a href="<?= e(base_path('/index.php')) ?>">Dashboard</a>
+                <a href="<?= e(base_path('/sync_orders.php')) ?>">Sync Orders</a>
                 <a href="<?= e(base_path('/logout.php')) ?>">Logout</a>
             </nav>
         </header>

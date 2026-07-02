@@ -293,6 +293,24 @@ button,
     color: var(--muted);
 }
 
+code {
+    border-radius: 4px;
+    background: #f3f4f6;
+    padding: 2px 5px;
+    font-size: .92em;
+}
+
+.month-form {
+    display: flex;
+    align-items: end;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.month-form label {
+    max-width: 180px;
+}
+
 .inline-form {
     display: flex;
     align-items: end;
@@ -424,6 +442,11 @@ tr:last-child td {
     }
 
     .inline-form {
+        display: grid;
+        align-items: stretch;
+    }
+
+    .month-form {
         display: grid;
         align-items: stretch;
     }
