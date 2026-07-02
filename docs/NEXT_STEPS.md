@@ -42,9 +42,9 @@ Required production app setting:
 
 The old setup key was disabled manually in production and should remain disabled.
 
-## Current Dashboard
+## Current Dashboard / CEO Money Cockpit
 
-Money Dashboard reads sales only from `db_orders`.
+CEO Money Cockpit reads sales only from `db_orders`.
 
 Rules:
 
@@ -53,7 +53,7 @@ Rules:
 - Monthly target comes from `db_sales_targets`, with `4,000,000 UAH` fallback.
 - Manager plan/fact comes from `db_sales_targets` plus `db_orders`.
 - Targets are effective from date and remain active until changed.
-- Expense KPIs come from `db_expenses`.
+- Outgoing payment KPIs should come from `db_payment_obligations`; `db_expenses` remains only legacy/fallback until the new table exists.
 - Strategic debt is shown separately from monthly operational pressure.
 - Old `orders` table is ignored.
 - No browser KeyCRM calls are made.
@@ -61,7 +61,21 @@ Rules:
 
 ## Next Milestone
 
-Invoices v0.2 / Money Dashboard v0.5 — verify invoice extraction, targets, expenses, manager mapping, and payment status rules.
+Payment Obligations v0.1 — create `db_payment_obligations` table and compact payment timeline UI.
+
+The milestone should:
+
+- Add the planned `db_payment_obligations` table.
+- Keep `db_expenses` as legacy/fallback only if already created.
+- Build a compact timeline grouped by overdue, today, tomorrow, this week, next week, later, and strategic debts.
+- Add simple actions: Paid, Move, Edit.
+- Add quick move options: `+1 day`, `+3 days`, `+7 days`, next Monday, custom date.
+- Link obligations to `keycrm_order_id` when a payment belongs to an order.
+- Show expected net cash for order-linked receivables.
+- Do not add drag-and-drop.
+- Do not call KeyCRM from the browser.
+
+Invoices v0.2 / CEO Money Cockpit v0.5 — verify invoice extraction, targets, payment obligations, manager mapping, and payment status rules.
 
 Planning document:
 

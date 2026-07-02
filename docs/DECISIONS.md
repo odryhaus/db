@@ -77,7 +77,7 @@ Decision:
 
 ## Local Order Cache
 
-Money Dashboard must read from `db_orders`, not from the old `orders` table and not directly from KeyCRM.
+CEO Money Cockpit must read from `db_orders`, not from the old `orders` table and not directly from KeyCRM.
 
 Decision:
 
@@ -88,7 +88,7 @@ Decision:
 - Start with CEO-only manual sync for current month and previous month.
 - Do not build a full historical sync or ERP workflow.
 
-## Money Dashboard Metrics
+## CEO Money Cockpit Metrics
 
 Selected month controls monthly sales plan/fact metrics.
 
@@ -99,8 +99,17 @@ Decision:
 - Receivables are paginated at 25 rows per page.
 - Old `orders` table remains ignored.
 - No charts are added yet.
-- Expense planning is additive and intentionally lightweight.
+- Outgoing payment planning is additive and intentionally lightweight.
 - Manager-specific filtering is deferred until KeyCRM manager mapping to local users is confirmed.
+
+## CEO Money Cockpit
+
+Decision:
+
+- The main dashboard concept is named `CEO Money Cockpit`.
+- The purpose is daily CEO control of monthly sales target, manager target/fact, receivables, unpaid/partially paid orders, outgoing obligations, operational cash pressure, strategic debts, and invoice/document status.
+- The dashboard remains simple, fast, and money-focused.
+- It is not an ERP and should not grow into one by default.
 
 ## Targets And Expenses Foundation
 
@@ -115,7 +124,9 @@ Decision:
 - For selected month `YYYY-MM`, use the latest target with `effective_from <= last day of selected month`.
 - Use `4,000,000 UAH` company fallback if no company target exists.
 - Use `0 UAH` manager fallback if no manager target exists.
-- Use `db_expenses` for planned outgoing payments and strategic debts.
+- `db_expenses` was the first planned outgoing payments foundation.
+- New outgoing-payment functionality should use `db_payment_obligations`.
+- Keep `db_expenses` only as legacy/fallback if already created.
 - Keep strategic debt separate from monthly operational cash pressure.
 - CEO manages sales targets.
 - CEO and accountant can manage expenses.
@@ -173,6 +184,20 @@ Decision:
 - Services remain disabled until a FOP 3 group seller company with `allowed_item_type = 'services_allowed'` is configured and reviewed.
 
 Reason: the first invoice milestone should speed up document creation and payment control without turning .BRAND DB into ERP/accounting software.
+
+## Payment Obligations
+
+Decision:
+
+- Outgoing payments are modeled as payment obligations, not just expenses.
+- The planned source of truth for outgoing payments is `db_payment_obligations`.
+- `db_expenses` can remain if already created, but new outgoing-payment functionality should use `db_payment_obligations`.
+- KeyCRM order-level expenses are separate and should be cached in `db_order_expenses`.
+- Use timeline groups instead of a classic month calendar: overdue, today, tomorrow, this week, next week, later, and strategic debts.
+- No drag-and-drop in v1; use simple Paid, Move, and Edit actions.
+- Order-linked obligations should support expected net cash calculation per order.
+
+Reason: CEO needs to see who `.BRAND` must pay, when, whether it is linked to an order, and how it affects cash pressure without building full accounting software.
 
 ## Out Of Scope
 

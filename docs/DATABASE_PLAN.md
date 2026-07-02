@@ -1,6 +1,19 @@
-# Database Plan
+# CEO Money Cockpit — Database Plan
 
 ## 1. Core Principle
+
+Core purpose:
+
+Every day the CEO must see:
+
+- monthly sales target
+- manager target/fact
+- client receivables
+- unpaid and partially paid orders
+- outgoing payment obligations
+- operational cash pressure
+- strategic debts
+- invoice/document status
 
 KeyCRM is the source for operational CRM data:
 
@@ -15,7 +28,7 @@ KeyCRM is the source for operational CRM data:
 
 - sales targets
 - manager plans
-- internal expenses
+- internal payment obligations
 - strategic debts
 - invoice drafts
 - document workflow statuses
@@ -395,6 +408,63 @@ Fields:
 - `raw_json`
 - `synced_at`
 
+### db_payment_obligations
+
+Planned main table for outgoing payment obligations.
+
+This is not just expenses. This is everything `.BRAND` must pay:
+
+- order contractor
+- supplier
+- rent
+- salary
+- tax
+- subscription
+- loan payment
+- operational debt
+- strategic debt
+- other
+
+Fields:
+
+```sql
+id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY
+title VARCHAR(255) NOT NULL
+payee_name VARCHAR(255) NULL
+amount_uah DECIMAL(14,2) NOT NULL DEFAULT 0
+currency VARCHAR(10) DEFAULT 'UAH'
+due_date DATE NULL
+status ENUM('planned','paid','moved','canceled','problem') NOT NULL DEFAULT 'planned'
+priority ENUM('low','normal','high','critical') NOT NULL DEFAULT 'normal'
+obligation_type ENUM('order_contractor','supplier','rent','salary','tax','subscription','loan_payment','operational_debt','strategic_debt','other') NOT NULL DEFAULT 'other'
+category VARCHAR(100) NULL
+keycrm_order_id INT UNSIGNED NULL
+order_number VARCHAR(50) NULL
+invoice_id INT UNSIGNED NULL
+is_recurring TINYINT(1) NOT NULL DEFAULT 0
+recurrence_type ENUM('none','monthly','weekly','custom') NOT NULL DEFAULT 'none'
+repeat_day TINYINT UNSIGNED NULL
+repeat_until DATE NULL
+is_strategic TINYINT(1) NOT NULL DEFAULT 0
+total_debt_amount_uah DECIMAL(14,2) NULL
+paid_amount_uah DECIMAL(14,2) NOT NULL DEFAULT 0
+note TEXT NULL
+created_by_user_id INT UNSIGNED NULL
+paid_at DATETIME NULL
+moved_from_due_date DATE NULL
+created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+```
+
+Indexes:
+
+- `due_date`
+- `status`
+- `obligation_type`
+- `is_strategic`
+- `keycrm_order_id`
+- `invoice_id`
+
 ### db_buyers
 
 Planned buyer cache from KeyCRM.
@@ -440,6 +510,13 @@ Fields:
 ### db_expenses
 
 Internal `.BRAND DB` expenses.
+
+Decision:
+
+- `db_payment_obligations` is the main future table for outgoing payments.
+- `db_expenses` can remain if it already exists.
+- New outgoing payment functionality should use `db_payment_obligations`.
+- KeyCRM order expenses are separate and should be cached in `db_order_expenses`.
 
 Stores:
 
@@ -583,13 +660,15 @@ Manager receivables:
 
 We owe this month:
 
-- Source: `db_expenses`
-- Rule: due in selected month and `is_strategic = 0`
+- Main source: `db_payment_obligations`
+- Legacy fallback if payment obligations are not implemented yet: `db_expenses`
+- Rule: due in selected month, unpaid amount remains, and `is_strategic = 0`
 
 Strategic debts:
 
-- Source: `db_expenses`
-- Rule: `is_strategic = 1`
+- Main source: `db_payment_obligations`
+- Legacy fallback if payment obligations are not implemented yet: `db_expenses`
+- Rule: `is_strategic = 1` or `obligation_type = 'strategic_debt'`
 
 Invoices sent / not sent:
 
@@ -601,7 +680,192 @@ Documents closed:
 - Source: `db_invoices`
 - Rule: use `docs_status` and `docs_closed_at`
 
-## 5. KeyCRM API Mapping
+Overdue obligations:
+
+- Source: `db_payment_obligations`
+- Rule: `status IN ('planned','moved','problem')` and `due_date < today` and `is_strategic = 0`
+
+This week obligations:
+
+- Source: `db_payment_obligations`
+- Rule: `status IN ('planned','moved','problem')` and `due_date` is inside the current week and `is_strategic = 0`
+
+Strategic debt total:
+
+- Source: `db_payment_obligations`
+- Rule: `is_strategic = 1` or `obligation_type = 'strategic_debt'`
+
+Order-linked obligations:
+
+- Source: `db_payment_obligations`
+- Rule: `keycrm_order_id IS NOT NULL`
+
+Expected net receivables:
+
+- Source: `db_orders` plus `db_payment_obligations`
+- Formula:
+
+```text
+expected_net_cash = unpaid_amount_uah - SUM(planned unpaid obligations linked to the same keycrm_order_id)
+```
+
+## 5. Outgoing Payment Obligations
+
+Outgoing payment obligations are everything `.BRAND` must pay, not only classic expenses.
+
+Examples:
+
+- order contractor
+- supplier
+- rent
+- salary
+- tax
+- subscription
+- loan payment
+- operational debt
+- strategic debt
+- other
+
+Main table:
+
+```text
+db_payment_obligations
+```
+
+Purpose:
+
+- Give the CEO a daily view of who `.BRAND` must pay, when, how much, and why.
+- Separate strategic debt from operational cash pressure.
+- Link outgoing obligations to KeyCRM orders when the payment belongs to a specific order.
+- Keep internal payment planning in `.BRAND DB`, not only in KeyCRM.
+
+Status model:
+
+- `planned`: payment is expected and unpaid.
+- `paid`: payment is complete.
+- `moved`: due date was moved.
+- `canceled`: obligation no longer applies.
+- `problem`: requires CEO/accountant attention.
+
+Priority model:
+
+- `low`
+- `normal`
+- `high`
+- `critical`
+
+## 6. Cash Calendar UI
+
+Recommended UI:
+
+Use a Payment Timeline, not a classic month calendar.
+
+Reason:
+
+- CEO needs to scan cash pressure fast.
+- A classic calendar hides money inside date cells.
+- Timeline groups make overdue, today, and this week obvious.
+
+Groups:
+
+- Overdue / `Прострочено`
+- Today / `Сьогодні`
+- Tomorrow / `Завтра`
+- This week / `Цей тиждень`
+- Next week / `Наступний тиждень`
+- Later / `Пізніше`
+- Strategic debts / `Стратегічні борги`
+
+Each row should show:
+
+- due date
+- amount
+- payee
+- obligation type
+- linked order number if any
+- status
+- actions: mark paid, move date, edit
+
+No drag-and-drop in v1.
+
+Use simple buttons:
+
+- Paid
+- Move
+- Edit
+
+Quick move options:
+
+- `+1 day`
+- `+3 days`
+- `+7 days`
+- next Monday
+- custom date
+
+## 7. Order-Linked Cash Control
+
+If an outgoing obligation is linked to a KeyCRM order, the CEO must see:
+
+- client owes us
+- we owe for this order
+- expected net cash from order
+
+Formula:
+
+```text
+expected_net_cash = unpaid_amount_uah - SUM(planned unpaid obligations linked to the same keycrm_order_id)
+```
+
+Dashboard usage in CEO Money Cockpit:
+
+- We owe this month
+- Overdue obligations
+- This week obligations
+- Strategic debt total
+- Order-linked obligations
+- Expected net receivables
+
+## 8. What Replaces db_expenses?
+
+Decision:
+
+- Use `db_payment_obligations` as the main table for outgoing payments.
+- `db_expenses` can remain only if already created.
+- New functionality should use `db_payment_obligations`.
+- KeyCRM order expenses are separate and should be cached in `db_order_expenses`.
+
+Migration approach later:
+
+- Do not delete `db_expenses`.
+- Add `db_payment_obligations` safely.
+- Keep dashboard fallback reads from `db_expenses` only until payment obligations are implemented.
+- Move UI from `expenses.php` conceptually toward payment obligations timeline.
+
+## 9. What Belongs Where
+
+KeyCRM:
+
+- orders
+- payments
+- order expenses
+- buyers
+- companies
+- products
+- files
+
+`.BRAND DB`:
+
+- sales targets
+- manager targets
+- internal payment obligations
+- strategic debts
+- invoice drafts
+- edited invoice lines
+- document statuses
+- CEO notes
+- our seller companies
+
+## 10. KeyCRM API Mapping
 
 Orders:
 
@@ -645,14 +909,15 @@ Custom fields:
 - Useful later for control fields such as document status, internal processing flags, or manager notes.
 - Must be planned carefully so `.BRAND DB` remains the source for CEO control data unless there is a clear reason to mirror specific fields to KeyCRM.
 
-## 6. What Must NOT Be Stored Only In KeyCRM
+## 11. What Must NOT Be Stored Only In KeyCRM
 
 These must live in `.BRAND DB`:
 
 - sales targets
 - manager plans
+- payment obligations
 - strategic debts
-- internal expense schedule
+- internal expense schedule / cash timeline
 - invoice edited titles
 - document workflow statuses
 - CEO notes
@@ -661,7 +926,7 @@ Reason:
 
 These are internal management/control records, not pure CRM order data. They must stay available for fast dashboard reads and should not depend on live KeyCRM API calls.
 
-## 7. Open Decisions
+## 12. Open Decisions
 
 - How to map `.BRAND DB` manager users to KeyCRM managers.
 - Whether to sync all historical orders or keep current/previous month plus receivables-specific history.
@@ -670,8 +935,10 @@ These are internal management/control records, not pure CRM order data. They mus
 - How to handle VAT seller companies later.
 - How to handle service invoices for FOP 3 group.
 - Whether to create custom fields in KeyCRM for document control.
+- Whether old `db_expenses` rows should be migrated into `db_payment_obligations`.
+- Whether order contractors should be created manually or synced from KeyCRM/order production data.
 
-## 8. Final Checklist Before v1 Launch
+## 13. Final Checklist Before v1 Launch
 
 - Targets work with `effective_from`.
 - All unpaid logic includes `part_paid`.
@@ -681,6 +948,8 @@ These are internal management/control records, not pure CRM order data. They mus
 - Delivery note PDF works.
 - No `services` wording for FOP 2 group seller companies.
 - Document status works.
-- Expenses are separated into operational and strategic.
+- Outgoing obligations are separated into operational and strategic.
+- Payment timeline groups overdue/today/tomorrow/this week/next week/later/strategic debts.
+- Order-linked obligations show expected net cash.
 - Dashboard loads fast.
 - KeyCRM token remains server-side only.
