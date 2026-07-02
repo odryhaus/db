@@ -11,7 +11,7 @@ Production `/db` authentication is live:
 - Production `setup_key` was disabled manually.
 - Production `setup-ceo.php` was manually deleted.
 
-This update adds sales targets, manager targets, receivables drilldown, and an expenses foundation while keeping KeyCRM sync unchanged.
+This update replaces month-only target logic with effective-date sales targets while keeping KeyCRM sync unchanged.
 
 ## Files Changed
 
@@ -31,7 +31,30 @@ This update adds sales targets, manager targets, receivables drilldown, and an e
 
 ## UI Redesign — Compact Money Dashboard
 
-This pass is UI/UX only. No database schema changed, no KeyCRM sync logic changed, no access rules changed.
+The current UI follows the compact money dashboard design system. KeyCRM sync logic and access rules were not changed in this update.
+
+## Effective-Date Sales Targets
+
+Created additive table if missing:
+
+```text
+db_sales_targets
+```
+
+New source of truth:
+
+- Company targets use `target_type = 'company'`.
+- Manager targets use `target_type = 'manager'` plus `manager_name`.
+- Targets are effective from `effective_from` and remain active until a newer target row replaces them.
+- For selected month `YYYY-MM`, dashboard and targets page use the latest row where `effective_from <= last day of selected month`.
+- Company fallback remains `4,000,000 UAH`.
+- Manager fallback is `0 UAH`, shown as `не задано`.
+
+Legacy tables:
+
+- `db_monthly_targets` and `db_manager_targets` are not deleted.
+- Old target data is not migrated automatically.
+- New reads/writes use `db_sales_targets`.
 
 ### Design system (`assets/app.css`)
 
@@ -146,7 +169,7 @@ Optional simple filter:
 
 Dashboard metrics:
 
-- monthly target from `db_monthly_targets`, fallback `4,000,000 UAH`
+- monthly target from `db_sales_targets`, fallback `4,000,000 UAH`
 - selected-month sales fact: `SUM(total_amount_uah)`
 - selected-month paid: `SUM(paid_amount_uah)`
 - selected-month unpaid: `SUM(unpaid_amount_uah)`
@@ -162,7 +185,7 @@ Dashboard metrics:
 - receivables manager filter using `debt_manager`
 - receivables summary by manager
 - top 10 unpaid orders for selected month
-- selected-month manager summary with target, fact, paid, unpaid, remaining, and progress
+- selected-month manager summary with active effective-date target, fact, paid, unpaid, remaining, and progress
 - operational expenses due this month
 - strategic debt total, shown separately
 
@@ -191,15 +214,16 @@ Access:
 
 Tables created only if missing:
 
-- `db_monthly_targets`
-- `db_manager_targets`
+- `db_sales_targets`
 
 Behavior:
 
 - Choose month.
-- Edit total monthly target.
+- Save a company target with `effective_from`.
 - Show managers found in `db_orders` for selected month.
-- Save manager targets.
+- Save manager targets with `effective_from`.
+- For selected month, active targets are the latest rows with `effective_from <= month_end`.
+- Old `db_monthly_targets` and `db_manager_targets` are not deleted, but are no longer the source of truth.
 
 ## Expenses Foundation
 

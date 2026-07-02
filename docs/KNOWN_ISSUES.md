@@ -38,6 +38,7 @@ Known limitations:
 - Canceled/deleted orders are excluded by simple status/payment-status text matching.
 - Buyer/company data is best-effort and depends on KeyCRM include support.
 - Manager users currently see the shared dashboard because reliable local manager mapping has not been confirmed.
+- Old `db_monthly_targets` / `db_manager_targets` data is not migrated automatically; new target logic uses `db_sales_targets`.
 - Expenses are a foundation only; no recurring schedule expansion or payment audit trail exists yet.
 - Additive finance tables are created with `CREATE TABLE IF NOT EXISTS` from application code.
 - Sync is manual CEO-only; no cron/automatic sync exists yet.

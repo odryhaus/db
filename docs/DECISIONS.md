@@ -108,9 +108,13 @@ Use small additive tables for dashboard planning data.
 
 Decision:
 
-- Create `db_monthly_targets`, `db_manager_targets`, and `db_expenses` only if they do not already exist.
-- Use `db_monthly_targets` for the dashboard monthly target, with `4,000,000 UAH` fallback.
-- Use `db_manager_targets` for manager plan/fact comparisons.
+- Create `db_sales_targets` and `db_expenses` only if they do not already exist.
+- Keep old `db_monthly_targets` and `db_manager_targets` if they exist, but do not use them as the source of truth.
+- Use `db_sales_targets` for company and manager targets.
+- Targets are effective from a date and remain active until a newer target row replaces them.
+- For selected month `YYYY-MM`, use the latest target with `effective_from <= last day of selected month`.
+- Use `4,000,000 UAH` company fallback if no company target exists.
+- Use `0 UAH` manager fallback if no manager target exists.
 - Use `db_expenses` for planned outgoing payments and strategic debts.
 - Keep strategic debt separate from monthly operational cash pressure.
 - CEO manages sales targets.

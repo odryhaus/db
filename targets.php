@@ -25,50 +25,59 @@ function target_progress_mini(float $progress): string
 }
 
 if (is_post()) {
-    $monthlyTarget = max(0, (float) str_replace(' ', '', (string) ($_POST['target_amount_uah'] ?? '0')));
-    $managerNames = is_array($_POST['manager_names'] ?? null) ? array_values($_POST['manager_names']) : [];
-    $managerTargets = is_array($_POST['manager_targets'] ?? null) ? array_values($_POST['manager_targets']) : [];
+    $action = (string) ($_POST['action'] ?? '');
+    $targetAmount = max(0, (float) str_replace(' ', '', (string) ($_POST['amount_uah'] ?? '0')));
+    $effectiveFrom = trim((string) ($_POST['effective_from'] ?? date('Y-m-d')));
+    $managerName = trim((string) ($_POST['manager_name'] ?? ''));
 
-    if (!csrf_is_valid()) {
+    if (!csrf_is_valid() || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $effectiveFrom)) {
         $error = 'Invalid target update.';
-    } else {
+    } elseif ($action === 'save_company') {
         $stmt = db()->prepare("
-            INSERT INTO db_monthly_targets (month, target_amount_uah)
-            VALUES (:month, :target_amount_uah)
-            ON DUPLICATE KEY UPDATE target_amount_uah = VALUES(target_amount_uah)
+            INSERT INTO db_sales_targets
+                (target_type, manager_name, amount_uah, effective_from, created_by_user_id)
+            VALUES
+                ('company', NULL, :amount_uah, :effective_from, :created_by_user_id)
         ");
         $stmt->execute([
-            'month' => $selectedMonth,
-            'target_amount_uah' => $monthlyTarget,
+            'amount_uah' => $targetAmount,
+            'effective_from' => $effectiveFrom,
+            'created_by_user_id' => (int) (current_user()['id'] ?? 0),
         ]);
 
-        $managerStmt = db()->prepare("
-            INSERT INTO db_manager_targets (month, manager_name, target_amount_uah)
-            VALUES (:month, :manager_name, :target_amount_uah)
-            ON DUPLICATE KEY UPDATE target_amount_uah = VALUES(target_amount_uah)
+        $message = 'Company target saved.';
+    } elseif ($action === 'save_manager' && $managerName !== '') {
+        $stmt = db()->prepare("
+            INSERT INTO db_sales_targets
+                (target_type, manager_name, amount_uah, effective_from, created_by_user_id)
+            VALUES
+                ('manager', :manager_name, :amount_uah, :effective_from, :created_by_user_id)
         ");
+        $stmt->execute([
+            'manager_name' => substr($managerName, 0, 150),
+            'amount_uah' => $targetAmount,
+            'effective_from' => $effectiveFrom,
+            'created_by_user_id' => (int) (current_user()['id'] ?? 0),
+        ]);
 
-        foreach ($managerNames as $index => $managerName) {
-            $managerName = trim((string) $managerName);
-            if ($managerName === '') {
-                continue;
-            }
-            $targetAmount = $managerTargets[$index] ?? 0;
-            $managerStmt->execute([
-                'month' => $selectedMonth,
-                'manager_name' => substr($managerName, 0, 150),
-                'target_amount_uah' => max(0, (float) str_replace(' ', '', (string) $targetAmount)),
-            ]);
-        }
-
-        $message = 'Targets saved.';
+        $message = 'Manager target saved.';
+    } else {
+        $error = 'Invalid target update.';
     }
 }
 
-$monthlyTargetStmt = db()->prepare('SELECT target_amount_uah FROM db_monthly_targets WHERE month = :month LIMIT 1');
-$monthlyTargetStmt->execute(['month' => $selectedMonth]);
-$monthlyTarget = (float) ($monthlyTargetStmt->fetchColumn() ?: 4000000);
+$companyTarget = active_company_target(db(), $selectedMonth);
+$monthlyTarget = (float) $companyTarget['amount_uah'];
+$monthEnd = month_end_date($selectedMonth);
 
+$notCanceledSql = "
+    LOWER(COALESCE(status_name, '')) NOT LIKE '%cancel%'
+    AND LOWER(COALESCE(status_name, '')) NOT LIKE '%deleted%'
+    AND LOWER(COALESCE(status_name, '')) NOT LIKE '%скас%'
+    AND LOWER(COALESCE(payment_status, '')) NOT LIKE '%cancel%'
+    AND LOWER(COALESCE(payment_status, '')) NOT LIKE '%deleted%'
+    AND LOWER(COALESCE(payment_status, '')) NOT LIKE '%скас%'
+";
 $managersStmt = db()->prepare("
     SELECT
         COALESCE(NULLIF(manager_name, ''), 'No manager') AS manager_name,
@@ -76,24 +85,23 @@ $managersStmt = db()->prepare("
         COALESCE(SUM(total_amount_uah), 0) AS sales_fact
     FROM db_orders
     WHERE order_month = :month
+      AND {$notCanceledSql}
     GROUP BY COALESCE(NULLIF(manager_name, ''), 'No manager')
     ORDER BY manager_name
 ");
 $managersStmt->execute(['month' => $selectedMonth]);
 $managers = $managersStmt->fetchAll();
 
-$targetsStmt = db()->prepare('SELECT manager_name, target_amount_uah FROM db_manager_targets WHERE month = :month');
-$targetsStmt->execute(['month' => $selectedMonth]);
-$savedTargets = [];
-foreach ($targetsStmt->fetchAll() as $row) {
-    $savedTargets[(string) $row['manager_name']] = (float) $row['target_amount_uah'];
-}
+$managerNames = array_map(static function (array $manager): string {
+    return (string) $manager['manager_name'];
+}, $managers);
+$activeManagerTargets = active_manager_targets(db(), $selectedMonth, $managerNames);
 
 $managerTargetTotal = 0;
 $managerSalesTotal = 0;
 foreach ($managers as $manager) {
     $managerName = (string) $manager['manager_name'];
-    $managerTargetTotal += (float) ($savedTargets[$managerName] ?? 0);
+    $managerTargetTotal += (float) ($activeManagerTargets[$managerName]['amount_uah'] ?? 0);
     $managerSalesTotal += (float) ($manager['sales_fact'] ?? 0);
 }
 $monthlyRemaining = max($monthlyTarget - $managerSalesTotal, 0);
@@ -134,8 +142,9 @@ $monthlyProgress = $monthlyTarget > 0 ? min(100, round(($managerSalesTotal / $mo
 
         <section class="kpi-grid" aria-label="Плани">
             <div class="kpi-card target">
-                <span class="label">План місяця</span>
+                <span class="label">Активний план компанії</span>
                 <strong><?= e(target_money($monthlyTarget)) ?></strong>
+                <small>діє з <?= e($companyTarget['effective_from'] ?: 'fallback') ?></small>
             </div>
             <div class="kpi-card">
                 <span class="label">Факт менеджерів</span>
@@ -163,74 +172,89 @@ $monthlyProgress = $monthlyTarget > 0 ? min(100, round(($managerSalesTotal / $mo
             </form>
         </section>
 
-        <form method="post" action="<?= e(base_path('/targets.php')) ?>">
-            <?= csrf_field() ?>
-            <input type="hidden" name="month" value="<?= e($selectedMonth) ?>">
-
-            <section class="panel dashboard-section">
-                <div class="section-heading">
-                    <div>
-                        <span class="label"><?= e($selectedMonth) ?></span>
-                        <h2><?= e($selectedMonth) ?></h2>
-                    </div>
-                    <strong><?= e(target_money($monthlyTarget)) ?></strong>
+        <section class="panel dashboard-section">
+            <div class="section-heading">
+                <div>
+                    <span class="label">Company target</span>
+                    <h2>План компанії</h2>
                 </div>
-                <label class="compact-field">
-                    <span>Загальний план місяця, UAH</span>
-                    <input type="number" step="0.01" min="0" name="target_amount_uah" value="<?= e((string) $monthlyTarget) ?>">
+                <strong><?= e(target_money($monthlyTarget)) ?></strong>
+            </div>
+            <form class="toolbar" method="post" action="<?= e(base_path('/targets.php')) ?>">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="save_company">
+                <input type="hidden" name="month" value="<?= e($selectedMonth) ?>">
+                <label>
+                    <span>Новий план, UAH</span>
+                    <input class="compact-money-input" type="number" step="0.01" min="0" name="amount_uah" value="<?= e((string) $monthlyTarget) ?>">
                 </label>
-            </section>
+                <label>
+                    <span>Діє з</span>
+                    <input class="compact-date-input" type="date" name="effective_from" value="<?= e(date('Y-m-d')) ?>">
+                </label>
+                <button type="submit">Зберегти</button>
+            </form>
+        </section>
 
-            <section class="panel table-panel dashboard-section">
-                <div class="section-heading padded">
-                    <div>
-                        <span class="label">Менеджери з db_orders</span>
-                        <h2>Плани менеджерів</h2>
-                    </div>
-                    <button type="submit">Зберегти плани</button>
+        <section class="panel table-panel dashboard-section">
+            <div class="section-heading padded">
+                <div>
+                    <span class="label">Активні на <?= e($monthEnd) ?></span>
+                    <h2>Плани менеджерів</h2>
                 </div>
-                <div class="table-wrap">
-                    <table>
-                        <thead>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Менеджер</th>
+                            <th class="num">Факт</th>
+                            <th class="num">Активний план</th>
+                            <th>Діє з</th>
+                            <th>Прогрес</th>
+                            <th class="num">Новий план</th>
+                            <th>Нова дата</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (!$managers): ?>
+                            <tr><td colspan="8">За цей місяць менеджерів у db_orders не знайдено.</td></tr>
+                        <?php endif; ?>
+                        <?php foreach ($managers as $manager): ?>
+                            <?php $managerName = (string) $manager['manager_name']; ?>
+                            <?php $activeTarget = $activeManagerTargets[$managerName] ?? ['amount_uah' => 0, 'effective_from' => null]; ?>
+                            <?php $managerTarget = (float) ($activeTarget['amount_uah'] ?? 0); ?>
+                            <?php $managerFact = (float) ($manager['sales_fact'] ?? 0); ?>
+                            <?php $managerProgress = $managerTarget > 0 ? min(100, round(($managerFact / $managerTarget) * 100, 1)) : 0; ?>
+                            <?php $formId = 'manager-target-' . md5($managerName); ?>
                             <tr>
-                                <th>Менеджер</th>
-                                <th class="num">Замовлень</th>
-                                <th class="num">Факт</th>
-                                <th class="num">План, UAH</th>
-                                <th>Прогрес</th>
+                                <td><?= e($managerName) ?></td>
+                                <td class="num"><?= e(target_money($managerFact)) ?></td>
+                                <td class="num"><?= $managerTarget > 0 ? e(target_money($managerTarget)) : '<span class="status-badge status-badge--muted">не задано</span>' ?></td>
+                                <td><?= e($activeTarget['effective_from'] ?: '—') ?></td>
+                                <td><?= $managerTarget > 0 ? target_progress_mini($managerProgress) : '—' ?></td>
+                                <td class="num">
+                                    <input form="<?= e($formId) ?>" class="compact-money-input" type="number" step="0.01" min="0" name="amount_uah" value="<?= e($managerTarget > 0 ? (string) $managerTarget : '') ?>">
+                                </td>
+                                <td>
+                                    <input form="<?= e($formId) ?>" class="compact-date-input" type="date" name="effective_from" value="<?= e(date('Y-m-d')) ?>">
+                                </td>
+                                <td>
+                                    <form id="<?= e($formId) ?>" method="post" action="<?= e(base_path('/targets.php')) ?>">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="action" value="save_manager">
+                                        <input type="hidden" name="month" value="<?= e($selectedMonth) ?>">
+                                        <input type="hidden" name="manager_name" value="<?= e($managerName) ?>">
+                                    </form>
+                                    <button form="<?= e($formId) ?>" type="submit" class="small-button">Save</button>
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (!$managers): ?>
-                                <tr><td colspan="5">За цей місяць менеджерів у db_orders не знайдено.</td></tr>
-                            <?php endif; ?>
-                            <?php foreach ($managers as $manager): ?>
-                                <?php $managerName = (string) $manager['manager_name']; ?>
-                                <?php $managerTarget = (float) ($savedTargets[$managerName] ?? 0); ?>
-                                <?php $managerFact = (float) ($manager['sales_fact'] ?? 0); ?>
-                                <?php $managerProgress = $managerTarget > 0 ? min(100, round(($managerFact / $managerTarget) * 100, 1)) : 0; ?>
-                                <tr>
-                                    <td><?= e($managerName) ?></td>
-                                    <td class="num"><?= e((string) $manager['order_count']) ?></td>
-                                    <td class="num"><?= e(target_money($managerFact)) ?></td>
-                                    <td class="num">
-                                        <input type="hidden" name="manager_names[]" value="<?= e($managerName) ?>">
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            name="manager_targets[]"
-                                            value="<?= e((string) $managerTarget) ?>"
-                                        >
-                                    </td>
-                                    <td><?= target_progress_mini($managerProgress) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-        </form>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
     </main>
 </body>
 </html>

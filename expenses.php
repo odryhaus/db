@@ -204,7 +204,7 @@ $upcomingCount = count($upcoming);
 
 $monthlyStmt = db()->prepare("
     SELECT
-        COALESCE(SUM(amount_uah), 0) AS planned_total,
+        COALESCE(SUM(GREATEST(amount_uah - paid_amount_uah, 0)), 0) AS planned_total,
         COUNT(*) AS planned_count
     FROM db_expenses
     WHERE status = 'planned'
@@ -230,7 +230,7 @@ $monthlyPlanned = $monthlyStmt->fetch() ?: [];
 
 $strategicStmt = db()->query("
     SELECT
-        COALESCE(SUM(COALESCE(total_debt_amount_uah, amount_uah) - paid_amount_uah), 0) AS strategic_total,
+        COALESCE(SUM(GREATEST(COALESCE(total_debt_amount_uah, amount_uah) - paid_amount_uah, 0)), 0) AS strategic_total,
         COUNT(*) AS strategic_count
     FROM db_expenses
     WHERE status <> 'canceled'
@@ -354,7 +354,7 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
                     <span>Тип</span>
                     <select name="expense_type">
                         <?php foreach (expense_types() as $type): ?>
-                            <option value="<?= e($type) ?>" <?= (string) ($editExpense['expense_type'] ?? 'other') === $type ? 'selected' : '' ?>><?= e(expense_type_label($type)) ?></option>
+                            <option value="<?= e($type) ?>" <?= (string) ($editExpense['expense_type'] ?? 'one_time') === $type ? 'selected' : '' ?>><?= e(expense_type_label($type)) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </label>

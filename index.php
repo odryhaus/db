@@ -100,12 +100,8 @@ $notCanceledSql = "
 ";
 
 try {
-    $targetStmt = db()->prepare('SELECT target_amount_uah FROM db_monthly_targets WHERE month = :month LIMIT 1');
-    $targetStmt->execute(['month' => $selectedMonth]);
-    $savedTarget = $targetStmt->fetchColumn();
-    if ($savedTarget !== false) {
-        $monthlyTarget = (float) $savedTarget;
-    }
+    $companyTarget = active_company_target(db(), $selectedMonth);
+    $monthlyTarget = (float) $companyTarget['amount_uah'];
 
     $metrics = db()->prepare("
         SELECT
@@ -252,46 +248,25 @@ try {
     $managerStmt->execute(['month' => $selectedMonth]);
     $managerSummary = $managerStmt->fetchAll();
 
-    $managerTargetsStmt = db()->prepare('SELECT manager_name, target_amount_uah FROM db_manager_targets WHERE month = :month');
-    $managerTargetsStmt->execute(['month' => $selectedMonth]);
-    $managerTargets = [];
-    foreach ($managerTargetsStmt->fetchAll() as $target) {
-        $managerTargets[(string) $target['manager_name']] = (float) $target['target_amount_uah'];
-    }
+    $managerNames = array_map(static function (array $manager): string {
+        return (string) $manager['manager_name'];
+    }, $managerSummary);
+    $managerTargets = active_manager_targets(db(), $selectedMonth, $managerNames);
 
     foreach ($managerSummary as &$manager) {
-        $target = $managerTargets[(string) $manager['manager_name']] ?? 0;
+        $targetData = $managerTargets[(string) $manager['manager_name']] ?? ['amount_uah' => 0, 'is_fallback' => true];
+        $target = (float) ($targetData['amount_uah'] ?? 0);
         $fact = (float) ($manager['sales_fact'] ?? 0);
         $manager['target_amount_uah'] = $target;
-        $manager['remaining_to_target'] = max($target - $fact, 0);
-        $manager['progress'] = $target > 0 ? min(100, round(($fact / $target) * 100, 1)) : 0;
+        $manager['has_target'] = $target > 0 && empty($targetData['is_fallback']);
+        $manager['target_effective_from'] = $targetData['effective_from'] ?? null;
+        $manager['remaining_to_target'] = $manager['has_target'] ? max($target - $fact, 0) : null;
+        $manager['progress'] = $manager['has_target'] ? min(100, round(($fact / $target) * 100, 1)) : null;
     }
     unset($manager);
 
-    foreach ($managerTargets as $managerName => $target) {
-        $exists = false;
-        foreach ($managerSummary as $manager) {
-            if ((string) $manager['manager_name'] === $managerName) {
-                $exists = true;
-                break;
-            }
-        }
-        if (!$exists && $target > 0) {
-            $managerSummary[] = [
-                'manager_name' => $managerName,
-                'order_count' => 0,
-                'sales_fact' => 0,
-                'paid' => 0,
-                'unpaid' => 0,
-                'target_amount_uah' => $target,
-                'remaining_to_target' => $target,
-                'progress' => 0,
-            ];
-        }
-    }
-
     $operationalStmt = db()->prepare("
-        SELECT COALESCE(SUM(amount_uah), 0)
+        SELECT COALESCE(SUM(GREATEST(amount_uah - paid_amount_uah, 0)), 0)
         FROM db_expenses
         WHERE status = 'planned'
           AND is_strategic = 0
@@ -315,7 +290,7 @@ try {
     $operationalDueThisMonth = (float) ($operationalStmt->fetchColumn() ?: 0);
 
     $strategicStmt = db()->query("
-        SELECT COALESCE(SUM(COALESCE(total_debt_amount_uah, amount_uah) - paid_amount_uah), 0)
+        SELECT COALESCE(SUM(GREATEST(COALESCE(total_debt_amount_uah, amount_uah) - paid_amount_uah, 0)), 0)
         FROM db_expenses
         WHERE status <> 'canceled'
           AND (is_strategic = 1 OR expense_type = 'strategic_debt')
@@ -325,7 +300,7 @@ try {
     $weekStart = $today->modify('-' . ((int) $today->format('N') - 1) . ' days');
     $weekEnd = $weekStart->modify('+6 days');
     $weeklyStmt = db()->prepare("
-        SELECT COALESCE(SUM(amount_uah), 0)
+        SELECT COALESCE(SUM(GREATEST(amount_uah - paid_amount_uah, 0)), 0)
         FROM db_expenses
         WHERE status = 'planned'
           AND is_strategic = 0
@@ -339,7 +314,7 @@ try {
     $operationalDueThisWeek = (float) ($weeklyStmt->fetchColumn() ?: 0);
 
     $overdueStmt = db()->prepare("
-        SELECT COALESCE(SUM(amount_uah), 0) AS overdue_total, COUNT(*) AS overdue_count
+        SELECT COALESCE(SUM(GREATEST(amount_uah - paid_amount_uah, 0)), 0) AS overdue_total, COUNT(*) AS overdue_count
         FROM db_expenses
         WHERE status = 'planned'
           AND is_strategic = 0
@@ -441,7 +416,7 @@ try {
         <section class="panel dashboard-section">
             <div class="section-heading">
                 <div>
-                    <span class="label"><?= e($monthLabel) ?></span>
+                    <span class="label"><?= e($monthLabel) ?><?= !empty($companyTarget['effective_from']) ? ' · план з ' . e((string) $companyTarget['effective_from']) : ' · fallback' ?></span>
                     <h2>План продажів</h2>
                 </div>
                 <strong><?= e((string) $progress) ?>%</strong>
@@ -500,12 +475,18 @@ try {
                         <?php foreach ($managerSummary as $manager): ?>
                             <tr>
                                 <td><?= e(dashboard_manager_key($manager['manager_name'] ?? '')) ?></td>
-                                <td class="num"><?= e(money_uah($manager['target_amount_uah'] ?? 0)) ?></td>
+                                <td class="num">
+                                    <?php if (!empty($manager['has_target'])): ?>
+                                        <?= e(money_uah($manager['target_amount_uah'] ?? 0)) ?>
+                                    <?php else: ?>
+                                        <span class="status-badge status-badge--muted">не задано</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="num"><?= e(money_uah($manager['sales_fact'] ?? 0)) ?></td>
-                                <td><?= dashboard_progress_mini((float) ($manager['progress'] ?? 0)) ?></td>
+                                <td><?= !empty($manager['has_target']) ? dashboard_progress_mini((float) ($manager['progress'] ?? 0)) : '—' ?></td>
                                 <td class="num"><?= e(money_uah($manager['paid'] ?? 0)) ?></td>
                                 <td class="num"><?= e(money_uah($manager['unpaid'] ?? 0)) ?></td>
-                                <td class="num"><?= e(money_uah($manager['remaining_to_target'] ?? 0)) ?></td>
+                                <td class="num"><?= !empty($manager['has_target']) ? e(money_uah($manager['remaining_to_target'] ?? 0)) : '—' ?></td>
                                 <td class="num"><?= e((string) $manager['order_count']) ?></td>
                             </tr>
                         <?php endforeach; ?>
@@ -518,14 +499,14 @@ try {
             <div class="section-heading padded">
                 <div>
                     <span class="label">Усі місяці · <?= e((string) $receivablesCount) ?> замовлень · найбільше <?= e(money_uah($largestReceivable)) ?></span>
-                    <h2>Нам повинні — <?= e(money_uah($receivablesTotal)) ?></h2>
+                    <h2><?= $debtManager !== '' ? 'Борги менеджера: ' . e(dashboard_manager_key($debtManager)) : 'Нам повинні' ?> — <?= e(money_uah($debtManager !== '' ? $filteredReceivablesTotal : $receivablesTotal)) ?></h2>
                     <?php if ($debtManager !== ''): ?>
                         <p class="muted">Фільтр: <?= e(dashboard_manager_key($debtManager)) ?> · <?= e(money_uah($filteredReceivablesTotal)) ?> (<?= e((string) $filteredReceivablesCount) ?>)</p>
                     <?php endif; ?>
                 </div>
                 <div class="pagination">
                     <?php if ($debtManager !== ''): ?>
-                        <a href="<?= e(dashboard_url(['month' => $selectedMonth])) ?>">Усі менеджери</a>
+                        <a href="<?= e(dashboard_url(['month' => $selectedMonth])) ?>">Показати всі</a>
                     <?php endif; ?>
                     <?php if ($debtPage > 1): ?>
                         <a href="<?= e(dashboard_url(['month' => $selectedMonth, 'debt_manager' => $debtManager, 'debt_page' => $debtPage - 1])) ?>">Назад</a>

@@ -408,6 +408,14 @@ button:hover,
     max-width: 320px;
 }
 
+.compact-money-input {
+    width: 160px;
+}
+
+.compact-date-input {
+    width: 132px;
+}
+
 /* toolbar — filter / search rows */
 
 .toolbar {

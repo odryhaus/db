@@ -101,10 +101,11 @@ The old `orders` table is outdated and ignored.
 Planning tables are additive and created only if missing:
 
 ```text
-db_monthly_targets
-db_manager_targets
+db_sales_targets
 db_expenses
 ```
+
+`db_sales_targets` is the active source of truth for company and manager targets. The old monthly target tables are kept if they exist but are not used for new dashboard target logic.
 
 ## Dashboard
 
@@ -114,8 +115,9 @@ Dashboard rule:
 
 - Selected month controls monthly sales plan/fact.
 - `Нам повинні` shows all unpaid client debt across all months.
-- Monthly target comes from `db_monthly_targets`, with `4,000,000 UAH` fallback.
-- Manager targets come from `db_manager_targets`.
+- Monthly target comes from `db_sales_targets`, with `4,000,000 UAH` fallback.
+- Manager targets come from `db_sales_targets`.
+- Targets are effective from a date and remain active until changed.
 - Operational expenses and strategic debts come from `db_expenses`.
 - Old `orders` table is ignored.
 

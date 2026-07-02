@@ -44,8 +44,9 @@ Rules:
 
 - Selected month controls sales plan/fact metrics.
 - Total receivables / `Нам повинні` shows all unpaid orders across all months.
-- Monthly target comes from `db_monthly_targets`, with `4,000,000 UAH` fallback.
-- Manager plan/fact comes from `db_manager_targets` plus `db_orders`.
+- Monthly target comes from `db_sales_targets`, with `4,000,000 UAH` fallback.
+- Manager plan/fact comes from `db_sales_targets` plus `db_orders`.
+- Targets are effective from date and remain active until changed.
 - Expense KPIs come from `db_expenses`.
 - Strategic debt is shown separately from monthly operational pressure.
 - Old `orders` table is ignored.
