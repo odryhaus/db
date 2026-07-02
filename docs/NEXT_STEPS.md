@@ -19,6 +19,9 @@ Checklist:
 - Dashboard selected-month metrics update when `?month=YYYY-MM` changes.
 - `Нам повинні` shows unpaid client debt across all months.
 - Receivables pagination keeps the selected month parameter.
+- CEO can open `targets.php` and save monthly/manager targets.
+- CEO/accountant can open `expenses.php`.
+- Dashboard shows operational monthly expenses and strategic debt separately.
 - Logout redirects back to login.
 
 ## Production Config Setup Reminder
@@ -35,19 +38,23 @@ The old setup key was disabled manually in production and should remain disabled
 
 ## Current Dashboard
 
-Money Dashboard v0.3 reads only from `db_orders`.
+Money Dashboard reads sales only from `db_orders`.
 
 Rules:
 
 - Selected month controls sales plan/fact metrics.
 - Total receivables / `Нам повинні` shows all unpaid orders across all months.
+- Monthly target comes from `db_monthly_targets`, with `4,000,000 UAH` fallback.
+- Manager plan/fact comes from `db_manager_targets` plus `db_orders`.
+- Expense KPIs come from `db_expenses`.
+- Strategic debt is shown separately from monthly operational pressure.
 - Old `orders` table is ignored.
 - No browser KeyCRM calls are made.
-- No charts or outgoing payments exist yet.
+- No charts exist yet.
 
 ## Next Milestone
 
-Money Dashboard v0.4 — verify synced data quality, manager mapping, and payment status rules.
+Money Dashboard v0.5 — verify targets, expenses, manager mapping, and payment status rules.
 
 Planning document:
 
@@ -70,6 +77,8 @@ The next milestone should:
 - Decide final canceled/deleted status exclusion rules.
 - Decide whether cron/automatic sync is needed.
 - Confirm whether managers can be safely filtered by local `users.keycrm_id`.
+- Review whether finance tables should be created by manual SQL instead of app bootstrap.
+- Add expense recurrence expansion if monthly subscriptions need concrete due rows.
 - Add data freshness display and sync error handling improvements if needed.
 
 The next dashboard should add or improve:
@@ -77,7 +86,7 @@ The next dashboard should add or improve:
 - Reliable manager-only data filtering.
 - Clear canceled/deleted/refunded status rules.
 - Better payment status labels if KeyCRM values are too technical.
-- Outgoing planned payments after the receivables side is trusted.
+- Expense payment audit/history if needed.
 
 ## Database Tables To Inspect Next
 

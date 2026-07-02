@@ -1,6 +1,6 @@
 # .BRAND DB
 
-Simple internal PHP system for `.BRAND` money control. The current MVP contains authentication, CEO user management, a money dashboard, and CEO-only manual order sync.
+Simple internal PHP system for `.BRAND` money control. The current MVP contains authentication, CEO user management, a money dashboard, CEO-only manual order sync, sales targets, and expenses planning.
 
 ## Purpose
 
@@ -13,13 +13,15 @@ Current milestone:
 - CEO-only user access management.
 - CEO-only manual KeyCRM order sync into local `db_orders`.
 - Money dashboard metrics from local `db_orders`.
+- CEO-only sales target management.
+- CEO/accountant expenses foundation.
 
 Not included yet:
 
 - Automatic CRM sync.
 - Charts.
-- Payments or debt screens.
-- Database migrations.
+- Full payments ledger.
+- Full debt workflow.
 
 ## Local Setup
 
@@ -88,13 +90,21 @@ Used fields:
 
 Do not use `users.username` or `users.password` for this project.
 
-Money dashboard source:
+Money dashboard sales source:
 
 ```text
 db_orders
 ```
 
 The old `orders` table is outdated and ignored.
+
+Planning tables are additive and created only if missing:
+
+```text
+db_monthly_targets
+db_manager_targets
+db_expenses
+```
 
 ## Dashboard
 
@@ -104,6 +114,9 @@ Dashboard rule:
 
 - Selected month controls monthly sales plan/fact.
 - `Нам повинні` shows all unpaid client debt across all months.
+- Monthly target comes from `db_monthly_targets`, with `4,000,000 UAH` fallback.
+- Manager targets come from `db_manager_targets`.
+- Operational expenses and strategic debts come from `db_expenses`.
 - Old `orders` table is ignored.
 
 Current monthly target:

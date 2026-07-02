@@ -360,6 +360,8 @@ try {
             </div>
             <nav class="nav">
                 <a href="<?= e(base_path('/index.php')) ?>">Dashboard</a>
+                <a href="<?= e(base_path('/targets.php')) ?>">Targets</a>
+                <a href="<?= e(base_path('/expenses.php')) ?>">Expenses</a>
                 <a href="<?= e(base_path('/users.php')) ?>">Users</a>
                 <a href="<?= e(base_path('/logout.php')) ?>">Logout</a>
             </nav>

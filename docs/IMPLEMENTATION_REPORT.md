@@ -11,17 +11,23 @@ Production `/db` authentication is live:
 - Production `setup_key` was disabled manually.
 - Production `setup-ceo.php` was manually deleted.
 
-This update redesigns Money Dashboard v0.3 so selected-month sales metrics and all-month unpaid receivables are visible on the first dashboard screen.
+This update adds sales targets, manager targets, receivables drilldown, and an expenses foundation while keeping KeyCRM sync unchanged.
 
 ## Files Changed
 
 - `README.md`
 - `assets/app.css`
+- `bootstrap.php`
 - `docs/DECISIONS.md`
 - `docs/IMPLEMENTATION_REPORT.md`
 - `docs/KNOWN_ISSUES.md`
 - `docs/NEXT_STEPS.md`
+- `expenses.php`
+- `finance.php`
 - `index.php`
+- `sync_orders.php`
+- `targets.php`
+- `users.php`
 
 ## Manual KeyCRM Sync
 
@@ -82,7 +88,7 @@ Money mapping:
 
 Buyer/company extraction is best-effort until KeyCRM include support is fully confirmed.
 
-## Money Dashboard v0.3
+## Money Dashboard
 
 `index.php` now reads only from `db_orders`.
 
@@ -99,7 +105,7 @@ Optional simple filter:
 
 Dashboard metrics:
 
-- monthly target: `4,000,000 UAH`
+- monthly target from `db_monthly_targets`, fallback `4,000,000 UAH`
 - selected-month sales fact: `SUM(total_amount_uah)`
 - selected-month paid: `SUM(paid_amount_uah)`
 - selected-month unpaid: `SUM(unpaid_amount_uah)`
@@ -112,13 +118,79 @@ Dashboard metrics:
 - daily required sales until selected month end, or `month closed` for past months
 - last successful sync time
 - all-month receivables table, 25 rows per page using `debt_page`
+- receivables manager filter using `debt_manager`
+- receivables summary by manager
 - top 10 unpaid orders for selected month
-- selected-month manager summary
+- selected-month manager summary with target, fact, paid, unpaid, remaining, and progress
+- operational expenses due this month
+- strategic debt total, shown separately
 
 Canceled/deleted handling:
 
 - Dashboard excludes rows where `status_name` or `payment_status` text contains common canceled/deleted markers.
 - This is a first-pass rule and should be reviewed against real statuses.
+
+Unpaid logic:
+
+- Unpaid lists use `unpaid_amount_uah > 0`.
+- This includes both unpaid and partially paid orders if the cached unpaid amount is positive.
+- Lists do not rely only on `payment_status`.
+
+## Target Management
+
+Created:
+
+```text
+targets.php
+```
+
+Access:
+
+- CEO-only.
+
+Tables created only if missing:
+
+- `db_monthly_targets`
+- `db_manager_targets`
+
+Behavior:
+
+- Choose month.
+- Edit total monthly target.
+- Show managers found in `db_orders` for selected month.
+- Save manager targets.
+
+## Expenses Foundation
+
+Created:
+
+```text
+expenses.php
+```
+
+Access:
+
+- CEO and accountant.
+
+Table created only if missing:
+
+- `db_expenses`
+
+Behavior:
+
+- Add expense.
+- Edit expense.
+- Mark expense as paid.
+- Filter by status.
+- Filter operational / strategic.
+- Show upcoming payments.
+- Show monthly planned operational expenses.
+- Show strategic debt separately.
+
+Dashboard expense KPIs:
+
+- `Ми повинні цього місяця`: planned operational expenses due in selected month.
+- `Стратегічні борги`: strategic debt total, not mixed into monthly cash pressure.
 
 ## KeyCRM Debug Inspector
 
@@ -247,17 +319,18 @@ Production already has `setup_key` disabled and `setup-ceo.php` deleted manually
 Access remains unchanged for this milestone:
 
 - `ceo`, `accountant`, and `manager` can view `index.php`.
-- Only `ceo` sees `Sync Orders` and `Users` links.
+- Only `ceo` sees `Targets`, `Sync Orders`, and `Users` links.
+- CEO and accountant can access `expenses.php`.
 - Manager-only filtering is not enabled yet because reliable local user-to-KeyCRM manager mapping still needs verification.
 
 ## What Remains Placeholder
 
-- Planned outgoing payments.
-- Debts/outgoing payments workflow.
 - Charts.
 - Automatic/cron sync.
+- Full expense recurrence automation.
+- Expense payment history/audit log.
 
-No payments UI, outgoing payments UI, charts, automatic sync, sync logic changes, or database schema changes were added.
+No charts, automatic sync, KeyCRM sync logic changes, browser KeyCRM calls, or destructive database changes were added.
 
 ## Authentication Review
 
@@ -285,6 +358,7 @@ It does not use:
 - Old local `orders` table is outdated and ignored.
 - Canceled/deleted exclusion is text-based and should be verified.
 - Manager role currently sees the same dashboard data as accountant/CEO except CEO-only links are hidden; manager-specific filtering is open until mapping is confirmed.
+- Additive tables are created by the app with `CREATE TABLE IF NOT EXISTS`.
 
 ## Recommendations
 
@@ -293,12 +367,15 @@ It does not use:
 - Run manual sync and verify `db_sync_runs` summary.
 - Confirm selected-month dashboard totals update from `db_orders`.
 - Confirm total receivables include unpaid orders across all months.
+- Confirm `targets.php` saves monthly and manager targets.
+- Confirm `expenses.php` can add, edit, filter, and mark expenses paid.
+- Confirm strategic debts are not included in monthly operational pressure.
 - Confirm browser never calls KeyCRM directly.
 - Run `php -l` on the server if available.
 
 ## Technical Debt
 
-- No outgoing payment calculations exist.
+- Expense foundation exists, but no full payment history or recurrence expansion exists.
 - No payment event logic exists beyond cached KeyCRM order amounts.
 - No dashboard audit or data freshness metadata exists.
 - No login rate limiting exists.
@@ -309,6 +386,9 @@ It does not use:
 ## Files To Review Manually
 
 - `index.php`
+- `targets.php`
+- `expenses.php`
+- `finance.php`
 - `assets/app.css`
 - `docs/NEXT_STEPS.md`
 
@@ -351,12 +431,14 @@ Files excluded from deploy:
 2. Log in as CEO.
 3. Open dashboard.
 4. Change `month=YYYY-MM` and confirm monthly sales/paid/unpaid/order count changes.
-5. Confirm `Нам повинні всього` and receivables table include unpaid orders across all months.
-6. Use `debt_page` pagination if more than 25 unpaid orders exist.
-7. Confirm selected-month manager summary renders.
-8. Confirm CEO sees `Sync Orders` and `Users`.
-9. Confirm accountant/manager do not see `Sync Orders` or `Users`.
-10. Confirm no schema changes were made by code.
+5. Open `targets.php`, save a monthly target and manager targets, then confirm dashboard uses them.
+6. Confirm `Нам повинні всього` and receivables table include unpaid orders across all months.
+7. Click manager names in receivables drilldown and confirm `debt_manager` filters the receivables table.
+8. Open `expenses.php`, add an operational expense and a strategic debt.
+9. Confirm dashboard shows `Ми повинні цього місяця` and `Стратегічні борги` separately.
+10. Confirm CEO sees `Targets`, `Expenses`, `Sync Orders`, and `Users`.
+11. Confirm accountant can access `Expenses` but not CEO-only pages.
+12. Confirm manager does not see CEO/accountant management links.
 
 ## Risks / Open Questions
 
@@ -365,3 +447,4 @@ Files excluded from deploy:
 - Need to verify canceled/deleted statuses against real data.
 - Need to verify manager mapping before filtering manager dashboard data.
 - Need to decide whether cron sync is needed after manual sync is trusted.
+- Need to confirm whether additive table creation from web requests is acceptable long-term or should move to reviewed SQL setup.

@@ -11,6 +11,7 @@ if (!is_file($configPath)) {
 
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/finance.php';
 require_once __DIR__ . '/auth.php';
 
 date_default_timezone_set((string) app_config('app.timezone', 'Europe/Kiev'));

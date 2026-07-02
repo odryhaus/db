@@ -23,9 +23,11 @@ Do not use:
 
 Reason: those fields belong to another internal project/calculator.
 
-## No Schema Changes
+## Safe Additive Schema Changes
 
-Do not add migrations or modify database structure in this milestone.
+Do not drop, rename, truncate, or overwrite existing tables.
+
+Add only small project-owned tables when explicitly needed and create them with `CREATE TABLE IF NOT EXISTS`.
 
 Reason: the production database already exists and must be handled conservatively.
 
@@ -86,7 +88,7 @@ Decision:
 - Start with CEO-only manual sync for current month and previous month.
 - Do not build a full historical sync or ERP workflow.
 
-## Money Dashboard v0.3 Metrics
+## Money Dashboard Metrics
 
 Selected month controls monthly sales plan/fact metrics.
 
@@ -97,8 +99,24 @@ Decision:
 - Receivables are paginated at 25 rows per page.
 - Old `orders` table remains ignored.
 - No charts are added yet.
-- No outgoing payments are added yet.
+- Expense planning is additive and intentionally lightweight.
 - Manager-specific filtering is deferred until KeyCRM manager mapping to local users is confirmed.
+
+## Targets And Expenses Foundation
+
+Use small additive tables for dashboard planning data.
+
+Decision:
+
+- Create `db_monthly_targets`, `db_manager_targets`, and `db_expenses` only if they do not already exist.
+- Use `db_monthly_targets` for the dashboard monthly target, with `4,000,000 UAH` fallback.
+- Use `db_manager_targets` for manager plan/fact comparisons.
+- Use `db_expenses` for planned outgoing payments and strategic debts.
+- Keep strategic debt separate from monthly operational cash pressure.
+- CEO manages sales targets.
+- CEO and accountant can manage expenses.
+- Do not change KeyCRM sync logic.
+- Do not call KeyCRM from the browser.
 
 ## Out Of Scope
 
@@ -108,6 +126,6 @@ The following are intentionally excluded:
 - Browser-side CRM loading.
 - Full historical order sync.
 - Charts.
-- Payments.
-- Debt tracking.
-- Database migrations.
+- Full payments ledger.
+- Full debt tracking workflow.
+- Destructive or broad database migrations.
