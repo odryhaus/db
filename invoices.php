@@ -1067,7 +1067,6 @@ foreach ($invoices as $invoiceRow) {
                 <form method="post" action="<?= e(base_path('/invoices.php?edit=' . (int) $editInvoice['id'])) ?>" class="invoice-form">
                     <?= csrf_field() ?>
                     <input type="hidden" name="id" value="<?= e((string) $editInvoice['id']) ?>">
-                    <input type="hidden" name="action" value="save_invoice">
                     <input type="hidden" name="client_company_id" value="<?= e((string) ($editInvoice['client_company_id'] ?? '')) ?>">
 
                     <div class="invoice-edit-grid">
