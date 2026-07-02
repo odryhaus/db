@@ -66,6 +66,7 @@ Invoices v0.2 / Money Dashboard v0.5 — verify invoice extraction, targets, exp
 Planning document:
 
 ```text
+docs/DATABASE_PLAN.md
 docs/CRM_SYNC_PLAN.md
 ```
 
