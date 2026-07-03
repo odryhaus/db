@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Access denied | .BRAND DB</title>
-    <link rel="stylesheet" href="<?= e(base_path('/assets/app.css')) ?>">
+    <link rel="stylesheet" href="<?= e(asset_path('/assets/app.css')) ?>">
 </head>
 <body>
     <main class="page page-narrow">

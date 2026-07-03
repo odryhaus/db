@@ -36,6 +36,18 @@ function base_path(string $path = ''): string
     return $base . $path;
 }
 
+function asset_path(string $path): string
+{
+    $url = base_path($path);
+    $file = __DIR__ . '/' . ltrim($path, '/');
+    if (is_file($file)) {
+        $separator = str_contains($url, '?') ? '&' : '?';
+        $url .= $separator . 'v=' . filemtime($file);
+    }
+
+    return $url;
+}
+
 function redirect_to(string $path): void
 {
     header('Location: ' . base_path($path));
