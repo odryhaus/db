@@ -138,7 +138,17 @@ This environment has no `php` binary or database access, so the redesign was rev
 - Verify the payment status badge logic (`Оплачено` / `Частково` / `Не оплачено`, computed from `paid = total − unpaid`) against a few real KeyCRM orders — it intentionally ignores the raw `payment_status` string because those values were inconsistent, but that should be confirmed against production data.
 - Have a Ukrainian-speaking reviewer sanity-check the interface copy (labels, empty states, nav) added across `index.php`, `targets.php`, `expenses.php`, `users.php`, `sync_orders.php`.
 - Consider adding client-side search/filter to the receivables table (like the one added to `users.php`) if the CEO wants to scan it without paging.
-- Charts are still explicitly out of scope; revisit only if the CEO asks for trend visuals beyond the compact KPI/progress-bar view.
+- Charts are still explicitly out of scope beyond the plain CSS stacked bar added 2026-07-03; revisit only if the CEO asks for real trend visuals (e.g. month-over-month).
+
+## Dashboard Hero/Pacing/Aging/Client-Debt (2026-07-03) — verify after deploy
+
+- Confirm the merged "Прогрес плану" panel shows one set of numbers (no more repeated План/Факт between the KPI strip and the panel).
+- Confirm the paid/unpaid stacked bar under the progress bar renders and its two widths sum to 100% at a few different fact/paid values, including `Факт = 0`.
+- Confirm "Темп" pacing badges (company panel + manager table) look right early/mid/late in a month, and for a manager with no target (`has_target = false`, should show `—`, not a badge).
+- Confirm the 0–7/8–30/30+ day aging chips above the receivables table match manual counts against `db_orders`.
+- Confirm "Клієнти з боргом" groups by client id (not by name) and the "Без клієнта" bucket only appears when `company_id`, `buyer_id`, and `client_id` are all empty.
+- Open a "Зведення" link (`index.php?client_statement=<id>`) as each role (ceo/accountant/manager) and confirm: Print and Copy-text buttons work, the copied text matches the visible table, and the page 404s cleanly for an id with no unpaid orders.
+- This statement page only prepares text/print output — it does not email or message the client. If the CEO wants actual sending, that is a new, separate feature decision (see `docs/DECISIONS.md`).
 
 ## Database Tables To Inspect Next
 

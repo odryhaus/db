@@ -880,6 +880,66 @@ td small {
     background: var(--success);
 }
 
+/* stacked fact bar — paid vs unpaid share of sales fact */
+
+.stack-bar {
+    display: flex;
+    height: 14px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--surface-muted);
+    border: 1px solid var(--line);
+    margin-top: var(--space-3);
+}
+
+.stack-bar span {
+    height: 100%;
+}
+
+.stack-bar-paid {
+    background: var(--success);
+}
+
+.stack-bar-unpaid {
+    background: var(--warning);
+}
+
+.stack-bar-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    margin-top: var(--space-2);
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.stack-bar-legend .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 5px;
+    border-radius: 999px;
+    vertical-align: middle;
+}
+
+.dot-success {
+    background: var(--success);
+}
+
+.dot-warning {
+    background: var(--warning);
+}
+
+/* aging / debt-age chips */
+
+.aging-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4) 0;
+    margin-bottom: var(--space-3);
+}
+
 .plan-list {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1095,6 +1155,35 @@ tr:last-child td {
     font-size: 12px;
     line-height: 1.45;
     white-space: pre-wrap;
+}
+
+/* ==========================================================================
+   Client statement (printable)
+   ========================================================================== */
+
+.statement-page {
+    width: min(760px, calc(100% - 32px));
+    padding-top: var(--space-5);
+}
+
+.statement-total {
+    margin-top: var(--space-4);
+    font-size: 16px;
+}
+
+@media print {
+    .no-print {
+        display: none !important;
+    }
+
+    body {
+        background: #fff;
+    }
+
+    .panel {
+        border: 0;
+        box-shadow: none;
+    }
 }
 
 /* ==========================================================================

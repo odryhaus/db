@@ -206,6 +206,20 @@ Decision:
 
 Reason: CEO needs to see who `.BRAND` must pay, when, whether it is linked to an order, and how it affects cash pressure without building full accounting software.
 
+## Dashboard Hero Dedup, Pacing, Aging, Client Debt (2026-07-03)
+
+The CEO flagged that the KPI strip and the "План продажів" panel repeated the same План/Факт/Прогрес numbers twice, and asked for a graphical Факт → Оплачено/Не оплачено breakdown, debt aging, plan pacing, and a per-client negative-balance view she can turn into a statement to send.
+
+Decision:
+
+- Merge the KPI strip and the plan panel into one flow: the KPI strip keeps only the numbers that appear nowhere else (План, Факт, Оплачено, Не оплачено за місяць, Нам повинні всього, Ми повинні цього місяця); the panel below keeps only what the strip doesn't show (progress bar, a plain CSS stacked bar for paid/unpaid share of fact, remaining, daily-required, pacing).
+- Pacing ("Темп") is `actual progress % − expected progress % (elapsed days / days in month)`, shown as a status badge on the company panel and per manager row. No chart library — a stacked bar is two `<span>`s with inline `width: N%`, same pattern as the existing `.progress-track`.
+- Receivables aging uses `DATEDIFF(CURDATE(), ordered_at)` bucketed 0–7 / 8–30 / 30+ days, since `db_orders` has no separate payment-due date. This is a heuristic (age of the unpaid order, not a contractual due date) and should be revisited once `db_payment_obligations` exists.
+- Added a "Клієнти з боргом" table grouped by `COALESCE(company_id, buyer_id, client_id, 0)` (falls back to a combined "Без клієнта" bucket when none of the three ids are set) — grouping by id instead of by display-name text to avoid merging different clients that happen to share a name.
+- "Send to client" is implemented as a printable statement page (`index.php?client_statement=<id>`) with a Print button and a Copy-text button (`navigator.clipboard`). The app does not send anything on the CEO's behalf — no email/SMS sending was added, and none should be added without an explicit separate decision, since that touches client communication and delivery guarantees this app doesn't own.
+
+Reason: keep "important numbers visible once, decisions actionable" without adding a charting dependency or an email-sending subsystem neither of which this task asked for.
+
 ## Out Of Scope
 
 The following are intentionally excluded:

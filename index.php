@@ -39,6 +39,11 @@ $monthlyUnpaidOrders = [];
 $receivableOrders = [];
 $managerSummary = [];
 $receivablesByManager = [];
+$aging = [];
+$clientDebt = [];
+$expectedProgress = 0;
+$paidShare = 0;
+$unpaidShare = 0;
 $operationalDueThisMonth = 0;
 $strategicDebtTotal = 0;
 $operationalDueThisWeek = 0;
@@ -90,6 +95,161 @@ function dashboard_progress_mini(float $progress): string
     return '<div class="progress-mini' . $cls . '"><span class="progress-track"><span style="width:' . e((string) $width) . '%"></span></span><span class="progress-pct">' . e((string) round($progress)) . '%</span></div>';
 }
 
+function dashboard_pace_badge(float $actual, float $expected): string
+{
+    $delta = (int) round($actual - $expected);
+
+    if ($delta >= -3) {
+        $class = 'status-badge--success';
+        $label = $delta > 3 ? 'Випереджає на ' . $delta . ' п.п.' : 'У графіку';
+    } elseif ($delta >= -15) {
+        $class = 'status-badge--warning';
+        $label = 'Відстає на ' . abs($delta) . ' п.п.';
+    } else {
+        $class = 'status-badge--danger';
+        $label = 'Сильно відстає на ' . abs($delta) . ' п.п.';
+    }
+
+    return '<span class="status-badge ' . $class . '">' . e($label) . '</span>';
+}
+
+function dashboard_age_days(?string $orderedAt): ?int
+{
+    if (!$orderedAt) {
+        return null;
+    }
+    $time = strtotime($orderedAt);
+    if (!$time) {
+        return null;
+    }
+
+    return max(0, (int) floor((time() - $time) / 86400));
+}
+
+function dashboard_age_badge(?string $orderedAt): string
+{
+    $days = dashboard_age_days($orderedAt);
+    if ($days === null) {
+        return '<span class="status-badge status-badge--muted">—</span>';
+    }
+
+    if ($days <= 7) {
+        $class = 'status-badge--muted';
+    } elseif ($days <= 30) {
+        $class = 'status-badge--warning';
+    } else {
+        $class = 'status-badge--danger';
+    }
+
+    return '<span class="status-badge ' . $class . '">' . e((string) $days) . ' дн.</span>';
+}
+
+function render_client_statement(int $clientKey, string $notCanceledSql): void
+{
+    $stmt = db()->prepare("
+        SELECT
+            order_number, ordered_at, total_amount_uah, paid_amount_uah, unpaid_amount_uah,
+            company_name, buyer_name, client_name, buyer_phone, buyer_email
+        FROM db_orders
+        WHERE COALESCE(company_id, buyer_id, client_id, 0) = :client_key
+          AND unpaid_amount_uah > 0
+          AND {$notCanceledSql}
+        ORDER BY ordered_at ASC
+    ");
+    $stmt->execute(['client_key' => $clientKey]);
+    $orders = $stmt->fetchAll();
+
+    if (!$orders) {
+        http_response_code(404);
+        echo 'Клієнта з таким боргом не знайдено.';
+        return;
+    }
+
+    $clientName = dashboard_client_name($orders[0]);
+    $phone = (string) ($orders[0]['buyer_phone'] ?? '');
+    $email = (string) ($orders[0]['buyer_email'] ?? '');
+    $total = 0.0;
+    $textLines = ['.BRAND — зведення по оплаті', 'Клієнт: ' . $clientName, 'Дата: ' . date('d.m.Y'), ''];
+
+    foreach ($orders as $order) {
+        $total += (float) $order['unpaid_amount_uah'];
+        $textLines[] = sprintf(
+            '№ %s від %s — борг %s',
+            (string) ($order['order_number'] ?: '—'),
+            $order['ordered_at'] ? date('d.m.Y', (int) strtotime((string) $order['ordered_at'])) : '—',
+            money_uah($order['unpaid_amount_uah'] ?? 0)
+        );
+    }
+    $textLines[] = '';
+    $textLines[] = 'Разом до сплати: ' . money_uah($total);
+    $statementText = implode("\n", $textLines);
+    ?>
+<!doctype html>
+<html lang="uk">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Зведення — <?= e($clientName) ?></title>
+    <link rel="stylesheet" href="<?= e(asset_path('/assets/app.css')) ?>">
+</head>
+<body>
+    <main class="page statement-page">
+        <div class="toolbar no-print">
+            <a href="<?= e(base_path('/index.php')) ?>" class="button-secondary small-button">Назад до дашборду</a>
+            <button type="button" class="small-button" onclick="window.print()">Друк</button>
+            <button type="button" class="button-secondary small-button" id="copy-statement-btn">Копіювати текст</button>
+        </div>
+        <section class="panel">
+            <p class="eyebrow">.BRAND — зведення по оплаті</p>
+            <h1><?= e($clientName) ?></h1>
+            <p class="muted">
+                Дата: <?= e(date('d.m.Y')) ?>
+                <?php if ($phone !== ''): ?> · Тел.: <?= e($phone) ?><?php endif; ?>
+                <?php if ($email !== ''): ?> · Email: <?= e($email) ?><?php endif; ?>
+            </p>
+            <div class="table-wrap">
+                <table class="compact-table">
+                    <thead>
+                        <tr>
+                            <th>№</th>
+                            <th>Дата</th>
+                            <th class="num">Сума</th>
+                            <th class="num">Оплачено</th>
+                            <th class="num">Борг</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($orders as $order): ?>
+                            <tr>
+                                <td><?= e((string) ($order['order_number'] ?: '—')) ?></td>
+                                <td><?= e($order['ordered_at'] ? date('d.m.Y', (int) strtotime((string) $order['ordered_at'])) : '—') ?></td>
+                                <td class="num"><?= e(money_uah($order['total_amount_uah'] ?? 0)) ?></td>
+                                <td class="num"><?= e(money_uah($order['paid_amount_uah'] ?? 0)) ?></td>
+                                <td class="num"><strong><?= e(money_uah($order['unpaid_amount_uah'] ?? 0)) ?></strong></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <p class="statement-total">Разом до сплати: <strong><?= e(money_uah($total)) ?></strong></p>
+        </section>
+    </main>
+    <script>
+        document.getElementById('copy-statement-btn').addEventListener('click', function () {
+            var button = this;
+            var text = <?= json_encode($statementText, JSON_UNESCAPED_UNICODE) ?>;
+            navigator.clipboard.writeText(text).then(function () {
+                var original = button.textContent;
+                button.textContent = 'Скопійовано!';
+                setTimeout(function () { button.textContent = original; }, 1500);
+            });
+        });
+    </script>
+</body>
+</html>
+    <?php
+}
+
 $notCanceledSql = "
     LOWER(COALESCE(status_name, '')) NOT LIKE '%cancel%'
     AND LOWER(COALESCE(status_name, '')) NOT LIKE '%deleted%'
@@ -98,6 +258,11 @@ $notCanceledSql = "
     AND LOWER(COALESCE(payment_status, '')) NOT LIKE '%deleted%'
     AND LOWER(COALESCE(payment_status, '')) NOT LIKE '%скас%'
 ";
+
+if (isset($_GET['client_statement'])) {
+    render_client_statement((int) $_GET['client_statement'], $notCanceledSql);
+    exit;
+}
 
 try {
     $companyTarget = active_company_target(db(), $selectedMonth);
@@ -131,6 +296,19 @@ try {
         $dailyRequiredLabel = 'план виконано';
     }
 
+    $daysInMonth = (int) $monthEnd->format('j');
+    if ($monthEnd < $today) {
+        $elapsedDays = $daysInMonth;
+    } elseif ($monthStart > $today) {
+        $elapsedDays = 0;
+    } else {
+        $elapsedDays = (int) $monthStart->diff($today)->format('%a') + 1;
+    }
+    $expectedProgress = $daysInMonth > 0 ? min(100, round(($elapsedDays / $daysInMonth) * 100, 1)) : 0;
+
+    $paidShare = $salesFact > 0 ? min(100, round(($paid / $salesFact) * 100, 1)) : 0;
+    $unpaidShare = $salesFact > 0 ? max(0, 100 - $paidShare) : 0;
+
     $lastSyncStmt = db()->query("SELECT finished_at FROM db_sync_runs WHERE status = 'success' ORDER BY finished_at DESC LIMIT 1");
     $lastSyncAt = $lastSyncStmt->fetchColumn() ?: null;
 
@@ -161,6 +339,38 @@ try {
         ORDER BY total_unpaid DESC
     ");
     $receivablesByManager = $receivablesByManagerStmt->fetchAll();
+
+    $agingStmt = db()->query("
+        SELECT
+            COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), ordered_at) <= 7 THEN unpaid_amount_uah ELSE 0 END), 0) AS bucket_fresh,
+            COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), ordered_at) BETWEEN 8 AND 30 THEN unpaid_amount_uah ELSE 0 END), 0) AS bucket_mid,
+            COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), ordered_at) > 30 THEN unpaid_amount_uah ELSE 0 END), 0) AS bucket_old,
+            COUNT(CASE WHEN DATEDIFF(CURDATE(), ordered_at) <= 7 THEN 1 END) AS count_fresh,
+            COUNT(CASE WHEN DATEDIFF(CURDATE(), ordered_at) BETWEEN 8 AND 30 THEN 1 END) AS count_mid,
+            COUNT(CASE WHEN DATEDIFF(CURDATE(), ordered_at) > 30 THEN 1 END) AS count_old
+        FROM db_orders
+        WHERE unpaid_amount_uah > 0
+          AND {$notCanceledSql}
+    ");
+    $aging = $agingStmt->fetch() ?: [];
+
+    $clientDebtStmt = db()->query("
+        SELECT
+            COALESCE(company_id, buyer_id, client_id, 0) AS client_key,
+            COALESCE(MAX(NULLIF(company_name, '')), MAX(NULLIF(buyer_name, '')), MAX(NULLIF(client_name, '')), 'Без клієнта') AS client_name,
+            COALESCE(SUM(unpaid_amount_uah), 0) AS total_unpaid,
+            COUNT(*) AS unpaid_count,
+            MIN(ordered_at) AS oldest_ordered_at,
+            MAX(NULLIF(buyer_phone, '')) AS contact_phone,
+            MAX(NULLIF(buyer_email, '')) AS contact_email
+        FROM db_orders
+        WHERE unpaid_amount_uah > 0
+          AND {$notCanceledSql}
+        GROUP BY COALESCE(company_id, buyer_id, client_id, 0)
+        ORDER BY total_unpaid DESC
+        LIMIT 50
+    ");
+    $clientDebt = $clientDebtStmt->fetchAll();
 
     $debtWhere = "unpaid_amount_uah > 0 AND {$notCanceledSql}";
     $debtParams = [];
@@ -407,40 +617,45 @@ try {
                 <strong><?= e(money_uah($operationalDueThisMonth)) ?></strong>
                 <small>операційні</small>
             </div>
-            <div class="kpi-card progress-card">
-                <span class="label">Прогрес</span>
-                <strong><?= e((string) $progress) ?>%</strong>
-                <small>залишилось <?= e(money_uah($remaining)) ?></small>
-            </div>
         </section>
 
         <section class="panel dashboard-section">
             <div class="section-heading">
                 <div>
                     <span class="label"><?= e($monthLabel) ?><?= !empty($companyTarget['effective_from']) ? ' · план з ' . e((string) $companyTarget['effective_from']) : ' · fallback' ?></span>
-                    <h2>План продажів</h2>
+                    <h2>Прогрес плану</h2>
                 </div>
                 <strong><?= e((string) $progress) ?>%</strong>
             </div>
             <div class="progress-track" aria-label="Прогрес виконання плану">
                 <span style="width: <?= e((string) $progress) ?>%"></span>
             </div>
+
+            <div class="stack-bar" aria-label="Факт: оплачено проти не оплачено">
+                <span class="stack-bar-paid" style="width: <?= e((string) $paidShare) ?>%"></span>
+                <span class="stack-bar-unpaid" style="width: <?= e((string) $unpaidShare) ?>%"></span>
+            </div>
+            <div class="stack-bar-legend">
+                <span><i class="dot dot-success"></i>Оплачено <?= e((string) $paidShare) ?>%</span>
+                <span><i class="dot dot-warning"></i>Не оплачено <?= e((string) $unpaidShare) ?>%</span>
+            </div>
+
             <dl class="plan-list">
                 <div>
-                    <dt>План</dt>
-                    <dd><?= e(money_uah($monthlyTarget)) ?></dd>
-                </div>
-                <div>
-                    <dt>Факт</dt>
-                    <dd><?= e(money_uah($salesFact)) ?></dd>
-                </div>
-                <div>
-                    <dt>Залишилось</dt>
+                    <dt>Залишилось до плану</dt>
                     <dd><?= e(money_uah($remaining)) ?></dd>
                 </div>
                 <div>
                     <dt>Потрібно в день</dt>
                     <dd><?= e($dailyRequiredLabel) ?></dd>
+                </div>
+                <div>
+                    <dt>Темп</dt>
+                    <dd><?= dashboard_pace_badge($progress, $expectedProgress) ?></dd>
+                </div>
+                <div>
+                    <dt>Очікувано на сьогодні</dt>
+                    <dd><?= e((string) $expectedProgress) ?>%</dd>
                 </div>
             </dl>
         </section>
@@ -463,6 +678,7 @@ try {
                             <th class="num">План</th>
                             <th class="num">Факт</th>
                             <th>%</th>
+                            <th>Темп</th>
                             <th class="num">Оплачено</th>
                             <th class="num">Борг</th>
                             <th class="num">Залишилось</th>
@@ -471,7 +687,7 @@ try {
                     </thead>
                     <tbody>
                         <?php if (!$managerSummary): ?>
-                            <tr><td colspan="8">Немає даних по менеджерах за <?= e($monthLabel) ?>.</td></tr>
+                            <tr><td colspan="9">Немає даних по менеджерах за <?= e($monthLabel) ?>.</td></tr>
                         <?php endif; ?>
                         <?php foreach ($managerSummary as $manager): ?>
                             <tr>
@@ -485,6 +701,7 @@ try {
                                 </td>
                                 <td class="num"><?= e(money_uah($manager['sales_fact'] ?? 0)) ?></td>
                                 <td><?= !empty($manager['has_target']) ? dashboard_progress_mini((float) ($manager['progress'] ?? 0)) : '—' ?></td>
+                                <td><?= !empty($manager['has_target']) ? dashboard_pace_badge((float) ($manager['progress'] ?? 0), $expectedProgress) : '—' ?></td>
                                 <td class="num"><?= e(money_uah($manager['paid'] ?? 0)) ?></td>
                                 <td class="num"><?= e(money_uah($manager['unpaid'] ?? 0)) ?></td>
                                 <td class="num"><?= !empty($manager['has_target']) ? e(money_uah($manager['remaining_to_target'] ?? 0)) : '—' ?></td>
@@ -517,6 +734,12 @@ try {
                         <a href="<?= e(dashboard_url(['month' => $selectedMonth, 'debt_manager' => $debtManager, 'debt_page' => $debtPage + 1])) ?>">Далі</a>
                     <?php endif; ?>
                 </div>
+            </div>
+
+            <div class="aging-row">
+                <span class="status-badge status-badge--muted">0–7 дн: <?= e(money_uah($aging['bucket_fresh'] ?? 0)) ?> (<?= e((string) ($aging['count_fresh'] ?? 0)) ?>)</span>
+                <span class="status-badge status-badge--warning">8–30 дн: <?= e(money_uah($aging['bucket_mid'] ?? 0)) ?> (<?= e((string) ($aging['count_mid'] ?? 0)) ?>)</span>
+                <span class="status-badge status-badge--danger">30+ дн: <?= e(money_uah($aging['bucket_old'] ?? 0)) ?> (<?= e((string) ($aging['count_old'] ?? 0)) ?>)</span>
             </div>
 
             <?php if ($receivablesByManager): ?>
@@ -555,6 +778,7 @@ try {
                         <tr>
                             <th>№</th>
                             <th>Дата</th>
+                            <th>Термін</th>
                             <th>Клієнт</th>
                             <th>Менеджер</th>
                             <th class="num">Сума</th>
@@ -566,12 +790,13 @@ try {
                     </thead>
                     <tbody>
                         <?php if (!$receivableOrders): ?>
-                            <tr><td colspan="9">Несплачених замовлень не знайдено.</td></tr>
+                            <tr><td colspan="10">Несплачених замовлень не знайдено.</td></tr>
                         <?php endif; ?>
                         <?php foreach ($receivableOrders as $order): ?>
                             <tr>
                                 <td><?= e((string) ($order['order_number'] ?: '—')) ?></td>
                                 <td><?= e((string) ($order['ordered_at'] ?: '—')) ?></td>
+                                <td><?= dashboard_age_badge($order['ordered_at'] ?? null) ?></td>
                                 <td><?= e(dashboard_client_name($order)) ?></td>
                                 <td><?= e(dashboard_manager_key($order['manager_name'] ?? '')) ?></td>
                                 <td class="num"><?= e(money_uah($order['total_amount_uah'] ?? 0)) ?></td>
@@ -613,6 +838,52 @@ try {
                                 <td><?= e(dashboard_client_name($order)) ?></td>
                                 <td><?= e(dashboard_manager_key($order['manager_name'] ?? '')) ?></td>
                                 <td class="num"><strong><?= e(money_uah($order['unpaid_amount_uah'] ?? 0)) ?></strong></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel table-panel dashboard-section">
+            <div class="section-heading padded">
+                <div>
+                    <span class="label">Усі місяці · <?= e((string) count($clientDebt)) ?> клієнтів</span>
+                    <h2>Клієнти з боргом</h2>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="compact-table">
+                    <thead>
+                        <tr>
+                            <th>Клієнт</th>
+                            <th>Контакт</th>
+                            <th>Найстаріше</th>
+                            <th class="num">Борг</th>
+                            <th class="num">Замовлень</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (!$clientDebt): ?>
+                            <tr><td colspan="6">Клієнтів з боргом немає.</td></tr>
+                        <?php endif; ?>
+                        <?php foreach ($clientDebt as $client): ?>
+                            <tr>
+                                <td><?= e((string) $client['client_name']) ?></td>
+                                <td>
+                                    <?php if (!empty($client['contact_phone'])): ?><?= e((string) $client['contact_phone']) ?><br><?php endif; ?>
+                                    <?php if (!empty($client['contact_email'])): ?><small><?= e((string) $client['contact_email']) ?></small><?php endif; ?>
+                                    <?php if (empty($client['contact_phone']) && empty($client['contact_email'])): ?>—<?php endif; ?>
+                                </td>
+                                <td><?= dashboard_age_badge($client['oldest_ordered_at'] ?? null) ?></td>
+                                <td class="num"><strong><?= e(money_uah($client['total_unpaid'] ?? 0)) ?></strong></td>
+                                <td class="num"><?= e((string) $client['unpaid_count']) ?></td>
+                                <td>
+                                    <?php if ((int) $client['client_key'] > 0): ?>
+                                        <a class="button-secondary small-button" target="_blank" href="<?= e(base_path('/index.php?client_statement=' . (int) $client['client_key'])) ?>">Зведення</a>
+                                    <?php endif; ?>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
