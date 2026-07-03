@@ -13,6 +13,7 @@
             <p>Your account does not have access to this page.</p>
             <a class="button" href="<?= e(base_path('/index.php')) ?>">Back to dashboard</a>
         </section>
+        <?= app_version_badge() ?>
     </main>
 </body>
 </html>

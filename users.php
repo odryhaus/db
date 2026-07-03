@@ -167,6 +167,7 @@ $users = $stmt->fetchAll();
                 </table>
             </div>
         </section>
+        <?= app_version_badge() ?>
     </main>
     <script>
         (function () {

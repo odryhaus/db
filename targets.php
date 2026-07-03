@@ -256,6 +256,7 @@ $monthlyProgress = $monthlyTarget > 0 ? min(100, round(($managerSalesTotal / $mo
                 </table>
             </div>
         </section>
+        <?= app_version_badge() ?>
     </main>
 </body>
 </html>

@@ -49,6 +49,7 @@ if (is_post()) {
                 <button type="submit">Sign in</button>
             </form>
         </section>
+        <?= app_version_badge() ?>
     </main>
 </body>
 </html>

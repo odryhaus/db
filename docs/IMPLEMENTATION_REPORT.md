@@ -27,6 +27,7 @@ This update fixes invoice numbering, PDF naming, recipient handling, and prepare
 - Added `db_invoice_documents` as the document registry foundation so invoice PDF, delivery note PDF, and act PDF can be stored as separate files instead of overwriting one `pdf_file_path`.
 - Changed the registry date display to compact `dd.mm.yyyy / HH:MM` format and moved invoice status changes into a dropdown directly in the registry.
 - Added CSS cache-busting through `asset_path()` because LiteSpeed serves `assets/app.css` with a 7-day browser cache; this ensures invoice design updates become visible immediately after deploy.
+- Added a visible `version <commit>` badge on PHP pages. GitHub Actions writes the deployed short commit hash into `VERSION` before FTP upload.
 
 Test after deploy:
 

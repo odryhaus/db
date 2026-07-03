@@ -293,6 +293,7 @@ $currencyCandidates = $order ? keycrm_debug_collect_candidates($order, ['/curren
                 <pre class="debug-json"><?= e($rawPretty ?: 'No response body.') ?></pre>
             </details>
         </section>
+        <?= app_version_badge() ?>
     </main>
 </body>
 </html>

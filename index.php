@@ -649,6 +649,7 @@ try {
                 </div>
             </dl>
         </section>
+        <?= app_version_badge() ?>
     </main>
 </body>
 </html>

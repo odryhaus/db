@@ -510,6 +510,7 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
                 </table>
             </div>
         </section>
+        <?= app_version_badge() ?>
     </main>
 </body>
 </html>

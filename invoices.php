@@ -1639,6 +1639,7 @@ foreach ($invoices as $invoiceRow) {
                 </table>
             </div>
         </section>
+        <?= app_version_badge() ?>
     </main>
     <script>
         (function () {

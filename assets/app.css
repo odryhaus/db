@@ -685,6 +685,14 @@ button:hover,
     font-weight: 600;
 }
 
+.version-badge {
+    margin: var(--space-5) 0 var(--space-2);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-align: center;
+}
+
 .flag-danger-cell {
     box-shadow: inset 3px 0 0 var(--danger);
 }

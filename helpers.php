@@ -48,6 +48,23 @@ function asset_path(string $path): string
     return $url;
 }
 
+function app_version(): string
+{
+    static $version = null;
+    if ($version !== null) {
+        return $version;
+    }
+
+    $versionPath = __DIR__ . '/VERSION';
+    $version = is_file($versionPath) ? trim((string) file_get_contents($versionPath)) : '';
+    return $version !== '' ? $version : 'local';
+}
+
+function app_version_badge(): string
+{
+    return '<div class="version-badge">version ' . e(app_version()) . '</div>';
+}
+
 function redirect_to(string $path): void
 {
     header('Location: ' . base_path($path));
