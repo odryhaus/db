@@ -109,11 +109,18 @@ db_expenses
 db_our_companies
 db_invoices
 db_invoice_items
+db_invoice_documents
 ```
 
 `db_sales_targets` is the active source of truth for company and manager targets. The old monthly target tables are kept if they exist but are not used for new dashboard target logic.
 
 Invoice tables store editable local document copies. They do not modify KeyCRM orders.
+
+Detailed database planning lives in:
+
+```text
+docs/DATABASE_PLAN.md
+```
 
 ## Dashboard
 
@@ -159,9 +166,28 @@ Rules:
 - Default collapsed title is `Поліграфічна продукція`.
 - Current documents are no-VAT only and include `Без ПДВ. Платник єдиного податку.`
 - Generated files are saved locally under `storage/invoices`.
+- Generated document file records are stored in `db_invoice_documents`.
 - Direct web access to `storage/invoices` is blocked; open files through the authenticated invoice page.
 - Server-side PDF rendering uses `dompdf/dompdf`, installed during GitHub Actions deploy.
 - KeyCRM file attachment is not implemented yet.
+
+## Documentation
+
+Start here:
+
+```text
+docs/README.md
+```
+
+Current source documents:
+
+- `docs/DATABASE_PLAN.md`
+- `docs/DECISIONS.md`
+- `docs/NEXT_STEPS.md`
+- `docs/KNOWN_ISSUES.md`
+- `docs/CRM_SYNC_PLAN.md`
+
+Historical implementation notes are archived under `docs/archive/`.
 
 ## Deploy Notes
 

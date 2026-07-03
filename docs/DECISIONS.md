@@ -173,8 +173,9 @@ Reason: the CEO-facing money system should feel like one compact internal produc
 Decision:
 
 - Add `invoices.php` as a small finance document tool, not as a full accounting module.
-- Create only project-owned additive tables: `db_our_companies`, `db_invoices`, `db_invoice_items`.
+- Create only project-owned additive tables: `db_our_companies`, `db_invoices`, `db_invoice_items`, `db_invoice_documents`, and local client snapshot tables.
 - Invoice rows and item rows are editable local copies copied from `db_orders.raw_json`.
+- Generated invoice, delivery note, and act files belong in `db_invoice_documents` so multiple documents can exist for one invoice/order.
 - Do not change KeyCRM orders.
 - Do not write payment statuses to KeyCRM.
 - Do not attach generated files to KeyCRM in v0.1.
@@ -183,7 +184,7 @@ Decision:
 - For seller companies with `allowed_item_type = 'products_only'`, default collapsed item wording is `Поліграфічна продукція`; service wording is not generated.
 - Services remain disabled until a FOP 3 group seller company with `allowed_item_type = 'services_allowed'` is configured and reviewed.
 - Invoice number defaults to the KeyCRM order number, not an internal `INV-YYYYMM-0001` sequence.
-- PDF file names use `INV_<invoice_number>.pdf` for invoices and `DN_<invoice_number>.pdf` for delivery notes.
+- PDF file names use `INV_<invoice_number>.pdf` for invoices, `DN_<invoice_number>.pdf` for delivery notes, and `ACT_<invoice_number>.pdf` for acts.
 - Buyer/contact is treated as the contact person.
 - Company/legal entity is treated as the invoice recipient/payer.
 - Multiple legal entities per client company are supported locally through `db_client_legal_entities`.

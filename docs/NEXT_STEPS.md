@@ -108,7 +108,8 @@ The next milestone should:
 - Run CEO manual sync for current and previous month.
 - Test invoice creation from several real KeyCRM orders in `db_orders`.
 - Compare extracted invoice products, buyer/company data, and totals against KeyCRM.
-- Decide whether production hosting should install `wkhtmltopdf` for automatic PDF generation or use browser print-to-PDF from saved HTML.
+- Verify production Dompdf PDF generation for invoice, delivery note, and act.
+- Verify `db_invoice_documents` stores multiple generated documents for one invoice without overwriting older files.
 - Add a reviewed file-download policy for generated invoice files if more roles get access.
 - Decide when KeyCRM file attachment should be added.
 - Verify `ordered_at` month assignment.

@@ -54,7 +54,7 @@ Known limitations:
 - Generated status changes stay local in `.BRAND DB` and are not written to KeyCRM.
 - Generated files are not attached to KeyCRM yet.
 - VAT is not implemented; current documents are no-VAT only.
-- Automatic PDF rendering requires `wkhtmltopdf` on the server. Without it, the app saves a print-ready HTML document that can be opened and printed to PDF manually.
+- Primary PDF rendering uses `dompdf/dompdf`, installed during GitHub Actions deploy. `wkhtmltopdf` is only a fallback if available.
 - `storage/invoices` contains generated document files and should be treated as sensitive business data; direct web access is blocked with `.htaccess`, but hosting behavior should be verified after deploy.
 - Buyer/company extraction is best-effort until more real KeyCRM order JSON examples are reviewed.
 - Product item extraction depends on KeyCRM product field names stored in `raw_json`.
