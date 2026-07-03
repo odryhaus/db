@@ -94,6 +94,7 @@ function ensure_invoice_tables(): void
             vat_amount_uah DECIMAL(14,2) NOT NULL DEFAULT 0,
             total_with_vat_uah DECIMAL(14,2) NOT NULL DEFAULT 0,
             payment_purpose VARCHAR(255) NULL,
+            expected_payment_date DATE NULL,
             status ENUM('draft','sent','paid','docs_sent','docs_closed','canceled') NOT NULL DEFAULT 'draft',
             sent_at DATETIME NULL,
             paid_at DATETIME NULL,
@@ -117,6 +118,23 @@ function ensure_invoice_tables(): void
     invoice_add_column_if_missing('db_invoices', 'client_company_id', 'INT UNSIGNED NULL');
     invoice_add_column_if_missing('db_invoices', 'client_legal_entity_id', 'INT UNSIGNED NULL');
     invoice_add_column_if_missing('db_invoices', 'buyer_contact_name', 'VARCHAR(255) NULL');
+    invoice_add_column_if_missing('db_invoices', 'expected_payment_date', 'DATE NULL');
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_invoice_documents (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            invoice_id INT UNSIGNED NOT NULL,
+            document_type ENUM('invoice','delivery_note','act') NOT NULL,
+            document_date DATE NOT NULL,
+            file_path VARCHAR(255) NOT NULL,
+            created_by_user_id INT UNSIGNED NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_invoice_id (invoice_id),
+            KEY idx_document_type (document_type),
+            KEY idx_document_date (document_date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS db_invoice_items (

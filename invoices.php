@@ -48,6 +48,12 @@ function invoice_date_label(?string $date): string
     return $time ? date('d.m.Y', $time) : $date;
 }
 
+function invoice_datetime_time_label(?string $datetime): string
+{
+    $time = $datetime ? strtotime($datetime) : false;
+    return $time ? date('H:i', $time) : '';
+}
+
 function invoice_ua_date_label(?string $date): string
 {
     $time = $date ? strtotime($date) : time();
@@ -186,12 +192,16 @@ function invoice_payment_control_label(array $invoice): string
         return '<span class="status-badge status-badge--success">оплачено' . ($paidAt !== '' ? ' ' . e($paidAt) : '') . '</span>';
     }
     if ($status === 'sent') {
-        $baseDate = (string) ($invoice['sent_at'] ?: $invoice['invoice_date'] ?: date('Y-m-d'));
-        $dueTime = strtotime($baseDate . ' +3 days');
+        $dueDate = (string) ($invoice['expected_payment_date'] ?? '');
+        if ($dueDate === '') {
+            $baseDate = (string) ($invoice['sent_at'] ?: $invoice['invoice_date'] ?: date('Y-m-d'));
+            $dueTime = strtotime($baseDate . ' +3 days');
+        } else {
+            $dueTime = strtotime($dueDate);
+        }
         if ($dueTime) {
             $class = $dueTime < strtotime('today') ? 'status-badge--danger' : 'status-badge--warning';
-            $prefix = $dueTime < strtotime('today') ? 'нагадати з ' : 'до ';
-            return '<span class="status-badge ' . $class . '">' . e($prefix . date('d.m.Y', $dueTime)) . '</span>';
+            return '<span class="status-badge ' . $class . '">' . e(date('d.m.Y', $dueTime)) . '</span>';
         }
     }
 
@@ -248,6 +258,28 @@ function invoice_print_template_available(array $invoice): bool
 {
     return !empty($invoice['pdf_file_path'])
         && strtolower(pathinfo((string) $invoice['pdf_file_path'], PATHINFO_EXTENSION)) === 'html';
+}
+
+function invoice_document_type_label(string $type): string
+{
+    $labels = [
+        'invoice' => 'Рахунок',
+        'delivery_note' => 'Видаткова',
+        'act' => 'Акт',
+    ];
+
+    return $labels[$type] ?? $type;
+}
+
+function invoice_document_short_label(string $type): string
+{
+    $labels = [
+        'invoice' => 'PDF',
+        'delivery_note' => 'Видаткова',
+        'act' => 'Акт',
+    ];
+
+    return $labels[$type] ?? 'PDF';
 }
 
 function invoice_order_payload(array $dbOrder): array
@@ -509,7 +541,8 @@ function invoice_legal_entities(?int $clientCompanyId): array
 function invoice_document_html(array $invoice, array $items, string $documentType): string
 {
     $isDelivery = $documentType === 'delivery_note';
-    $title = $isDelivery ? 'ВИДАТКОВА НАКЛАДНА' : 'РАХУНОК НА ОПЛАТУ';
+    $isAct = $documentType === 'act';
+    $title = $isAct ? 'АКТ' : ($isDelivery ? 'ВИДАТКОВА НАКЛАДНА' : 'РАХУНОК НА ОПЛАТУ');
     $seller = (string) ($invoice['legal_name'] ?: $invoice['short_name']);
     $buyer = (string) ($invoice['buyer_display_name'] ?: 'Одержувач не підтягнувся');
     $contact = (string) ($invoice['buyer_contact_name'] ?? '');
@@ -625,11 +658,13 @@ function invoice_document_html(array $invoice, array $items, string $documentTyp
     <div class="footer">
         <p><strong>Всього на суму: <?= e(number_format($total, 2, ',', ' ')) ?> грн</strong></p>
         <p>Без ПДВ. Платник єдиного податку.</p>
-        <?php if (!$isDelivery): ?>
+            <?php if (!$isDelivery && !$isAct): ?>
             <p>Рахунок дійсний протягом 3-х днів.</p>
             <p><strong>Призначення платежу:</strong> <?= e((string) $invoice['payment_purpose']) ?></p>
-        <?php else: ?>
+        <?php elseif ($isDelivery): ?>
             <p>Замовник підтверджує відсутність претензій щодо обсягу, якості та терміну відвантаження продукції.</p>
+        <?php else: ?>
+            <p>Замовник підтверджує відсутність претензій щодо обсягу, якості та складу позицій документа.</p>
         <?php endif; ?>
     </div>
 
@@ -659,7 +694,13 @@ function invoice_generate_document(array $invoice, array $items, string $documen
     }
 
     $safeNumber = invoice_safe_file_number((string) $invoice['invoice_number']);
-    $base = ($documentType === 'delivery_note' ? 'DN_' : 'INV_') . $safeNumber;
+    $prefix = 'INV_';
+    if ($documentType === 'delivery_note') {
+        $prefix = 'DN_';
+    } elseif ($documentType === 'act') {
+        $prefix = 'ACT_';
+    }
+    $base = $prefix . $safeNumber;
     $htmlPath = $dir . '/' . $base . '.html';
     $pdfPath = $dir . '/' . $base . '.pdf';
     $html = invoice_document_html($invoice, $items, $documentType);
@@ -695,9 +736,56 @@ function invoice_generate_document(array $invoice, array $items, string $documen
     return ['path' => $relativeHtml, 'is_pdf' => false];
 }
 
+function invoice_store_document(int $invoiceId, string $documentType, string $documentDate, string $filePath): void
+{
+    $stmt = db()->prepare("
+        INSERT INTO db_invoice_documents
+            (invoice_id, document_type, document_date, file_path, created_by_user_id)
+        VALUES
+            (:invoice_id, :document_type, :document_date, :file_path, :created_by_user_id)
+    ");
+    $stmt->execute([
+        'invoice_id' => $invoiceId,
+        'document_type' => $documentType,
+        'document_date' => $documentDate,
+        'file_path' => $filePath,
+        'created_by_user_id' => (int) (current_user()['id'] ?? 0),
+    ]);
+}
+
 function invoice_download_file(array $invoice): void
 {
     $relative = (string) ($invoice['pdf_file_path'] ?? '');
+    $full = __DIR__ . '/' . ltrim($relative, '/');
+    $storageRoot = realpath(__DIR__ . '/storage/invoices');
+    $filePath = realpath($full);
+
+    if ($relative === '' || !$storageRoot || !$filePath || strpos($filePath, $storageRoot) !== 0 || !is_file($filePath)) {
+        http_response_code(404);
+        echo 'Document file not found.';
+        exit;
+    }
+
+    $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+    if ($extension === 'pdf') {
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . basename($filePath) . '"');
+    } elseif ($extension === 'html') {
+        header('Content-Type: text/html; charset=utf-8');
+        header('Content-Disposition: inline; filename="' . basename($filePath) . '"');
+    } else {
+        http_response_code(404);
+        echo 'Document file type is not allowed.';
+        exit;
+    }
+
+    header('Content-Length: ' . filesize($filePath));
+    readfile($filePath);
+    exit;
+}
+
+function invoice_download_path(string $relative): void
+{
     $full = __DIR__ . '/' . ltrim($relative, '/');
     $storageRoot = realpath(__DIR__ . '/storage/invoices');
     $filePath = realpath($full);
@@ -733,6 +821,15 @@ if (isset($_GET['download'])) {
     $downloadInvoice = invoice_load((int) $_GET['download']);
     if ($downloadInvoice) {
         invoice_download_file($downloadInvoice);
+    }
+}
+
+if (isset($_GET['document'])) {
+    $stmt = db()->prepare('SELECT * FROM db_invoice_documents WHERE id = :id LIMIT 1');
+    $stmt->execute(['id' => (int) $_GET['document']]);
+    $document = $stmt->fetch();
+    if ($document) {
+        invoice_download_path((string) $document['file_path']);
     }
 }
 
@@ -808,17 +905,23 @@ if (is_post()) {
             $error = 'Invoice not found.';
         } elseif ($action === 'status') {
             $statusAction = (string) ($_POST['status_action'] ?? '');
-            $allowed = ['sent', 'paid', 'docs_sent', 'docs_closed', 'problem', 'canceled'];
+            $allowed = ['draft', 'sent', 'paid', 'docs_sent', 'docs_closed', 'problem', 'canceled'];
             if (!in_array($statusAction, $allowed, true)) {
                 $error = 'Invalid invoice status.';
             } else {
                 $sets = [];
                 $params = ['id' => $invoiceId];
-                if ($statusAction === 'sent') {
+                if ($statusAction === 'draft') {
+                    $sets[] = "status = 'draft'";
+                    $sets[] = "docs_status = 'not_sent'";
+                } elseif ($statusAction === 'sent') {
                     $sets[] = "status = 'sent'";
+                    $sets[] = "docs_status = 'not_sent'";
                     $sets[] = 'sent_at = NOW()';
+                    $sets[] = 'expected_payment_date = COALESCE(expected_payment_date, DATE_ADD(CURDATE(), INTERVAL 3 DAY))';
                 } elseif ($statusAction === 'paid') {
                     $sets[] = "status = 'paid'";
+                    $sets[] = "docs_status = 'not_sent'";
                     $sets[] = 'paid_at = NOW()';
                 } elseif ($statusAction === 'docs_sent') {
                     $sets[] = "status = 'docs_sent'";
@@ -834,9 +937,21 @@ if (is_post()) {
                     $sets[] = "status = 'canceled'";
                 }
                 db()->prepare('UPDATE db_invoices SET ' . implode(', ', $sets) . ' WHERE id = :id')->execute($params);
-                redirect_to('/invoices.php?edit=' . $invoiceId);
+                redirect_to((string) ($_POST['return_to'] ?? '') === 'registry' ? '/invoices.php' : '/invoices.php?edit=' . $invoiceId);
             }
-        } elseif (in_array($action, ['save_invoice', 'save_legal_entity', 'collapse_one', 'collapse_manual', 'use_detailed', 'generate_invoice', 'generate_delivery'], true)) {
+        } elseif ($action === 'expected_payment_date') {
+            $expectedPaymentDate = trim((string) ($_POST['expected_payment_date'] ?? ''));
+            if ($expectedPaymentDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expectedPaymentDate)) {
+                $error = 'Invalid expected payment date.';
+            } else {
+                $stmt = db()->prepare('UPDATE db_invoices SET expected_payment_date = :expected_payment_date WHERE id = :id');
+                $stmt->execute([
+                    'expected_payment_date' => $expectedPaymentDate !== '' ? $expectedPaymentDate : null,
+                    'id' => $invoiceId,
+                ]);
+                redirect_to('/invoices.php');
+            }
+        } elseif (in_array($action, ['save_invoice', 'save_legal_entity', 'collapse_one', 'collapse_manual', 'use_detailed', 'generate_invoice', 'generate_delivery', 'generate_act'], true)) {
             $sellerId = (int) ($_POST['seller_company_id'] ?? $invoice['seller_company_id']);
             $seller = $defaultCompany;
             foreach ($companies as $company) {
@@ -1036,15 +1151,29 @@ if (is_post()) {
                     invoice_insert_items(db(), $invoiceId, $items);
                     db()->commit();
 
-                    if ($action === 'generate_invoice' || $action === 'generate_delivery') {
+                    if ($action === 'generate_invoice' || $action === 'generate_delivery' || $action === 'generate_act') {
                         $updatedInvoice = invoice_load($invoiceId);
                         $updatedItems = invoice_items($invoiceId);
                         if ($updatedInvoice) {
-                            $documentType = $action === 'generate_delivery' ? 'delivery_note' : 'invoice';
+                            $documentType = 'invoice';
+                            if ($action === 'generate_delivery') {
+                                $documentType = 'delivery_note';
+                            } elseif ($action === 'generate_act') {
+                                $documentType = 'act';
+                            }
+                            $documentDate = trim((string) ($_POST['document_date'] ?? ''));
+                            if ($documentDate === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $documentDate)) {
+                                $documentDate = (string) $updatedInvoice['invoice_date'];
+                            }
+                            if ($documentType !== 'invoice') {
+                                $updatedInvoice['invoice_date'] = $documentDate;
+                            }
                             $generated = invoice_generate_document($updatedInvoice, $updatedItems, $documentType);
+                            invoice_store_document($invoiceId, $documentType, $documentDate, (string) $generated['path']);
+                            $legacyDocumentType = $documentType === 'act' ? (string) $updatedInvoice['document_type'] : $documentType;
                             $stmt = db()->prepare('UPDATE db_invoices SET document_type = :document_type, pdf_file_path = :pdf_file_path WHERE id = :id');
                             $stmt->execute([
-                                'document_type' => $documentType,
+                                'document_type' => $legacyDocumentType,
                                 'pdf_file_path' => $generated['path'],
                                 'id' => $invoiceId,
                             ]);
@@ -1078,6 +1207,22 @@ $invoices = db()->query("
     ORDER BY i.invoice_date DESC, i.id DESC
     LIMIT 100
 ")->fetchAll();
+
+$invoiceDocuments = [];
+$invoiceIds = array_map(static fn($row) => (int) $row['id'], $invoices);
+if ($invoiceIds) {
+    $placeholders = implode(',', array_fill(0, count($invoiceIds), '?'));
+    $stmt = db()->prepare("
+        SELECT *
+        FROM db_invoice_documents
+        WHERE invoice_id IN ($placeholders)
+        ORDER BY document_date DESC, id DESC
+    ");
+    $stmt->execute($invoiceIds);
+    foreach ($stmt->fetchAll() as $documentRow) {
+        $invoiceDocuments[(int) $documentRow['invoice_id']][] = $documentRow;
+    }
+}
 
 $draftCount = 0;
 $paidCount = 0;
@@ -1218,6 +1363,10 @@ foreach ($invoices as $invoiceRow) {
                                 <?php endforeach; ?>
                             </select>
                         </label>
+                        <label>
+                            <span>Дата видаткової/акта</span>
+                            <input type="date" name="document_date" value="<?= e((string) $editInvoice['invoice_date']) ?>">
+                        </label>
                         <?php if ($editLegalEntities): ?>
                             <label class="wide-field">
                                 <span>Юрособа для рахунку</span>
@@ -1324,6 +1473,7 @@ foreach ($invoices as $invoiceRow) {
                         <button type="submit" name="action" value="save_invoice">Зберегти</button>
                         <button type="submit" name="action" value="generate_invoice">Сформувати і завантажити PDF</button>
                         <button type="submit" name="action" value="generate_delivery" class="button-secondary">Сформувати видаткову PDF</button>
+                        <button type="submit" name="action" value="generate_act" class="button-secondary">Сформувати акт PDF</button>
                         <button type="submit" name="action" value="use_detailed" class="button-secondary">Детальні товари CRM</button>
                         <button type="submit" name="action" value="collapse_one" class="button-secondary">Один рядок</button>
                         <label class="collapse-field">
@@ -1379,17 +1529,25 @@ foreach ($invoices as $invoiceRow) {
                             <tr>
                                 <td><strong><?= e((string) $invoiceRow['invoice_number']) ?></strong></td>
                                 <td>
-                                    <?php if (invoice_pdf_available($invoiceRow)): ?>
-                                        <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>">PDF</a>
+                                    <div class="invoice-doc-actions">
+                                    <?php if (!empty($invoiceDocuments[(int) $invoiceRow['id']])): ?>
+                                        <?php foreach ($invoiceDocuments[(int) $invoiceRow['id']] as $documentRow): ?>
+                                            <a class="button-secondary small-button pdf-button" href="<?= e(base_path('/invoices.php?document=' . (int) $documentRow['id'])) ?>">
+                                                <?= e(strtolower(pathinfo((string) $documentRow['file_path'], PATHINFO_EXTENSION)) === 'pdf' ? invoice_document_short_label((string) $documentRow['document_type']) : 'HTML') ?>
+                                            </a>
+                                        <?php endforeach; ?>
+                                    <?php elseif (invoice_pdf_available($invoiceRow)): ?>
+                                        <a class="button-secondary small-button pdf-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>">PDF</a>
                                     <?php elseif (invoice_print_template_available($invoiceRow)): ?>
                                         <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>" target="_blank">HTML</a>
                                     <?php else: ?>
                                         <span class="status-badge status-badge--muted">немає</span>
                                     <?php endif; ?>
+                                    </div>
                                 </td>
-                                <td>
+                                <td class="registry-date">
                                     <?= e(invoice_date_label((string) $invoiceRow['invoice_date'])) ?>
-                                    <small><?= e(!empty($invoiceRow['updated_at']) ? 'оновлено ' . date('d.m H:i', strtotime((string) $invoiceRow['updated_at'])) : 'створено ' . date('d.m H:i', strtotime((string) $invoiceRow['created_at']))) ?></small>
+                                    <small>/ <?= e(invoice_datetime_time_label((string) ($invoiceRow['updated_at'] ?: $invoiceRow['created_at']))) ?></small>
                                 </td>
                                 <td class="wrap">
                                     <?= e((string) ($invoiceRow['buyer_display_name'] ?: '—')) ?>
@@ -1399,8 +1557,42 @@ foreach ($invoices as $invoiceRow) {
                                 </td>
                                 <td><?= e((string) ($invoiceRow['seller_short_name'] ?: '—')) ?></td>
                                 <td class="num"><?= e(invoice_money($invoiceRow['total_with_vat_uah'] ?? 0)) ?></td>
-                                <td><?= invoice_workflow_badge($invoiceRow) ?></td>
-                                <td><?= invoice_payment_control_label($invoiceRow) ?></td>
+                                <td>
+                                    <form method="post" action="<?= e(base_path('/invoices.php')) ?>" class="inline-cell-form">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="action" value="status">
+                                        <input type="hidden" name="id" value="<?= e((string) $invoiceRow['id']) ?>">
+                                        <input type="hidden" name="return_to" value="registry">
+                                        <select name="status_action" class="compact-select" onchange="this.form.submit()">
+                                            <?php
+                                            $registryStatus = (string) $invoiceRow['status'];
+                                            if ((string) $invoiceRow['docs_status'] === 'problem') {
+                                                $registryStatus = 'problem';
+                                            }
+                                            foreach ([
+                                                'draft' => 'Чернетка',
+                                                'sent' => 'Очікуємо оплату',
+                                                'paid' => 'Оплачено',
+                                                'docs_sent' => 'Документи відправлено',
+                                                'docs_closed' => 'Документи закрито',
+                                                'problem' => 'Проблема',
+                                                'canceled' => 'Скасовано',
+                                            ] as $statusValue => $statusLabel):
+                                            ?>
+                                                <option value="<?= e($statusValue) ?>" <?= $registryStatus === $statusValue ? 'selected' : '' ?>><?= e($statusLabel) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </form>
+                                </td>
+                                <td>
+                                    <form method="post" action="<?= e(base_path('/invoices.php')) ?>" class="inline-cell-form payment-control-form">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="action" value="expected_payment_date">
+                                        <input type="hidden" name="id" value="<?= e((string) $invoiceRow['id']) ?>">
+                                        <input type="date" name="expected_payment_date" value="<?= e((string) ($invoiceRow['expected_payment_date'] ?? '')) ?>" onchange="this.form.submit()">
+                                        <?= invoice_payment_control_label($invoiceRow) ?>
+                                    </form>
+                                </td>
                                 <td>
                                     <div class="row-actions">
                                         <a class="button small-button" href="<?= e(base_path('/invoices.php?edit=' . (int) $invoiceRow['id'])) ?>">Редагувати</a>

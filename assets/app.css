@@ -362,6 +362,44 @@ button:hover,
     gap: 6px;
 }
 
+.invoice-doc-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.pdf-button {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+
+.pdf-button:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    color: #fff;
+}
+
+.inline-cell-form {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+}
+
+.compact-select,
+.payment-control-form input[type="date"] {
+    min-height: 30px;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.payment-control-form input[type="date"] {
+    width: 132px;
+}
+
 .form {
     display: grid;
     gap: 12px;
@@ -639,6 +677,12 @@ button:hover,
 td small {
     display: block;
     margin-top: 2px;
+}
+
+.registry-date small {
+    display: inline;
+    margin-top: 0;
+    color: var(--muted);
 }
 
 .action-panel {
