@@ -250,8 +250,10 @@ Pages:
 
 Purpose:
 
-- Editable invoice/delivery note document header.
-- Stores local document status and document closing status.
+- Editable commercial invoice header.
+- Main working row for `Реєстр рахунків`.
+- Stores payment-control status and expected payment date.
+- Does not need to store every generated document file directly; generated files belong in `db_invoice_documents`.
 
 Source of data:
 
@@ -281,6 +283,7 @@ Main fields:
 - `vat_amount_uah`
 - `total_with_vat_uah`
 - `payment_purpose`
+- `expected_payment_date`
 - `status`
 - `sent_at`
 - `paid_at`
@@ -298,6 +301,87 @@ Main fields:
 Pages:
 
 - `invoices.php`
+
+Important:
+
+- `invoice_number` is the KeyCRM order number by default.
+- The visible registry status should stay simple:
+  - `draft` / Чернетка
+  - `sent` / Очікуємо оплату
+  - `paid` / Оплачено
+  - `docs_sent` / Документи відправлено
+  - `docs_closed` / Документи закрито
+  - `canceled` / Скасовано
+- `docs_status = problem` can override the visible workflow as `Проблема`.
+- `expected_payment_date` is editable in the registry. If empty, UI may calculate a fallback from `sent_at + 3 days`.
+- Long-term, `pdf_file_path` is legacy/fallback. The correct document list is `db_invoice_documents`.
+
+### db_invoice_documents
+
+Purpose:
+
+- Local registry of generated document files for one invoice.
+- Allows one invoice/order to have multiple documents:
+  - invoice PDF
+  - delivery note PDF
+  - act PDF
+  - future corrected/reissued document versions
+- Prevents delivery notes or acts from overwriting the original invoice PDF path.
+
+Source of data:
+
+- Server-side PDF generation from `invoices.php`.
+- Future KeyCRM file attachment can store returned KeyCRM file IDs here.
+
+Current/planned fields:
+
+- `id`
+- `invoice_id`
+- `document_type`
+- `document_date`
+- `file_path`
+- `created_by_user_id`
+- `created_at`
+- `updated_at`
+
+Recommended additional fields:
+
+- `document_number`
+- `status`
+- `sent_at`
+- `signed_at`
+- `closed_at`
+- `keycrm_file_id`
+- `download_count`
+- `last_downloaded_at`
+- `note`
+
+Recommended `document_type` values:
+
+- `invoice`
+- `delivery_note`
+- `act`
+- `correction`
+- `other`
+
+Recommended `status` values:
+
+- `draft`
+- `generated`
+- `sent`
+- `signed`
+- `closed`
+- `canceled`
+- `problem`
+
+Rules:
+
+- Invoice date and document date are not always the same.
+- `invoice_date` is the invoice issue date.
+- `document_date` for delivery note / act is the shipment or closing document date.
+- One invoice may need both a delivery note and an act if the order contains both goods/products and services.
+- For FOP 2 group sellers with `allowed_item_type = products_only`, generated item wording must remain product/goods wording only.
+- Service wording must wait until a reviewed FOP 3 group seller with `allowed_item_type = services_allowed` is configured.
 
 ### db_invoice_items
 
@@ -328,6 +412,30 @@ Main fields:
 Pages:
 
 - `invoices.php`
+
+Recommended additional fields:
+
+- `item_type`
+- `source_product_name`
+- `source_product_sku`
+- `source_offer_id`
+- `source_product_json`
+- `tax_mode`
+- `vat_rate`
+- `vat_amount_uah`
+
+Recommended `item_type` values:
+
+- `product`
+- `service`
+- `mixed`
+- `other`
+
+Reason:
+
+- The system needs to know whether a line is product/goods or service before deciding whether to generate a delivery note, act, or both.
+- FOP 2 group sellers must not generate service wording.
+- FOP 3 group / service-allowed sellers can later use acts for service lines.
 
 ### db_client_companies
 
@@ -780,6 +888,180 @@ File types:
 - `invoice_pdf`
 - `delivery_note_pdf`
 - `other`
+
+## 3A. Invoice / Document Data Gap Analysis
+
+Current invoice work is already beyond a single `pdf_file_path`.
+
+CEO/accountant now need to control:
+
+- whether invoice was sent
+- when payment is expected
+- whether payment is overdue
+- whether invoice is paid
+- whether closing documents were sent
+- whether closing documents are signed/closed
+- which files exist for the order:
+  - invoice
+  - delivery note
+  - act
+  - future corrected documents
+
+### Data that should remain in `db_invoices`
+
+`db_invoices` should stay the main commercial invoice / registry row.
+
+Keep or add:
+
+- `expected_payment_date`
+- `payment_terms_days`
+- `sent_channel`
+- `sent_to_email`
+- `last_reminder_at`
+- `reminder_count`
+- `next_follow_up_at`
+- `assigned_user_id`
+- `status_changed_at`
+- `status_changed_by_user_id`
+
+Why:
+
+- CEO needs to see who must be reminded and when.
+- A static status is not enough; follow-up date and reminder history are operational control data.
+- `payment_terms_days` allows different payment periods without hardcoding `+3 days`.
+
+Recommended safe additive columns:
+
+```sql
+ALTER TABLE db_invoices
+  ADD COLUMN payment_terms_days SMALLINT UNSIGNED NULL,
+  ADD COLUMN sent_channel ENUM('none','email','viber','telegram','phone','other') NOT NULL DEFAULT 'none',
+  ADD COLUMN sent_to_email VARCHAR(190) NULL,
+  ADD COLUMN last_reminder_at DATETIME NULL,
+  ADD COLUMN reminder_count INT UNSIGNED NOT NULL DEFAULT 0,
+  ADD COLUMN next_follow_up_at DATE NULL,
+  ADD COLUMN assigned_user_id INT UNSIGNED NULL,
+  ADD COLUMN status_changed_at DATETIME NULL,
+  ADD COLUMN status_changed_by_user_id INT UNSIGNED NULL;
+```
+
+Do not add all of these immediately unless the UI is ready to use them.
+
+Minimum recommended next addition:
+
+- `payment_terms_days`
+- `next_follow_up_at`
+- `last_reminder_at`
+- `reminder_count`
+
+### Data that should move to / be stored in `db_invoice_documents`
+
+One invoice can have many generated documents.
+
+The document table should become the source for the PDF column in `Реєстр рахунків`.
+
+Recommended safe additive columns:
+
+```sql
+ALTER TABLE db_invoice_documents
+  ADD COLUMN document_number VARCHAR(80) NULL,
+  ADD COLUMN status ENUM('draft','generated','sent','signed','closed','canceled','problem') NOT NULL DEFAULT 'generated',
+  ADD COLUMN sent_at DATETIME NULL,
+  ADD COLUMN signed_at DATETIME NULL,
+  ADD COLUMN closed_at DATETIME NULL,
+  ADD COLUMN keycrm_file_id VARCHAR(80) NULL,
+  ADD COLUMN download_count INT UNSIGNED NOT NULL DEFAULT 0,
+  ADD COLUMN last_downloaded_at DATETIME NULL,
+  ADD COLUMN note TEXT NULL;
+```
+
+Why:
+
+- Invoice PDF, delivery note PDF, and act PDF should not overwrite each other.
+- Delivery note / act date may differ from invoice date.
+- Later KeyCRM file attachment needs a per-file `keycrm_file_id`.
+- CEO/accountant may need to know whether a specific act/delivery note is sent or closed.
+
+### Data that should be added to invoice items
+
+The system needs to decide whether an order should generate:
+
+- only delivery note
+- only act
+- both delivery note and act
+
+This cannot be done reliably from title text alone.
+
+Recommended safe additive columns:
+
+```sql
+ALTER TABLE db_invoice_items
+  ADD COLUMN item_type ENUM('product','service','mixed','other') NOT NULL DEFAULT 'product',
+  ADD COLUMN source_product_name VARCHAR(255) NULL,
+  ADD COLUMN source_product_sku VARCHAR(120) NULL,
+  ADD COLUMN source_offer_id INT UNSIGNED NULL,
+  ADD COLUMN source_product_json LONGTEXT NULL;
+```
+
+Rules:
+
+- `product` lines can generate delivery notes.
+- `service` lines can generate acts only when seller company allows services.
+- FOP 2 group / `products_only` seller must force product wording and should not generate service lines.
+- If order contains both product and service lines, generate both documents later:
+  - delivery note for products
+  - act for services
+
+### Data that should go into a small audit table
+
+For finance operations, silent status changes are risky.
+
+Recommended planned table:
+
+```sql
+db_invoice_events
+- id
+- invoice_id
+- document_id NULL
+- event_type
+- old_value
+- new_value
+- note
+- created_by_user_id
+- created_at
+```
+
+Recommended event types:
+
+- `status_changed`
+- `expected_payment_date_changed`
+- `reminder_sent`
+- `document_generated`
+- `document_sent`
+- `document_closed`
+- `payment_marked_paid`
+- `problem_marked`
+
+Why:
+
+- CEO can see who changed status and when.
+- Accountant can track reminders and document closing.
+- Bugs or accidental status changes are easier to diagnose.
+
+### What not to add yet
+
+Do not add a full accounting ledger yet.
+
+Out of scope for the next invoice step:
+
+- VAT tax invoices
+- official accounting journal
+- bank statement import
+- automated KeyCRM payment writes
+- electronic signature integration
+- automatic file attachment to KeyCRM
+
+These should be planned separately so `.BRAND DB` remains a fast CEO Money Cockpit, not an ERP.
 
 ## 4. Dashboard Data Needs
 
