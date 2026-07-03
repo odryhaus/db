@@ -21,6 +21,10 @@
 - Updated invoice creation to keep buyer/contact separate from recipient/payer.
 - Updated invoice edit UX with compact seller, client company, contact, and legal entity controls.
 - Updated invoice registry with separate payment and document status dropdowns.
+- Simplified invoice editing by removing status controls and document-generation buttons from the edit form.
+- Moved registry work into one compact table: edit, PDF download, payment status, payment deadline, and delete are handled from `Реєстр рахунків`.
+- New invoices now enter `Очікуємо оплату` immediately with a default payment deadline instead of exposing `Чернетка` in the registry.
+- Added row deletion through a CSRF-protected `×` button.
 
 ### Business Rules Reflected
 
@@ -47,4 +51,5 @@
 4. Confirm client company, contact, and legal recipient are separate.
 5. Change payment status and document status independently in the registry.
 6. Set payment deadline and confirm overdue behavior.
-7. Generate invoice/delivery/act PDF and confirm filenames use order number.
+7. Confirm the edit form only saves/edits invoice data and closes back to the registry.
+8. Confirm PDF download and delete actions are available in the registry action column.

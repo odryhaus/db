@@ -312,6 +312,25 @@ function invoice_payment_control_label(array $invoice): string
     return '<span class="status-badge status-badge--muted">не відправлено</span>';
 }
 
+function invoice_deadline_class(array $invoice): string
+{
+    $status = (string) (($invoice['payment_status'] ?? '') ?: ($invoice['status'] ?? 'draft'));
+    if ($status === 'paid') {
+        return 'deadline-date--paid';
+    }
+    if ($status === 'problem') {
+        return 'deadline-date--overdue';
+    }
+    if (invoice_is_overdue($invoice)) {
+        return 'deadline-date--overdue';
+    }
+    if ($status === 'waiting_payment' || $status === 'sent') {
+        return 'deadline-date--waiting';
+    }
+
+    return 'deadline-date--muted';
+}
+
 function invoice_get_path(array $data, array $paths)
 {
     foreach ($paths as $path) {
@@ -1057,13 +1076,13 @@ if (is_post()) {
                      buyer_company_id, client_company_id, buyer_display_name, buyer_contact_name,
                      buyer_edrpou, buyer_address, buyer_email, buyer_phone,
                      total_amount_uah, vat_mode, vat_amount_uah, total_with_vat_uah, payment_purpose,
-                     payment_status, document_status, created_by_user_id)
+                     payment_status, document_status, status, sent_at, payment_due_date, expected_payment_date, created_by_user_id)
                 VALUES
                     (:keycrm_order_id, :invoice_number, CURDATE(), 'invoice', :seller_company_id, :buyer_id,
                      :buyer_company_id, :client_company_id, :buyer_display_name, :buyer_contact_name,
                      :buyer_edrpou, :buyer_address, :buyer_email, :buyer_phone,
                      :total_amount_uah, 'no_vat', 0, :total_with_vat_uah, :payment_purpose,
-                     'draft', 'not_sent', :created_by_user_id)
+                     'waiting_payment', 'not_sent', 'sent', NOW(), DATE_ADD(CURDATE(), INTERVAL 3 DAY), DATE_ADD(CURDATE(), INTERVAL 3 DAY), :created_by_user_id)
             ");
             $stmt->execute([
                 'keycrm_order_id' => $orderId,
@@ -1100,6 +1119,13 @@ if (is_post()) {
 
         if (!$invoice) {
             $error = 'Invoice not found.';
+        } elseif ($action === 'delete_invoice') {
+            db()->beginTransaction();
+            db()->prepare('DELETE FROM db_invoice_items WHERE invoice_id = :id')->execute(['id' => $invoiceId]);
+            db()->prepare('DELETE FROM db_invoice_documents WHERE invoice_id = :id')->execute(['id' => $invoiceId]);
+            db()->prepare('DELETE FROM db_invoices WHERE id = :id')->execute(['id' => $invoiceId]);
+            db()->commit();
+            redirect_to('/invoices.php');
         } elseif ($action === 'status') {
             $statusType = (string) ($_POST['status_type'] ?? 'payment');
             $statusAction = (string) ($_POST['status_action'] ?? '');
@@ -1460,7 +1486,17 @@ if (is_post()) {
                             $generated = invoice_generate_document($updatedInvoice, $updatedItems, $documentType);
                             invoice_store_document($invoiceId, $documentType, $documentDate, (string) $generated['path']);
                             $legacyDocumentType = $documentType === 'act' ? (string) $updatedInvoice['document_type'] : $documentType;
-                            $stmt = db()->prepare('UPDATE db_invoices SET document_type = :document_type, pdf_file_path = :pdf_file_path WHERE id = :id');
+                            $stmt = db()->prepare("
+                                UPDATE db_invoices
+                                SET document_type = :document_type,
+                                    pdf_file_path = :pdf_file_path,
+                                    payment_status = CASE WHEN payment_status = 'paid' THEN payment_status ELSE 'waiting_payment' END,
+                                    status = CASE WHEN status = 'paid' THEN status ELSE 'sent' END,
+                                    sent_at = COALESCE(sent_at, NOW()),
+                                    payment_due_date = COALESCE(payment_due_date, DATE_ADD(CURDATE(), INTERVAL 3 DAY)),
+                                    expected_payment_date = COALESCE(expected_payment_date, payment_due_date, DATE_ADD(CURDATE(), INTERVAL 3 DAY))
+                                WHERE id = :id
+                            ");
                             $stmt->execute([
                                 'document_type' => $legacyDocumentType,
                                 'pdf_file_path' => $generated['path'],
@@ -1590,10 +1626,6 @@ foreach ($invoices as $invoiceRow) {
                 <strong><?= e(invoice_money($overdueTotal)) ?></strong>
                 <small><?= e((string) $overdueCount) ?> рахунків після дедлайну оплати</small>
             </div>
-            <div class="kpi-card">
-                <span class="label">Чернетки</span>
-                <strong><?= e((string) $draftCount) ?></strong>
-            </div>
             <div class="kpi-card progress-card">
                 <span class="label">Оплачено</span>
                 <strong><?= e((string) $paidCount) ?></strong>
@@ -1633,14 +1665,6 @@ foreach ($invoices as $invoiceRow) {
                     <div>
                         <span class="label">Редагування</span>
                         <h2><?= e((string) $editInvoice['invoice_number']) ?> · <?= invoice_payment_badge($editInvoice) ?> <?= invoice_document_badge($editInvoice) ?></h2>
-                    </div>
-                    <div class="row-actions">
-                        <?php if (invoice_pdf_available($editInvoice)): ?>
-                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $editInvoice['id'])) ?>">Завантажити PDF</a>
-                        <?php elseif (invoice_print_template_available($editInvoice)): ?>
-                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $editInvoice['id'])) ?>" target="_blank">HTML-шаблон</a>
-                        <?php endif; ?>
-                        <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php')) ?>">Закрити</a>
                     </div>
                 </div>
 
@@ -1823,9 +1847,7 @@ foreach ($invoices as $invoiceRow) {
 
                     <div class="invoice-actions">
                         <button type="submit" name="action" value="save_invoice">Зберегти</button>
-                        <button type="submit" name="action" value="generate_invoice">Сформувати і завантажити PDF</button>
-                        <button type="submit" name="action" value="generate_delivery" class="button-secondary">Сформувати видаткову PDF</button>
-                        <button type="submit" name="action" value="generate_act" class="button-secondary">Сформувати акт PDF</button>
+                        <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php')) ?>">Закрити</a>
                         <button type="submit" name="action" value="use_detailed" class="button-secondary">Детальні товари CRM</button>
                         <button type="submit" name="action" value="collapse_one" class="button-secondary">Один рядок</button>
                         <label class="collapse-field">
@@ -1835,35 +1857,6 @@ foreach ($invoices as $invoiceRow) {
                         <button type="submit" name="action" value="collapse_manual" class="button-secondary">Згорнути з цією назвою</button>
                     </div>
                 </form>
-
-                <div class="invoice-status-actions">
-                    <span class="label">Оплата</span>
-                    <?php foreach (['waiting_payment' => 'Очікуємо оплату', 'paid' => 'Оплачено', 'problem' => 'Проблема', 'canceled' => 'Скасувати'] as $statusAction => $label): ?>
-                        <form method="post" action="<?= e(base_path('/invoices.php?edit=' . (int) $editInvoice['id'])) ?>">
-                            <?= csrf_field() ?>
-                            <input type="hidden" name="action" value="status">
-                            <input type="hidden" name="status_type" value="payment">
-                            <input type="hidden" name="id" value="<?= e((string) $editInvoice['id']) ?>">
-                            <input type="hidden" name="status_action" value="<?= e($statusAction) ?>">
-                            <button
-                                type="submit"
-                                class="<?= $statusAction === 'canceled' ? 'button-danger' : 'button-secondary' ?> small-button"
-                                <?= $statusAction === 'canceled' ? 'data-confirm="Скасувати рахунок ' . e((string) $editInvoice['invoice_number']) . '?"' : '' ?>
-                            ><?= e($label) ?></button>
-                        </form>
-                    <?php endforeach; ?>
-                    <span class="label">Документи</span>
-                    <?php foreach (['sent' => 'Документи відправлено', 'closed' => 'Документи закрито', 'problem' => 'Проблема'] as $statusAction => $label): ?>
-                        <form method="post" action="<?= e(base_path('/invoices.php?edit=' . (int) $editInvoice['id'])) ?>">
-                            <?= csrf_field() ?>
-                            <input type="hidden" name="action" value="status">
-                            <input type="hidden" name="status_type" value="document">
-                            <input type="hidden" name="id" value="<?= e((string) $editInvoice['id']) ?>">
-                            <input type="hidden" name="status_action" value="<?= e($statusAction) ?>">
-                            <button type="submit" class="button-secondary small-button"><?= e($label) ?></button>
-                        </form>
-                    <?php endforeach; ?>
-                </div>
             </section>
         <?php endif; ?>
 
@@ -1879,47 +1872,42 @@ foreach ($invoices as $invoiceRow) {
                     <thead>
                         <tr>
                             <th>Номер</th>
-                            <th>Документи</th>
                             <th>Дата</th>
                             <th>Одержувач / контакт</th>
                             <th>Від кого</th>
                             <th class="num">Сума</th>
                             <th>Оплата</th>
                             <th>Дата оплати / deadline</th>
-                            <th>Документи</th>
                             <th>Дія</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (!$invoices): ?>
-                            <tr><td colspan="10">Рахунків ще немає.</td></tr>
+                            <tr><td colspan="8">Рахунків ще немає.</td></tr>
                         <?php endif; ?>
                         <?php foreach ($invoices as $invoiceRow): ?>
+                            <?php
+                            $primaryPdfUrl = '';
+                            if (!empty($invoiceDocuments[(int) $invoiceRow['id']])) {
+                                foreach ($invoiceDocuments[(int) $invoiceRow['id']] as $documentRow) {
+                                    if (strtolower(pathinfo((string) $documentRow['file_path'], PATHINFO_EXTENSION)) === 'pdf') {
+                                        $primaryPdfUrl = base_path('/invoices.php?document=' . (int) $documentRow['id']);
+                                        break;
+                                    }
+                                }
+                            }
+                            if ($primaryPdfUrl === '' && invoice_pdf_available($invoiceRow)) {
+                                $primaryPdfUrl = base_path('/invoices.php?download=' . (int) $invoiceRow['id']);
+                            }
+                            ?>
                             <tr>
                                 <td class="<?= invoice_is_overdue($invoiceRow) ? 'flag-danger-cell' : '' ?>"><strong><?= e((string) $invoiceRow['invoice_number']) ?></strong></td>
-                                <td>
-                                    <div class="invoice-doc-actions">
-                                    <?php if (!empty($invoiceDocuments[(int) $invoiceRow['id']])): ?>
-                                        <?php foreach ($invoiceDocuments[(int) $invoiceRow['id']] as $documentRow): ?>
-                                            <a class="button-secondary small-button pdf-button" href="<?= e(base_path('/invoices.php?document=' . (int) $documentRow['id'])) ?>">
-                                                <?= e(strtolower(pathinfo((string) $documentRow['file_path'], PATHINFO_EXTENSION)) === 'pdf' ? invoice_document_short_label((string) $documentRow['document_type']) : 'HTML') ?>
-                                            </a>
-                                        <?php endforeach; ?>
-                                    <?php elseif (invoice_pdf_available($invoiceRow)): ?>
-                                        <a class="button-secondary small-button pdf-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>">PDF</a>
-                                    <?php elseif (invoice_print_template_available($invoiceRow)): ?>
-                                        <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>" target="_blank">HTML</a>
-                                    <?php else: ?>
-                                        <span class="status-badge status-badge--muted">немає</span>
-                                    <?php endif; ?>
-                                    </div>
-                                </td>
                                 <td class="registry-date">
                                     <?= e(invoice_date_label((string) $invoiceRow['invoice_date'])) ?>
                                     <small>/ <?= e(invoice_datetime_time_label((string) ($invoiceRow['updated_at'] ?: $invoiceRow['created_at']))) ?></small>
                                 </td>
                                 <td class="wrap">
-                                    <?= e((string) ($invoiceRow['buyer_display_name'] ?: '—')) ?>
+                                    <strong><?= e((string) ($invoiceRow['buyer_display_name'] ?: '—')) ?></strong>
                                     <?php if (!empty($invoiceRow['buyer_contact_name'])): ?>
                                         <small><?= e((string) $invoiceRow['buyer_contact_name']) ?></small>
                                     <?php endif; ?>
@@ -1936,12 +1924,13 @@ foreach ($invoices as $invoiceRow) {
                                         <select name="status_action" class="compact-select registry-status-select" data-invoice-number="<?= e((string) $invoiceRow['invoice_number']) ?>">
                                             <?php
                                             $registryStatus = (string) ($invoiceRow['payment_status'] ?? 'draft');
+                                            if ($registryStatus === 'draft' || $registryStatus === 'canceled') {
+                                                $registryStatus = 'waiting_payment';
+                                            }
                                             foreach ([
-                                                'draft' => 'Чернетка',
                                                 'waiting_payment' => 'Очікуємо оплату',
                                                 'paid' => 'Оплачено',
                                                 'problem' => 'Проблема',
-                                                'canceled' => 'Скасовано',
                                             ] as $statusValue => $statusLabel):
                                             ?>
                                                 <option value="<?= e($statusValue) ?>" <?= $registryStatus === $statusValue ? 'selected' : '' ?>><?= e($statusLabel) ?></option>
@@ -1954,33 +1943,21 @@ foreach ($invoices as $invoiceRow) {
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="action" value="payment_due_date">
                                         <input type="hidden" name="id" value="<?= e((string) $invoiceRow['id']) ?>">
-                                        <input type="date" name="payment_due_date" value="<?= e((string) (($invoiceRow['payment_due_date'] ?? '') ?: ($invoiceRow['expected_payment_date'] ?? ''))) ?>" onchange="this.form.submit()">
-                                        <?= invoice_payment_control_label($invoiceRow) ?>
-                                    </form>
-                                </td>
-                                <td>
-                                    <form method="post" action="<?= e(base_path('/invoices.php')) ?>" class="inline-cell-form">
-                                        <?= csrf_field() ?>
-                                        <input type="hidden" name="action" value="status">
-                                        <input type="hidden" name="status_type" value="document">
-                                        <input type="hidden" name="id" value="<?= e((string) $invoiceRow['id']) ?>">
-                                        <input type="hidden" name="return_to" value="registry">
-                                        <select name="status_action" class="compact-select" onchange="this.form.submit()">
-                                            <?php $documentRegistryStatus = (string) ($invoiceRow['document_status'] ?? 'not_sent'); ?>
-                                            <?php foreach ([
-                                                'not_sent' => 'Не надіслано',
-                                                'sent' => 'Документи відправлено',
-                                                'closed' => 'Документи закрито',
-                                                'problem' => 'Проблема',
-                                            ] as $statusValue => $statusLabel): ?>
-                                                <option value="<?= e($statusValue) ?>" <?= $documentRegistryStatus === $statusValue ? 'selected' : '' ?>><?= e($statusLabel) ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
+                                        <input class="deadline-date <?= e(invoice_deadline_class($invoiceRow)) ?>" type="date" name="payment_due_date" value="<?= e((string) (($invoiceRow['payment_due_date'] ?? '') ?: ($invoiceRow['expected_payment_date'] ?? ''))) ?>" onchange="this.form.submit()">
                                     </form>
                                 </td>
                                 <td>
                                     <div class="row-actions">
                                         <a class="button small-button" href="<?= e(base_path('/invoices.php?edit=' . (int) $invoiceRow['id'])) ?>">Редагувати</a>
+                                        <?php if ($primaryPdfUrl !== ''): ?>
+                                            <a class="button-secondary small-button pdf-button" href="<?= e($primaryPdfUrl) ?>">PDF</a>
+                                        <?php endif; ?>
+                                        <form method="post" action="<?= e(base_path('/invoices.php')) ?>" class="inline-cell-form">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="action" value="delete_invoice">
+                                            <input type="hidden" name="id" value="<?= e((string) $invoiceRow['id']) ?>">
+                                            <button type="submit" class="button-danger small-button icon-delete-button" data-confirm="Видалити рахунок <?= e((string) $invoiceRow['invoice_number']) ?>?">×</button>
+                                        </form>
                                     </div>
                                 </td>
                             </tr>
@@ -2091,13 +2068,8 @@ foreach ($invoices as $invoiceRow) {
         (function () {
             document.querySelectorAll('.registry-status-select').forEach(function (select) {
                 select.addEventListener('change', function () {
-                    if (select.value === 'canceled' && !window.confirm('Скасувати рахунок ' + (select.dataset.invoiceNumber || '') + '?')) {
-                        select.value = select.dataset.previousValue || select.value;
-                        return;
-                    }
                     select.form.submit();
                 });
-                select.dataset.previousValue = select.value;
             });
         })();
     </script>

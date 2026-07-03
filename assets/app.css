@@ -417,6 +417,36 @@ button:hover,
     width: 132px;
 }
 
+.deadline-date.deadline-date--waiting {
+    border-color: var(--warning-border);
+    background: var(--warning-soft);
+    color: var(--warning);
+}
+
+.deadline-date.deadline-date--paid {
+    border-color: var(--success-border);
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.deadline-date.deadline-date--overdue {
+    border-color: var(--danger-border);
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.deadline-date.deadline-date--muted {
+    color: var(--muted);
+}
+
+.icon-delete-button {
+    width: 30px;
+    padding-left: 0;
+    padding-right: 0;
+    font-size: 16px;
+    line-height: 1;
+}
+
 .form {
     display: grid;
     gap: 12px;
