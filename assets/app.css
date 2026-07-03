@@ -517,38 +517,52 @@ button:hover,
 
 .invoice-form {
     display: grid;
-    gap: var(--space-4);
+    gap: var(--space-3);
 }
 
 .invoice-edit-grid {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: var(--space-3) var(--space-4);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    align-items: start;
+    padding: var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface-muted);
 }
 
 .invoice-edit-grid label {
+    flex: 1 1 170px;
+    min-width: 150px;
     margin-bottom: 0;
 }
 
 .invoice-edit-grid .wide-field {
-    grid-column: span 3;
+    flex: 2 1 320px;
+    min-width: 260px;
 }
 
 .invoice-edit-grid .full-field {
-    grid-column: 1 / -1;
+    flex: 1 1 100%;
+    min-width: 100%;
 }
 
 .invoice-edit-grid .section-label {
-    grid-column: 1 / -1;
+    flex: 1 1 100%;
     margin-top: var(--space-1);
-    padding-top: var(--space-2);
+    padding-top: var(--space-1);
     border-top: 1px solid var(--line);
+}
+
+.invoice-edit-grid input,
+.invoice-edit-grid select,
+.invoice-edit-grid textarea {
+    padding: 8px 10px;
 }
 
 .invoice-items-heading {
     margin: 0;
-    padding-top: var(--space-2);
-    border-top: 1px solid var(--line);
+    padding-top: var(--space-1);
 }
 
 .invoice-items-table {
@@ -557,11 +571,12 @@ button:hover,
 
 .invoice-items-table td {
     height: auto;
-    padding: 6px;
+    padding: 5px;
 }
 
 .invoice-items-table input {
     min-width: 0;
+    padding: 7px 8px;
 }
 
 .mini-input {
@@ -579,24 +594,39 @@ button:hover,
 .invoice-status-actions {
     display: flex;
     flex-wrap: wrap;
-    align-items: end;
+    align-items: center;
     gap: var(--space-2);
 }
 
 .invoice-actions {
-    padding: var(--space-3);
+    padding: var(--space-2);
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
     background: var(--surface-muted);
 }
 
 .invoice-status-actions {
-    margin-top: var(--space-3);
+    margin-top: var(--space-2);
+    padding: var(--space-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--panel);
+}
+
+.invoice-status-actions form {
+    margin: 0;
+}
+
+.invoice-status-actions button,
+.invoice-actions button,
+.invoice-actions .button-secondary {
+    white-space: nowrap;
 }
 
 .collapse-field {
     flex: 1 1 260px;
     min-width: 220px;
+    margin-bottom: 0;
 }
 
 .field-warning {

@@ -453,56 +453,71 @@ function invoice_document_html(array $invoice, array $items, string $documentTyp
     <meta charset="utf-8">
     <title><?= e($title . ' № ' . $invoice['invoice_number']) ?></title>
     <style>
-        @page { size: A4; margin: 16mm; }
-        body { margin: 0; color: #111; font-family: DejaVu Sans, Arial, sans-serif; font-size: 10.5px; line-height: 1.35; }
-        .doc-header { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #111; padding-bottom: 14px; margin-bottom: 18px; }
-        .brand { font-size: 20px; font-weight: 800; letter-spacing: .03em; }
+        @page { size: A4; margin: 14mm 13mm; }
+        body { margin: 0; color: #111; font-family: DejaVu Sans, Arial, sans-serif; font-size: 10px; line-height: 1.32; }
+        .topline { width: 100%; margin-bottom: 11px; border-bottom: 2px solid #111; }
+        .topline td { border: 0; padding: 0 0 8px; vertical-align: bottom; }
+        .brand { font-size: 22px; font-weight: 800; letter-spacing: .03em; }
         .muted { color: #555; }
-        .details { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px; }
-        .box { border: 1px solid #ddd; padding: 10px; min-height: 86px; }
-        h1 { margin: 18px 0 4px; text-align: center; font-size: 16px; letter-spacing: .04em; }
-        .date { text-align: center; margin-bottom: 18px; }
+        .tax-note { text-align: right; font-weight: 700; }
+        .party-table { width: 100%; margin-bottom: 16px; border-collapse: collapse; }
+        .party-table td { width: 50%; border: 0; padding: 0 10px 0 0; vertical-align: top; }
+        .party-table td + td { padding: 0 0 0 10px; }
+        .party-title { margin-bottom: 4px; font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: .04em; }
+        .party-name { margin-bottom: 4px; font-size: 11px; font-weight: 700; }
+        .party-line { margin-bottom: 2px; }
+        h1 { margin: 12px 0 4px; text-align: center; font-size: 16px; letter-spacing: .04em; }
+        .date { text-align: center; margin-bottom: 14px; }
         table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #ddd; padding: 6px; vertical-align: top; }
-        th { background: #f4f4f4; font-size: 10px; text-transform: uppercase; }
+        th, td { border: 1px solid #d8dde5; padding: 5px 6px; vertical-align: top; }
+        th { background: #f3f5f7; font-size: 9px; text-transform: uppercase; }
         .num { text-align: right; white-space: nowrap; }
         .center { text-align: center; }
         .total-row td { font-weight: 700; }
-        .footer { margin-top: 20px; }
-        .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 48px; }
+        .footer { margin-top: 16px; }
+        .footer p { margin: 0 0 5px; }
+        .signatures { width: 100%; margin-top: 38px; border-collapse: collapse; }
+        .signatures td { width: 50%; border: 0; padding: 0 32px 0 0; }
+        .signatures td + td { padding: 0 0 0 32px; }
         .line { border-bottom: 1px solid #111; height: 28px; margin-bottom: 6px; }
     </style>
 </head>
 <body>
-    <div class="doc-header">
-        <div>
-            <div class="brand">.BRAND</div>
-            <div class="muted">bws.com.ua</div>
-        </div>
-        <div class="muted">Без ПДВ. Платник єдиного податку.</div>
-    </div>
+    <table class="topline">
+        <tr>
+            <td>
+                <div class="brand">.BRAND</div>
+                <div class="muted">bws.com.ua</div>
+            </td>
+            <td class="tax-note">Без ПДВ. Платник єдиного податку.</td>
+        </tr>
+    </table>
 
-    <div class="details">
-        <div class="box">
-            <strong>Постачальник: <?= e($seller) ?></strong><br>
-            рахунок IBAN: <?= e((string) $invoice['iban']) ?><br>
-            ЄДРПОУ: <?= e((string) $invoice['edrpou']) ?><br>
-            банк: <?= e((string) $invoice['bank']) ?><br>
-            адреса друкарні: <?= e((string) $invoice['address']) ?><br>
-            e-mail: <?= e((string) $invoice['email']) ?><br>
-            офіс: <?= e((string) $invoice['phone']) ?><br>
-            бухгалтерія: <?= e((string) $invoice['accountant_email']) ?>, <?= e((string) $invoice['accountant_phone']) ?>
-        </div>
-        <div class="box">
-            <strong>Одержувач: <?= e($buyer) ?></strong><br>
-            <?php if ($contact !== ''): ?>Контактна особа: <?= e($contact) ?><br><?php endif; ?>
-            <?php if (!empty($invoice['buyer_edrpou'])): ?>ЄДРПОУ: <?= e((string) $invoice['buyer_edrpou']) ?><br><?php endif; ?>
-            <?php if (!empty($invoice['buyer_address'])): ?>Адреса: <?= e((string) $invoice['buyer_address']) ?><br><?php endif; ?>
-            <?php if (!empty($invoice['buyer_email'])): ?>E-mail: <?= e((string) $invoice['buyer_email']) ?><br><?php endif; ?>
-            <?php if (!empty($invoice['buyer_phone'])): ?>Тел.: <?= e((string) $invoice['buyer_phone']) ?><br><?php endif; ?>
-            <?php if ($isDelivery): ?>Платник: той самий<br>Умова продажу: Безготівковий розрахунок<?php endif; ?>
-        </div>
-    </div>
+    <table class="party-table">
+        <tr>
+            <td>
+                <div class="party-title">Постачальник</div>
+                <div class="party-name"><?= e($seller) ?></div>
+                <div class="party-line">IBAN: <?= e((string) $invoice['iban']) ?></div>
+                <div class="party-line">ЄДРПОУ: <?= e((string) $invoice['edrpou']) ?></div>
+                <div class="party-line">Банк: <?= e((string) $invoice['bank']) ?></div>
+                <div class="party-line">Адреса: <?= e((string) $invoice['address']) ?></div>
+                <div class="party-line">E-mail: <?= e((string) $invoice['email']) ?></div>
+                <div class="party-line">Офіс: <?= e((string) $invoice['phone']) ?></div>
+                <div class="party-line">Бухгалтерія: <?= e((string) $invoice['accountant_email']) ?><?= !empty($invoice['accountant_phone']) ? ', ' . e((string) $invoice['accountant_phone']) : '' ?></div>
+            </td>
+            <td>
+                <div class="party-title">Одержувач</div>
+                <div class="party-name"><?= e($buyer) ?></div>
+                <?php if ($contact !== ''): ?><div class="party-line">Контактна особа: <?= e($contact) ?></div><?php endif; ?>
+                <?php if (!empty($invoice['buyer_edrpou'])): ?><div class="party-line">ЄДРПОУ: <?= e((string) $invoice['buyer_edrpou']) ?></div><?php endif; ?>
+                <?php if (!empty($invoice['buyer_address'])): ?><div class="party-line">Адреса: <?= e((string) $invoice['buyer_address']) ?></div><?php endif; ?>
+                <?php if (!empty($invoice['buyer_email'])): ?><div class="party-line">E-mail: <?= e((string) $invoice['buyer_email']) ?></div><?php endif; ?>
+                <?php if (!empty($invoice['buyer_phone'])): ?><div class="party-line">Тел.: <?= e((string) $invoice['buyer_phone']) ?></div><?php endif; ?>
+                <?php if ($isDelivery): ?><div class="party-line">Платник: той самий</div><div class="party-line">Умова продажу: безготівковий розрахунок</div><?php endif; ?>
+            </td>
+        </tr>
+    </table>
 
     <h1><?= e($title) ?> № <?= e((string) $invoice['invoice_number']) ?></h1>
     <div class="date">від <?= e(invoice_ua_date_label((string) $invoice['invoice_date'])) ?></div>
@@ -548,16 +563,18 @@ function invoice_document_html(array $invoice, array $items, string $documentTyp
         <?php endif; ?>
     </div>
 
-    <div class="signatures">
-        <div>
-            <div class="line"></div>
-            <div>Від постачальника</div>
-        </div>
-        <div>
-            <div class="line"></div>
-            <div>Від замовника</div>
-        </div>
-    </div>
+    <table class="signatures">
+        <tr>
+            <td>
+                <div class="line"></div>
+                <div>Від постачальника</div>
+            </td>
+            <td>
+                <div class="line"></div>
+                <div>Від замовника</div>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>
     <?php
@@ -964,7 +981,7 @@ if (is_post()) {
                             if ($generated['is_pdf']) {
                                 redirect_to('/invoices.php?download=' . $invoiceId);
                             }
-                            $error = 'PDF не створено: на сервері не знайдено wkhtmltopdf або PDF-рендер вимкнений. Збережено тільки HTML-шаблон.';
+                            $error = 'PDF не створено: на сервері не підключився Dompdf/wkhtmltopdf або PDF-рендер вимкнений. Збережено тільки HTML-шаблон для діагностики.';
                         }
                     } else {
                         $message = 'Invoice saved.';
@@ -1091,9 +1108,9 @@ foreach ($invoices as $invoiceRow) {
                     </div>
                     <div class="row-actions">
                         <?php if (invoice_pdf_available($editInvoice)): ?>
-                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $editInvoice['id'])) ?>">PDF</a>
+                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $editInvoice['id'])) ?>">Завантажити PDF</a>
                         <?php elseif (invoice_print_template_available($editInvoice)): ?>
-                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $editInvoice['id'])) ?>" target="_blank">Друк/PDF</a>
+                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $editInvoice['id'])) ?>" target="_blank">HTML-шаблон</a>
                         <?php endif; ?>
                         <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php')) ?>">Закрити</a>
                     </div>
@@ -1248,6 +1265,7 @@ foreach ($invoices as $invoiceRow) {
                 </form>
 
                 <div class="invoice-status-actions">
+                    <span class="label">Статус</span>
                     <?php foreach (['sent' => 'Sent to client', 'paid' => 'Paid', 'docs_sent' => 'Docs sent', 'docs_closed' => 'Docs closed', 'problem' => 'Problem', 'canceled' => 'Cancel'] as $statusAction => $label): ?>
                         <form method="post" action="<?= e(base_path('/invoices.php?edit=' . (int) $editInvoice['id'])) ?>">
                             <?= csrf_field() ?>
@@ -1318,7 +1336,7 @@ foreach ($invoices as $invoiceRow) {
                                         <?php if (invoice_pdf_available($invoiceRow)): ?>
                                             <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>">PDF</a>
                                         <?php elseif (invoice_print_template_available($invoiceRow)): ?>
-                                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>" target="_blank">Друк/PDF</a>
+                                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>" target="_blank">HTML</a>
                                         <?php endif; ?>
                                     </div>
                                 </td>

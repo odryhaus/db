@@ -13,6 +13,28 @@ Production `/db` authentication is live:
 
 This update fixes invoice numbering, PDF naming, recipient handling, and prepares a simple local client legal entities model while keeping KeyCRM sync unchanged.
 
+## 2026-07-03 — Invoice PDF and Editor Cleanup
+
+- Updated invoice document generation layout in `invoices.php` to use a compact A4 table-based PDF template instead of browser-print-style flex/grid blocks.
+- Removed heavy framed supplier/buyer boxes from generated invoice HTML so Dompdf renders the document without overlapping the title and party details.
+- Kept the action path as true server-side PDF generation: `Сформувати і завантажити PDF` saves a `.pdf` file and redirects to download it.
+- Renamed HTML fallback links to `HTML` / `HTML-шаблон` so old fallback documents are not confused with real PDF files.
+- Made invoice editing controls in `assets/app.css` more compact: top fields wrap into a dense editor grid, item inputs are smaller, and status actions render as a clean button row.
+
+Test after deploy:
+
+1. Open `https://bph.com.ua/db/invoices.php`.
+2. Open an existing invoice for editing.
+3. Click `Сформувати і завантажити PDF`.
+4. Confirm the browser downloads a `.pdf` file, not an HTML page.
+5. Open the downloaded PDF and confirm there are no browser print headers/footers, no URL footer, and supplier/buyer details do not overlap the invoice title.
+
+Notes:
+
+- Existing invoices that were previously saved as HTML fallback need to be regenerated to create real PDF files.
+- If the system still shows the PDF renderer error after deploy, verify that GitHub Actions ran `composer install` and uploaded `vendor/dompdf/dompdf` to the server.
+- Local PHP lint was not run because PHP is not available in the local PATH or bundled runtime.
+
 ## Files Changed
 
 - `README.md`
@@ -42,8 +64,8 @@ This update fixes invoice numbering, PDF naming, recipient handling, and prepare
 - The invoice list and edit header show a `PDF` button instead of `File`; it downloads the real PDF as an attachment.
 - Invoice generation buttons now submit their own action directly, without a hidden `save_invoice` action overriding them.
 - Successful PDF generation now immediately redirects to the authenticated download endpoint.
-- If the server cannot render PDF, the page shows a clear Ukrainian error that `wkhtmltopdf`/PDF rendering is unavailable.
-- If only the fallback HTML template exists, the invoice registry shows `Друк/PDF`, which opens the authenticated print template so the browser can save it as PDF.
+- If the server cannot render PDF, the page shows a clear Ukrainian error that Dompdf/wkhtmltopdf rendering is unavailable.
+- If only the fallback HTML template exists, the invoice registry shows `HTML`, which opens the authenticated diagnostic template; it is not labeled as PDF.
 - Buyer/contact and company/legal recipient are separated:
   - buyer/contact = contact person
   - company/legal entity = invoice recipient/payer
