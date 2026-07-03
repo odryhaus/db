@@ -94,6 +94,10 @@ function ensure_invoice_tables(): void
             vat_amount_uah DECIMAL(14,2) NOT NULL DEFAULT 0,
             total_with_vat_uah DECIMAL(14,2) NOT NULL DEFAULT 0,
             payment_purpose VARCHAR(255) NULL,
+            payment_status ENUM('draft','waiting_payment','paid','problem','canceled') NOT NULL DEFAULT 'draft',
+            document_status ENUM('not_sent','sent','closed','problem') NOT NULL DEFAULT 'not_sent',
+            payment_due_date DATE NULL,
+            document_due_date DATE NULL,
             expected_payment_date DATE NULL,
             status ENUM('draft','sent','paid','docs_sent','docs_closed','canceled') NOT NULL DEFAULT 'draft',
             sent_at DATETIME NULL,
@@ -119,6 +123,10 @@ function ensure_invoice_tables(): void
     invoice_add_column_if_missing('db_invoices', 'client_legal_entity_id', 'INT UNSIGNED NULL');
     invoice_add_column_if_missing('db_invoices', 'buyer_contact_name', 'VARCHAR(255) NULL');
     invoice_add_column_if_missing('db_invoices', 'expected_payment_date', 'DATE NULL');
+    invoice_add_column_if_missing('db_invoices', 'payment_status', "ENUM('draft','waiting_payment','paid','problem','canceled') NOT NULL DEFAULT 'draft'");
+    invoice_add_column_if_missing('db_invoices', 'document_status', "ENUM('not_sent','sent','closed','problem') NOT NULL DEFAULT 'not_sent'");
+    invoice_add_column_if_missing('db_invoices', 'payment_due_date', 'DATE NULL');
+    invoice_add_column_if_missing('db_invoices', 'document_due_date', 'DATE NULL');
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS db_invoice_documents (
@@ -127,6 +135,12 @@ function ensure_invoice_tables(): void
             document_type ENUM('invoice','delivery_note','act') NOT NULL,
             document_date DATE NOT NULL,
             file_path VARCHAR(255) NOT NULL,
+            status ENUM('draft','generated','sent','signed','closed','canceled','problem') NOT NULL DEFAULT 'generated',
+            sent_at DATETIME NULL,
+            signed_at DATETIME NULL,
+            closed_at DATETIME NULL,
+            keycrm_file_id VARCHAR(80) NULL,
+            note TEXT NULL,
             created_by_user_id INT UNSIGNED NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -135,6 +149,12 @@ function ensure_invoice_tables(): void
             KEY idx_document_date (document_date)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    invoice_add_column_if_missing('db_invoice_documents', 'status', "ENUM('draft','generated','sent','signed','closed','canceled','problem') NOT NULL DEFAULT 'generated'");
+    invoice_add_column_if_missing('db_invoice_documents', 'sent_at', 'DATETIME NULL');
+    invoice_add_column_if_missing('db_invoice_documents', 'signed_at', 'DATETIME NULL');
+    invoice_add_column_if_missing('db_invoice_documents', 'closed_at', 'DATETIME NULL');
+    invoice_add_column_if_missing('db_invoice_documents', 'keycrm_file_id', 'VARCHAR(80) NULL');
+    invoice_add_column_if_missing('db_invoice_documents', 'note', 'TEXT NULL');
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS db_invoice_items (
@@ -146,20 +166,26 @@ function ensure_invoice_tables(): void
             quantity DECIMAL(12,3) NOT NULL DEFAULT 1,
             price_uah DECIMAL(14,2) NOT NULL DEFAULT 0,
             amount_uah DECIMAL(14,2) NOT NULL DEFAULT 0,
+            item_type ENUM('product','service','mixed','other') NOT NULL DEFAULT 'product',
             sort_order INT UNSIGNED NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             KEY idx_invoice_id (invoice_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    invoice_add_column_if_missing('db_invoice_items', 'item_type', "ENUM('product','service','mixed','other') NOT NULL DEFAULT 'product'");
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS db_client_companies (
             id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             keycrm_company_id INT UNSIGNED NULL,
+            display_name VARCHAR(255) NULL,
+            keycrm_name VARCHAR(255) NULL,
+            keycrm_title VARCHAR(255) NULL,
             name VARCHAR(255) NULL,
             title VARCHAR(255) NULL,
             manager_id INT UNSIGNED NULL,
+            note TEXT NULL,
             raw_json LONGTEXT NULL,
             synced_at DATETIME NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -167,6 +193,10 @@ function ensure_invoice_tables(): void
             KEY idx_keycrm_company_id (keycrm_company_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    invoice_add_column_if_missing('db_client_companies', 'display_name', 'VARCHAR(255) NULL');
+    invoice_add_column_if_missing('db_client_companies', 'keycrm_name', 'VARCHAR(255) NULL');
+    invoice_add_column_if_missing('db_client_companies', 'keycrm_title', 'VARCHAR(255) NULL');
+    invoice_add_column_if_missing('db_client_companies', 'note', 'TEXT NULL');
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS db_client_contacts (
@@ -177,6 +207,7 @@ function ensure_invoice_tables(): void
             email VARCHAR(190) NULL,
             phone VARCHAR(80) NULL,
             position VARCHAR(120) NULL,
+            note TEXT NULL,
             raw_json LONGTEXT NULL,
             synced_at DATETIME NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -184,6 +215,29 @@ function ensure_invoice_tables(): void
             KEY idx_keycrm_buyer_id (keycrm_buyer_id),
             KEY idx_client_company_id (client_company_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    invoice_add_column_if_missing('db_client_contacts', 'note', 'TEXT NULL');
+
+    $pdo->exec("
+        UPDATE db_invoices
+        SET payment_status = CASE
+                WHEN status = 'sent' THEN 'waiting_payment'
+                WHEN status = 'paid' THEN 'paid'
+                WHEN status IN ('docs_sent','docs_closed') THEN 'paid'
+                WHEN status = 'canceled' THEN 'canceled'
+                WHEN docs_status = 'problem' THEN 'problem'
+                ELSE payment_status
+            END,
+            document_status = CASE
+                WHEN docs_status = 'sent' THEN 'sent'
+                WHEN docs_status IN ('signed','closed') OR status = 'docs_closed' THEN 'closed'
+                WHEN docs_status = 'problem' THEN 'problem'
+                ELSE document_status
+            END,
+            payment_due_date = COALESCE(payment_due_date, expected_payment_date)
+        WHERE payment_status = 'draft'
+           OR document_status = 'not_sent'
+           OR payment_due_date IS NULL
     ");
 
     $pdo->exec("

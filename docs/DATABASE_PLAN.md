@@ -283,6 +283,10 @@ Main fields:
 - `vat_amount_uah`
 - `total_with_vat_uah`
 - `payment_purpose`
+- `payment_status`
+- `document_status`
+- `payment_due_date`
+- `document_due_date`
 - `expected_payment_date`
 - `status`
 - `sent_at`
@@ -305,16 +309,9 @@ Pages:
 Important:
 
 - `invoice_number` is the KeyCRM order number by default.
-- The visible registry status should stay simple:
-  - `draft` / Чернетка
-  - `sent` / Очікуємо оплату
-  - `paid` / Оплачено
-  - `docs_sent` / Документи відправлено
-  - `docs_closed` / Документи закрито
-  - `canceled` / Скасовано
-- `docs_status = problem` can override the visible workflow as `Проблема`.
-- `expected_payment_date` is editable in the registry. If empty, UI may calculate a fallback from `sent_at + 3 days`.
-- Long-term, `pdf_file_path` is legacy/fallback. The correct document list is `db_invoice_documents`.
+- Payment status and document status are separate in UI.
+- `payment_due_date` is editable in the registry. If empty, UI may calculate a fallback from `sent_at + 3 days`.
+- `status`, `docs_status`, `expected_payment_date`, and `pdf_file_path` are legacy/fallback compatibility fields while UI moves to `payment_status`, `document_status`, `payment_due_date`, and `db_invoice_documents`.
 
 ### db_invoice_documents
 
@@ -340,6 +337,12 @@ Current/planned fields:
 - `document_type`
 - `document_date`
 - `file_path`
+- `status`
+- `sent_at`
+- `signed_at`
+- `closed_at`
+- `keycrm_file_id`
+- `note`
 - `created_by_user_id`
 - `created_at`
 - `updated_at`
@@ -347,14 +350,8 @@ Current/planned fields:
 Recommended additional fields:
 
 - `document_number`
-- `status`
-- `sent_at`
-- `signed_at`
-- `closed_at`
-- `keycrm_file_id`
 - `download_count`
 - `last_downloaded_at`
-- `note`
 
 Recommended `document_type` values:
 
@@ -400,6 +397,7 @@ Main fields:
 - `id`
 - `invoice_id`
 - `source_product_id`
+- `item_type`
 - `title`
 - `unit`
 - `quantity`
@@ -415,7 +413,6 @@ Pages:
 
 Recommended additional fields:
 
-- `item_type`
 - `source_product_name`
 - `source_product_sku`
 - `source_offer_id`
@@ -453,9 +450,13 @@ Main fields:
 
 - `id`
 - `keycrm_company_id`
+- `display_name`
+- `keycrm_name`
+- `keycrm_title`
 - `name`
 - `title`
 - `manager_id`
+- `note`
 - `raw_json`
 - `synced_at`
 - `created_at`
@@ -486,6 +487,7 @@ Main fields:
 - `email`
 - `phone`
 - `position`
+- `note`
 - `raw_json`
 - `synced_at`
 - `created_at`

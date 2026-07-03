@@ -176,6 +176,9 @@ Decision:
 - Create only project-owned additive tables: `db_our_companies`, `db_invoices`, `db_invoice_items`, `db_invoice_documents`, and local client snapshot tables.
 - Invoice rows and item rows are editable local copies copied from `db_orders.raw_json`.
 - Generated invoice, delivery note, and act files belong in `db_invoice_documents` so multiple documents can exist for one invoice/order.
+- Payment workflow and document workflow are separate:
+  - `payment_status` controls draft/waiting/paid/problem/canceled.
+  - `document_status` controls not sent/sent/closed/problem.
 - Do not change KeyCRM orders.
 - Do not write payment statuses to KeyCRM.
 - Do not attach generated files to KeyCRM in v0.1.

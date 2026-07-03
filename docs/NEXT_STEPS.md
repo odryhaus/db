@@ -98,13 +98,10 @@ The next milestone should:
 
 - Review `docs/DATABASE_PLAN.md` section `Invoice / Document Data Gap Analysis`.
 - Decide the minimum invoice data additions for v0.2:
-  - `payment_terms_days`
   - `next_follow_up_at`
   - `last_reminder_at`
   - `reminder_count`
-  - document-level `status`
-  - document-level `keycrm_file_id`
-  - invoice item `item_type`
+  - invoice event/audit table
 - Run CEO manual sync for current and previous month.
 - Test invoice creation from several real KeyCRM orders in `db_orders`.
 - Compare extracted invoice products, buyer/company data, and totals against KeyCRM.

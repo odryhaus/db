@@ -9,11 +9,12 @@ This folder is intentionally small. Use this page as the map.
 - `NEXT_STEPS.md` — current deploy checklist and next implementation milestones.
 - `KNOWN_ISSUES.md` — active limitations and risks.
 - `CRM_SYNC_PLAN.md` — KeyCRM sync architecture and old `/brand-dashboard` analysis.
+- `IMPLEMENTATION_REPORT.md` — short report for the latest implementation milestone.
 
 ## Archived Documents
 
 - `archive/AUTH_MVP_PLAN.md` — original authentication MVP plan; historical only.
-- `archive/IMPLEMENTATION_REPORT.md` — historical implementation log; not the source of truth.
+- `archive/IMPLEMENTATION_REPORT.md` — long historical implementation log; not the current source of truth.
 
 ## Source Of Truth Rules
 
