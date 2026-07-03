@@ -350,6 +350,17 @@ button:hover,
     border-color: var(--line-strong);
 }
 
+.button-danger {
+    border: 1px solid var(--danger);
+    background: var(--danger);
+    color: #fff;
+}
+
+.button-danger:hover {
+    background: #8f1414;
+    border-color: #8f1414;
+}
+
 .small-button {
     padding: 6px 10px;
     font-size: 12px;
@@ -674,6 +685,29 @@ button:hover,
     font-weight: 600;
 }
 
+.flag-danger-cell {
+    box-shadow: inset 3px 0 0 var(--danger);
+}
+
+.invoice-items-table .actions-cell {
+    width: 1%;
+}
+
+.invoice-remove-row {
+    padding: 5px 8px;
+    color: var(--muted);
+}
+
+.invoice-remove-row:hover {
+    border-color: var(--danger-border);
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.invoice-add-row {
+    align-self: flex-start;
+}
+
 td small {
     display: block;
     margin-top: 2px;
@@ -728,7 +762,7 @@ td small {
 }
 
 .compact-kpis {
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(180px, 220px));
 }
 
 .kpi-card {
@@ -1068,16 +1102,6 @@ tr:last-child td {
     .expense-form {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-
-    .invoice-edit-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .invoice-edit-grid .wide-field,
-    .invoice-edit-grid .full-field,
-    .invoice-edit-grid .section-label {
-        grid-column: 1 / -1;
-    }
 }
 
 @media (max-width: 680px) {
@@ -1127,8 +1151,9 @@ tr:last-child td {
         grid-template-columns: 1fr;
     }
 
-    .invoice-edit-grid {
-        grid-template-columns: 1fr;
+    .invoice-edit-grid label,
+    .invoice-edit-grid .wide-field {
+        flex-basis: 100%;
     }
 
     .action-panel {

@@ -176,6 +176,29 @@ function invoice_workflow_badge(array $invoice): string
     return '<span class="status-badge ' . $class . '">' . e($label) . '</span>';
 }
 
+function invoice_expected_due_timestamp(array $invoice): ?int
+{
+    $dueDate = (string) ($invoice['expected_payment_date'] ?? '');
+    if ($dueDate !== '') {
+        $time = strtotime($dueDate);
+        return $time ?: null;
+    }
+
+    $baseDate = (string) (($invoice['sent_at'] ?? '') ?: (($invoice['invoice_date'] ?? '') ?: date('Y-m-d')));
+    $time = strtotime($baseDate . ' +3 days');
+    return $time ?: null;
+}
+
+function invoice_is_overdue(array $invoice): bool
+{
+    if ((string) ($invoice['status'] ?? '') !== 'sent') {
+        return false;
+    }
+
+    $dueTime = invoice_expected_due_timestamp($invoice);
+    return $dueTime !== null && $dueTime < strtotime('today');
+}
+
 function invoice_payment_control_label(array $invoice): string
 {
     $status = (string) ($invoice['status'] ?? 'draft');
@@ -192,13 +215,7 @@ function invoice_payment_control_label(array $invoice): string
         return '<span class="status-badge status-badge--success">оплачено' . ($paidAt !== '' ? ' ' . e($paidAt) : '') . '</span>';
     }
     if ($status === 'sent') {
-        $dueDate = (string) ($invoice['expected_payment_date'] ?? '');
-        if ($dueDate === '') {
-            $baseDate = (string) ($invoice['sent_at'] ?: $invoice['invoice_date'] ?: date('Y-m-d'));
-            $dueTime = strtotime($baseDate . ' +3 days');
-        } else {
-            $dueTime = strtotime($dueDate);
-        }
+        $dueTime = invoice_expected_due_timestamp($invoice);
         if ($dueTime) {
             $class = $dueTime < strtotime('today') ? 'status-badge--danger' : 'status-badge--warning';
             return '<span class="status-badge ' . $class . '">' . e(date('d.m.Y', $dueTime)) . '</span>';
@@ -1227,6 +1244,8 @@ if ($invoiceIds) {
 $draftCount = 0;
 $paidCount = 0;
 $openTotal = 0;
+$overdueCount = 0;
+$overdueTotal = 0;
 foreach ($invoices as $invoiceRow) {
     if ((string) $invoiceRow['status'] === 'draft') {
         $draftCount++;
@@ -1236,6 +1255,10 @@ foreach ($invoices as $invoiceRow) {
     }
     if (!in_array((string) $invoiceRow['status'], ['paid', 'canceled'], true)) {
         $openTotal += (float) $invoiceRow['total_with_vat_uah'];
+    }
+    if (invoice_is_overdue($invoiceRow)) {
+        $overdueCount++;
+        $overdueTotal += (float) $invoiceRow['total_with_vat_uah'];
     }
 }
 ?>
@@ -1282,6 +1305,11 @@ foreach ($invoices as $invoiceRow) {
                 <span class="label">Відкрито</span>
                 <strong><?= e(invoice_money($openTotal)) ?></strong>
                 <small>не оплачено і не скасовано</small>
+            </div>
+            <div class="kpi-card <?= $overdueCount > 0 ? 'danger' : '' ?>">
+                <span class="label">Прострочено</span>
+                <strong><?= e(invoice_money($overdueTotal)) ?></strong>
+                <small><?= e((string) $overdueCount) ?> рахунків після дедлайну оплати</small>
             </div>
             <div class="kpi-card">
                 <span class="label">Чернетки</span>
@@ -1442,7 +1470,7 @@ foreach ($invoices as $invoiceRow) {
                     </div>
 
                     <div class="table-wrap">
-                        <table class="invoice-items-table">
+                        <table class="invoice-items-table" id="invoice-items-table">
                             <thead>
                                 <tr>
                                     <th>Назва</th>
@@ -1450,6 +1478,7 @@ foreach ($invoices as $invoiceRow) {
                                     <th class="num">К-сть</th>
                                     <th class="num">Ціна</th>
                                     <th class="num">Разом</th>
+                                    <th class="actions-cell"></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1457,17 +1486,19 @@ foreach ($invoices as $invoiceRow) {
                                     <tr>
                                         <td>
                                             <input type="hidden" name="item_source_product_id[]" value="<?= e((string) ($item['source_product_id'] ?? '')) ?>">
-                                            <input name="item_title[]" value="<?= e((string) $item['title']) ?>">
+                                            <input name="item_title[]" required value="<?= e((string) $item['title']) ?>">
                                         </td>
                                         <td><input class="mini-input" name="item_unit[]" value="<?= e((string) $item['unit']) ?>"></td>
                                         <td><input class="mini-input num-input" type="number" step="0.001" min="0" name="item_quantity[]" value="<?= e((string) $item['quantity']) ?>"></td>
                                         <td><input class="money-input" type="number" step="0.01" min="0" name="item_price_uah[]" value="<?= e((string) $item['price_uah']) ?>"></td>
                                         <td><input class="money-input" type="number" step="0.01" min="0" name="item_amount_uah[]" value="<?= e((string) $item['amount_uah']) ?>"></td>
+                                        <td class="actions-cell"><button type="button" class="button-secondary small-button invoice-remove-row">Видалити</button></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
+                    <button type="button" class="button-secondary small-button invoice-add-row">+ Додати рядок</button>
 
                     <div class="invoice-actions">
                         <button type="submit" name="action" value="save_invoice">Зберегти</button>
@@ -1492,7 +1523,11 @@ foreach ($invoices as $invoiceRow) {
                             <input type="hidden" name="action" value="status">
                             <input type="hidden" name="id" value="<?= e((string) $editInvoice['id']) ?>">
                             <input type="hidden" name="status_action" value="<?= e($statusAction) ?>">
-                            <button type="submit" class="<?= $statusAction === 'canceled' ? '' : 'button-secondary' ?> small-button"><?= e($label) ?></button>
+                            <button
+                                type="submit"
+                                class="<?= $statusAction === 'canceled' ? 'button-danger' : 'button-secondary' ?> small-button"
+                                <?= $statusAction === 'canceled' ? 'data-confirm="Скасувати рахунок ' . e((string) $editInvoice['invoice_number']) . '?"' : '' ?>
+                            ><?= e($label) ?></button>
                         </form>
                     <?php endforeach; ?>
                 </div>
@@ -1511,7 +1546,7 @@ foreach ($invoices as $invoiceRow) {
                     <thead>
                         <tr>
                             <th>Номер</th>
-                            <th>PDF</th>
+                            <th>Документи</th>
                             <th>Дата</th>
                             <th>Одержувач / контакт</th>
                             <th>Постачальник</th>
@@ -1527,7 +1562,7 @@ foreach ($invoices as $invoiceRow) {
                         <?php endif; ?>
                         <?php foreach ($invoices as $invoiceRow): ?>
                             <tr>
-                                <td><strong><?= e((string) $invoiceRow['invoice_number']) ?></strong></td>
+                                <td class="<?= invoice_is_overdue($invoiceRow) ? 'flag-danger-cell' : '' ?>"><strong><?= e((string) $invoiceRow['invoice_number']) ?></strong></td>
                                 <td>
                                     <div class="invoice-doc-actions">
                                     <?php if (!empty($invoiceDocuments[(int) $invoiceRow['id']])): ?>
@@ -1563,7 +1598,7 @@ foreach ($invoices as $invoiceRow) {
                                         <input type="hidden" name="action" value="status">
                                         <input type="hidden" name="id" value="<?= e((string) $invoiceRow['id']) ?>">
                                         <input type="hidden" name="return_to" value="registry">
-                                        <select name="status_action" class="compact-select" onchange="this.form.submit()">
+                                        <select name="status_action" class="compact-select registry-status-select" data-invoice-number="<?= e((string) $invoiceRow['invoice_number']) ?>">
                                             <?php
                                             $registryStatus = (string) $invoiceRow['status'];
                                             if ((string) $invoiceRow['docs_status'] === 'problem') {
@@ -1630,6 +1665,65 @@ foreach ($invoices as $invoiceRow) {
                 if (fields.address) fields.address.value = option.dataset.address || '';
                 if (fields.email) fields.email.value = option.dataset.email || '';
                 if (fields.phone) fields.phone.value = option.dataset.phone || '';
+            });
+        })();
+
+        (function () {
+            var table = document.getElementById('invoice-items-table');
+            var addButton = document.querySelector('.invoice-add-row');
+            if (!table || !addButton) {
+                return;
+            }
+            var tbody = table.querySelector('tbody');
+
+            function rowCount() {
+                return tbody.querySelectorAll('tr').length;
+            }
+
+            table.addEventListener('click', function (event) {
+                var button = event.target.closest('.invoice-remove-row');
+                if (!button) {
+                    return;
+                }
+                if (rowCount() <= 1) {
+                    return;
+                }
+                button.closest('tr').remove();
+            });
+
+            addButton.addEventListener('click', function () {
+                var templateRow = tbody.querySelector('tr');
+                if (!templateRow) {
+                    return;
+                }
+                var row = templateRow.cloneNode(true);
+                row.querySelectorAll('input').forEach(function (input) {
+                    input.value = input.name === 'item_unit[]' ? 'шт' : '';
+                });
+                tbody.appendChild(row);
+            });
+        })();
+
+        (function () {
+            document.querySelectorAll('[data-confirm]').forEach(function (button) {
+                button.addEventListener('click', function (event) {
+                    if (!window.confirm(button.dataset.confirm)) {
+                        event.preventDefault();
+                    }
+                });
+            });
+        })();
+
+        (function () {
+            document.querySelectorAll('.registry-status-select').forEach(function (select) {
+                select.addEventListener('change', function () {
+                    if (select.value === 'canceled' && !window.confirm('Скасувати рахунок ' + (select.dataset.invoiceNumber || '') + '?')) {
+                        select.value = select.dataset.previousValue || select.value;
+                        return;
+                    }
+                    select.form.submit();
+                });
+                select.dataset.previousValue = select.value;
             });
         })();
     </script>
