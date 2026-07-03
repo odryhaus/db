@@ -20,6 +20,9 @@ This update fixes invoice numbering, PDF naming, recipient handling, and prepare
 - Kept the action path as true server-side PDF generation: `Сформувати і завантажити PDF` saves a `.pdf` file and redirects to download it.
 - Renamed HTML fallback links to `HTML` / `HTML-шаблон` so old fallback documents are not confused with real PDF files.
 - Made invoice editing controls in `assets/app.css` more compact: top fields wrap into a dense editor grid, item inputs are smaller, and status actions render as a clean button row.
+- Refined `Реєстр рахунків` into the main working invoice list: removed duplicate KeyCRM/document columns, moved PDF/HTML links into the PDF column, added a compact payment-control column, and changed the edit action to a primary `Редагувати` button.
+- Simplified the visible invoice workflow into one status: `Чернетка`, `Очікуємо оплату`, `Оплачено`, `Документи відправлено`, `Документи закрито`, `Проблема`, or `Скасовано`.
+- Payment control currently uses the existing 3-day invoice validity rule: after `Надіслано клієнту`, the registry shows the expected payment date as `sent_at + 3 days`; if overdue, it shows a reminder badge.
 
 Test after deploy:
 

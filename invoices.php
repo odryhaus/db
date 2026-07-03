@@ -128,6 +128,76 @@ function invoice_docs_badge(string $status): string
     return '<span class="status-badge ' . $class . '">' . e(invoice_docs_status_label($status)) . '</span>';
 }
 
+function invoice_workflow_label(array $invoice): string
+{
+    $status = (string) ($invoice['status'] ?? 'draft');
+    $docsStatus = (string) ($invoice['docs_status'] ?? 'not_sent');
+
+    if ($status === 'canceled') {
+        return 'Скасовано';
+    }
+    if ($docsStatus === 'problem') {
+        return 'Проблема';
+    }
+    if ($status === 'docs_closed' || $docsStatus === 'closed') {
+        return 'Документи закрито';
+    }
+    if ($status === 'docs_sent' || $docsStatus === 'sent') {
+        return 'Документи відправлено';
+    }
+    if ($status === 'paid') {
+        return 'Оплачено';
+    }
+    if ($status === 'sent') {
+        return 'Очікуємо оплату';
+    }
+
+    return 'Чернетка';
+}
+
+function invoice_workflow_badge(array $invoice): string
+{
+    $label = invoice_workflow_label($invoice);
+    $class = 'status-badge--muted';
+    if (in_array($label, ['Оплачено', 'Документи закрито'], true)) {
+        $class = 'status-badge--success';
+    } elseif (in_array($label, ['Очікуємо оплату', 'Документи відправлено'], true)) {
+        $class = 'status-badge--warning';
+    } elseif (in_array($label, ['Проблема', 'Скасовано'], true)) {
+        $class = 'status-badge--danger';
+    }
+
+    return '<span class="status-badge ' . $class . '">' . e($label) . '</span>';
+}
+
+function invoice_payment_control_label(array $invoice): string
+{
+    $status = (string) ($invoice['status'] ?? 'draft');
+    $docsStatus = (string) ($invoice['docs_status'] ?? 'not_sent');
+
+    if ($docsStatus === 'problem') {
+        return '<span class="status-badge status-badge--danger">потрібна дія</span>';
+    }
+    if ($status === 'canceled') {
+        return '<span class="status-badge status-badge--muted">скасовано</span>';
+    }
+    if ($status === 'paid' || $status === 'docs_sent' || $status === 'docs_closed') {
+        $paidAt = !empty($invoice['paid_at']) ? invoice_date_label((string) $invoice['paid_at']) : '';
+        return '<span class="status-badge status-badge--success">оплачено' . ($paidAt !== '' ? ' ' . e($paidAt) : '') . '</span>';
+    }
+    if ($status === 'sent') {
+        $baseDate = (string) ($invoice['sent_at'] ?: $invoice['invoice_date'] ?: date('Y-m-d'));
+        $dueTime = strtotime($baseDate . ' +3 days');
+        if ($dueTime) {
+            $class = $dueTime < strtotime('today') ? 'status-badge--danger' : 'status-badge--warning';
+            $prefix = $dueTime < strtotime('today') ? 'нагадати з ' : 'до ';
+            return '<span class="status-badge ' . $class . '">' . e($prefix . date('d.m.Y', $dueTime)) . '</span>';
+        }
+    }
+
+    return '<span class="status-badge status-badge--muted">не відправлено</span>';
+}
+
 function invoice_get_path(array $data, array $paths)
 {
     foreach ($paths as $path) {
@@ -1104,7 +1174,7 @@ foreach ($invoices as $invoiceRow) {
                 <div class="section-heading">
                     <div>
                         <span class="label">Редагування</span>
-                        <h2><?= e((string) $editInvoice['invoice_number']) ?> · <?= invoice_status_badge((string) $editInvoice['status']) ?> <?= invoice_docs_badge((string) $editInvoice['docs_status']) ?></h2>
+                        <h2><?= e((string) $editInvoice['invoice_number']) ?> · <?= invoice_workflow_badge($editInvoice) ?></h2>
                     </div>
                     <div class="row-actions">
                         <?php if (invoice_pdf_available($editInvoice)): ?>
@@ -1266,7 +1336,7 @@ foreach ($invoices as $invoiceRow) {
 
                 <div class="invoice-status-actions">
                     <span class="label">Статус</span>
-                    <?php foreach (['sent' => 'Sent to client', 'paid' => 'Paid', 'docs_sent' => 'Docs sent', 'docs_closed' => 'Docs closed', 'problem' => 'Problem', 'canceled' => 'Cancel'] as $statusAction => $label): ?>
+                    <?php foreach (['sent' => 'Надіслано клієнту', 'paid' => 'Оплачено', 'docs_sent' => 'Документи надіслані', 'docs_closed' => 'Документи закриті', 'problem' => 'Проблема', 'canceled' => 'Скасувати'] as $statusAction => $label): ?>
                         <form method="post" action="<?= e(base_path('/invoices.php?edit=' . (int) $editInvoice['id'])) ?>">
                             <?= csrf_field() ?>
                             <input type="hidden" name="action" value="status">
@@ -1282,7 +1352,7 @@ foreach ($invoices as $invoiceRow) {
         <section class="panel table-panel">
             <div class="section-heading padded">
                 <div>
-                    <span class="label">Останні 100</span>
+                    <span class="label">Основний список для роботи</span>
                     <h2>Реєстр рахунків</h2>
                 </div>
             </div>
@@ -1293,33 +1363,34 @@ foreach ($invoices as $invoiceRow) {
                             <th>Номер</th>
                             <th>PDF</th>
                             <th>Дата</th>
-                            <th>KeyCRM</th>
                             <th>Одержувач / контакт</th>
                             <th>Постачальник</th>
                             <th class="num">Сума</th>
                             <th>Статус</th>
-                            <th>Документи</th>
-                            <th></th>
+                            <th>Контроль оплати</th>
+                            <th>Дія</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (!$invoices): ?>
-                            <tr><td colspan="10">Рахунків ще немає.</td></tr>
+                            <tr><td colspan="9">Рахунків ще немає.</td></tr>
                         <?php endif; ?>
                         <?php foreach ($invoices as $invoiceRow): ?>
                             <tr>
-                                <td><?= e((string) $invoiceRow['invoice_number']) ?></td>
+                                <td><strong><?= e((string) $invoiceRow['invoice_number']) ?></strong></td>
                                 <td>
                                     <?php if (invoice_pdf_available($invoiceRow)): ?>
-                                        <span class="status-badge status-badge--success"><?= e(((string) $invoiceRow['document_type'] === 'delivery_note' ? 'DN_' : 'INV_') . (string) $invoiceRow['invoice_number']) ?></span>
+                                        <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>">PDF</a>
                                     <?php elseif (invoice_print_template_available($invoiceRow)): ?>
-                                        <span class="status-badge status-badge--warning">HTML</span>
+                                        <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>" target="_blank">HTML</a>
                                     <?php else: ?>
                                         <span class="status-badge status-badge--muted">немає</span>
                                     <?php endif; ?>
                                 </td>
-                                <td><?= e((string) $invoiceRow['invoice_date']) ?></td>
-                                <td><?= e((string) ($invoiceRow['keycrm_order_id'] ?: '—')) ?></td>
+                                <td>
+                                    <?= e(invoice_date_label((string) $invoiceRow['invoice_date'])) ?>
+                                    <small><?= e(!empty($invoiceRow['updated_at']) ? 'оновлено ' . date('d.m H:i', strtotime((string) $invoiceRow['updated_at'])) : 'створено ' . date('d.m H:i', strtotime((string) $invoiceRow['created_at']))) ?></small>
+                                </td>
                                 <td class="wrap">
                                     <?= e((string) ($invoiceRow['buyer_display_name'] ?: '—')) ?>
                                     <?php if (!empty($invoiceRow['buyer_contact_name'])): ?>
@@ -1328,16 +1399,11 @@ foreach ($invoices as $invoiceRow) {
                                 </td>
                                 <td><?= e((string) ($invoiceRow['seller_short_name'] ?: '—')) ?></td>
                                 <td class="num"><?= e(invoice_money($invoiceRow['total_with_vat_uah'] ?? 0)) ?></td>
-                                <td><?= invoice_status_badge((string) $invoiceRow['status']) ?></td>
-                                <td><?= invoice_docs_badge((string) $invoiceRow['docs_status']) ?></td>
+                                <td><?= invoice_workflow_badge($invoiceRow) ?></td>
+                                <td><?= invoice_payment_control_label($invoiceRow) ?></td>
                                 <td>
                                     <div class="row-actions">
-                                        <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?edit=' . (int) $invoiceRow['id'])) ?>">Edit</a>
-                                        <?php if (invoice_pdf_available($invoiceRow)): ?>
-                                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>">PDF</a>
-                                        <?php elseif (invoice_print_template_available($invoiceRow)): ?>
-                                            <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php?download=' . (int) $invoiceRow['id'])) ?>" target="_blank">HTML</a>
-                                        <?php endif; ?>
+                                        <a class="button small-button" href="<?= e(base_path('/invoices.php?edit=' . (int) $invoiceRow['id'])) ?>">Редагувати</a>
                                     </div>
                                 </td>
                             </tr>
