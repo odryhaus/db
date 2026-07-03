@@ -23,18 +23,24 @@
     --accent-hover: #000000;
     --accent-soft: #eef0f2;
 
-    /* semantic status colors — used only for badges/thin borders, never large fills */
-    --danger: #b91c1c;
-    --danger-soft: #fdf2f2;
-    --danger-border: #f3c6c6;
+    /* semantic status colors — used for badges/thin borders/small text */
+    --danger: #dc2626;
+    --danger-soft: #fef1f1;
+    --danger-border: #f7b9b9;
 
-    --warning: #92400e;
-    --warning-soft: #fdf6ec;
-    --warning-border: #efd8ad;
+    --warning: #b45309;
+    --warning-soft: #fff5e0;
+    --warning-border: #fbd48c;
 
-    --success: #0f6b46;
-    --success-soft: #eef7f2;
-    --success-border: #c3e2d2;
+    --success: #15803d;
+    --success-soft: #e8f8ee;
+    --success-border: #a3e2bb;
+
+    /* vivid chart fills — used only for solid bar/dot chart segments, not text */
+    --chart-green: #22c55e;
+    --chart-amber: #fbbf24;
+    --chart-red: #f43f5e;
+    --chart-blue: #3b82f6;
 
     /* radius */
     --radius-sm: 6px;
@@ -357,8 +363,8 @@ button:hover,
 }
 
 .button-danger:hover {
-    background: #8f1414;
-    border-color: #8f1414;
+    background: #b91c1c;
+    border-color: #b91c1c;
 }
 
 .small-button {
@@ -897,11 +903,11 @@ td small {
 }
 
 .stack-bar-paid {
-    background: var(--success);
+    background: var(--chart-green);
 }
 
 .stack-bar-unpaid {
-    background: var(--warning);
+    background: var(--chart-amber);
 }
 
 .stack-bar-legend {
@@ -923,11 +929,11 @@ td small {
 }
 
 .dot-success {
-    background: var(--success);
+    background: var(--chart-green);
 }
 
 .dot-warning {
-    background: var(--warning);
+    background: var(--chart-amber);
 }
 
 /* aging / debt-age chips */
