@@ -1255,6 +1255,31 @@ tr:last-child td {
     color: var(--muted);
 }
 
+.client-stack {
+    display: grid;
+    gap: 6px;
+    min-width: 260px;
+}
+
+.client-stack div {
+    display: grid;
+    gap: 1px;
+}
+
+.client-stack strong,
+.client-stack span {
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.25;
+}
+
+.client-stack small {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
 /* ==========================================================================
    Debug pages (KeyCRM inspector) — kept for internal tooling
    ========================================================================== */

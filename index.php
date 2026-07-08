@@ -100,8 +100,17 @@ function dashboard_raw_id(array $order, array $paths): int
 
 function dashboard_cached_client_name(array $order): string
 {
+    $company = dashboard_cached_company($order);
+    if ($company !== '') {
+        return $company;
+    }
+
+    return dashboard_cached_contact_name($order);
+}
+
+function dashboard_cached_company(array $order): string
+{
     static $companies = [];
-    static $contacts = [];
 
     $companyId = (int) (($order['company_id'] ?? 0) ?: dashboard_raw_id($order, ['company.id', 'company_id', 'buyer.company.id', 'buyer.company_id']));
     if ($companyId > 0) {
@@ -121,6 +130,13 @@ function dashboard_cached_client_name(array $order): string
             return $companies[$companyId];
         }
     }
+
+    return '';
+}
+
+function dashboard_cached_contact_name(array $order): string
+{
+    static $contacts = [];
 
     $buyerId = (int) (($order['buyer_id'] ?? 0) ?: dashboard_raw_id($order, ['buyer.id', 'buyer_id']));
     if ($buyerId > 0) {
@@ -144,7 +160,7 @@ function dashboard_cached_client_name(array $order): string
     return '';
 }
 
-function dashboard_raw_client_name(array $order): string
+function dashboard_raw_company_name(array $order): string
 {
     $raw = json_decode((string) ($order['raw_json'] ?? ''), true);
     if (!is_array($raw)) {
@@ -154,15 +170,62 @@ function dashboard_raw_client_name(array $order): string
     $buyer = is_array($raw['buyer'] ?? null) ? $raw['buyer'] : [];
     $buyerCompany = is_array($buyer['company'] ?? null) ? $buyer['company'] : [];
     $company = is_array($raw['company'] ?? null) ? $raw['company'] : $buyerCompany;
-    $client = is_array($raw['client'] ?? null) ? $raw['client'] : [];
+
+    foreach ([
+        $company['name'] ?? null,
+        $buyerCompany['name'] ?? null,
+    ] as $value) {
+        $value = trim((string) $value);
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    return '';
+}
+
+function dashboard_raw_legal_name(array $order): string
+{
+    $raw = json_decode((string) ($order['raw_json'] ?? ''), true);
+    if (!is_array($raw)) {
+        return '';
+    }
+
+    $buyer = is_array($raw['buyer'] ?? null) ? $raw['buyer'] : [];
+    $buyerCompany = is_array($buyer['company'] ?? null) ? $buyer['company'] : [];
+    $company = is_array($raw['company'] ?? null) ? $raw['company'] : $buyerCompany;
 
     foreach ([
         $company['title'] ?? null,
         $company['full_name'] ?? null,
-        $company['name'] ?? null,
         $buyerCompany['title'] ?? null,
         $buyerCompany['full_name'] ?? null,
-        $buyerCompany['name'] ?? null,
+    ] as $value) {
+        $value = trim((string) $value);
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    return '';
+}
+
+function dashboard_raw_client_name(array $order): string
+{
+    $company = dashboard_raw_legal_name($order) ?: dashboard_raw_company_name($order);
+    if ($company !== '') {
+        return $company;
+    }
+
+    $raw = json_decode((string) ($order['raw_json'] ?? ''), true);
+    if (!is_array($raw)) {
+        return '';
+    }
+
+    $buyer = is_array($raw['buyer'] ?? null) ? $raw['buyer'] : [];
+    $client = is_array($raw['client'] ?? null) ? $raw['client'] : [];
+
+    foreach ([
         $buyer['full_name'] ?? null,
         $buyer['name'] ?? null,
         $client['full_name'] ?? null,
@@ -521,18 +584,41 @@ try {
     $clientDebtMap = [];
     foreach ($clientDebtRowsStmt->fetchAll() as $debtRow) {
         $name = dashboard_client_name($debtRow);
+        $companyDisplay = (string) (($debtRow['company_name'] ?? '') ?: ($debtRow['local_company_name'] ?? '') ?: dashboard_raw_company_name($debtRow) ?: dashboard_cached_company($debtRow));
+        $legalDisplay = (string) (dashboard_raw_legal_name($debtRow) ?: $companyDisplay);
+        $contactName = (string) (($debtRow['buyer_name'] ?? '') ?: ($debtRow['local_contact_name'] ?? '') ?: dashboard_cached_contact_name($debtRow));
+        $contactPhone = (string) (($debtRow['buyer_phone'] ?? '') ?: ($debtRow['local_contact_phone'] ?? '') ?: dashboard_raw_contact_value($debtRow, 'phone'));
+        $contactEmail = (string) (($debtRow['buyer_email'] ?? '') ?: ($debtRow['local_contact_email'] ?? '') ?: dashboard_raw_contact_value($debtRow, 'email'));
         $keyId = (int) (($debtRow['company_id'] ?? 0) ?: ($debtRow['buyer_id'] ?? 0) ?: ($debtRow['client_id'] ?? 0));
         $key = $keyId > 0 ? 'id:' . $keyId : 'name:' . strtolower($name);
         if (!isset($clientDebtMap[$key])) {
             $clientDebtMap[$key] = [
                 'client_key' => $keyId,
                 'client_name' => $name !== '—' ? $name : 'Без клієнта',
+                'company_display' => $companyDisplay,
+                'legal_display' => $legalDisplay,
+                'contact_display' => $contactName,
                 'total_unpaid' => 0,
                 'unpaid_count' => 0,
                 'oldest_ordered_at' => $debtRow['ordered_at'] ?? null,
-                'contact_phone' => (string) (($debtRow['buyer_phone'] ?? '') ?: ($debtRow['local_contact_phone'] ?? '') ?: dashboard_raw_contact_value($debtRow, 'phone')),
-                'contact_email' => (string) (($debtRow['buyer_email'] ?? '') ?: ($debtRow['local_contact_email'] ?? '') ?: dashboard_raw_contact_value($debtRow, 'email')),
+                'contact_phone' => $contactPhone,
+                'contact_email' => $contactEmail,
             ];
+        }
+        if ($clientDebtMap[$key]['company_display'] === '' && $companyDisplay !== '') {
+            $clientDebtMap[$key]['company_display'] = $companyDisplay;
+        }
+        if ($clientDebtMap[$key]['legal_display'] === '' && $legalDisplay !== '') {
+            $clientDebtMap[$key]['legal_display'] = $legalDisplay;
+        }
+        if ($clientDebtMap[$key]['contact_display'] === '' && $contactName !== '') {
+            $clientDebtMap[$key]['contact_display'] = $contactName;
+        }
+        if ($clientDebtMap[$key]['contact_phone'] === '' && $contactPhone !== '') {
+            $clientDebtMap[$key]['contact_phone'] = $contactPhone;
+        }
+        if ($clientDebtMap[$key]['contact_email'] === '' && $contactEmail !== '') {
+            $clientDebtMap[$key]['contact_email'] = $contactEmail;
         }
         $clientDebtMap[$key]['total_unpaid'] += (float) ($debtRow['unpaid_amount_uah'] ?? 0);
         $clientDebtMap[$key]['unpaid_count']++;
@@ -1042,7 +1128,6 @@ try {
                     <thead>
                         <tr>
                             <th>Клієнт</th>
-                            <th>Контакт</th>
                             <th>Найстаріше</th>
                             <th class="num">Борг</th>
                             <th class="num">Замовлень</th>
@@ -1051,15 +1136,32 @@ try {
                     </thead>
                     <tbody>
                         <?php if (!$clientDebt): ?>
-                            <tr><td colspan="6">Клієнтів з боргом немає.</td></tr>
+                            <tr><td colspan="5">Клієнтів з боргом немає.</td></tr>
                         <?php endif; ?>
                         <?php foreach ($clientDebt as $client): ?>
                             <tr>
-                                <td><?= e((string) $client['client_name']) ?></td>
                                 <td>
-                                    <?php if (!empty($client['contact_phone'])): ?><?= e((string) $client['contact_phone']) ?><br><?php endif; ?>
-                                    <?php if (!empty($client['contact_email'])): ?><small><?= e((string) $client['contact_email']) ?></small><?php endif; ?>
-                                    <?php if (empty($client['contact_phone']) && empty($client['contact_email'])): ?>—<?php endif; ?>
+                                    <div class="client-stack">
+                                        <div>
+                                            <strong><?= e((string) (($client['company_display'] ?? '') ?: ($client['client_name'] ?? 'Без клієнта'))) ?></strong>
+                                            <small>Компанія</small>
+                                        </div>
+                                        <div>
+                                            <span><?= e((string) (($client['legal_display'] ?? '') ?: ($client['client_name'] ?? '—'))) ?></span>
+                                            <small>Повна назва юрособи</small>
+                                        </div>
+                                        <div>
+                                            <?php
+                                            $contactParts = array_filter([
+                                                (string) ($client['contact_display'] ?? ''),
+                                                (string) ($client['contact_email'] ?? ''),
+                                                (string) ($client['contact_phone'] ?? ''),
+                                            ], static fn($value) => trim($value) !== '');
+                                            ?>
+                                            <span><?= e($contactParts ? implode(' / ', $contactParts) : '—') ?></span>
+                                            <small>Покупець та контакти</small>
+                                        </div>
+                                    </div>
                                 </td>
                                 <td><?= dashboard_age_badge($client['oldest_ordered_at'] ?? null) ?></td>
                                 <td class="num"><strong><?= e(money_uah($client['total_unpaid'] ?? 0)) ?></strong></td>
