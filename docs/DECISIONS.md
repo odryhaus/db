@@ -274,3 +274,15 @@ Decision:
 - Do not drop hidden invoice columns yet; they may be needed for document history or future automated legal-data enrichment.
 
 Reason: invoice work should be fast and compact; rare legal details should not make every invoice edit screen heavy.
+
+## Client Search Is Local-Only
+
+Decision:
+
+- Sync KeyCRM companies and buyers server-side into `.BRAND DB`.
+- Invoice autocomplete searches local DB only through `ajax_client_search.php`.
+- Do not render all clients into HTML dropdowns.
+- Do not call KeyCRM from the browser.
+- Do not overwrite local legal entities or local manager assignments during sync.
+
+Reason: invoice editing must stay fast even when the client base grows, and KeyCRM credentials must never reach the browser.

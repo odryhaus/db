@@ -94,3 +94,9 @@ Known risks:
 ## Client Manager Assignment UI Not Built Yet
 
 The database plan includes local company/contact manager ownership, but the Clients page and bulk reassignment UI are not implemented yet.
+
+## KeyCRM Client Delta Filters Need Production Verification
+
+Client sync sends updated-after style parameters where possible and keeps bounded page limits as fallback. Confirm in production whether KeyCRM company/buyer endpoints honor those filters.
+
+If they do not, delta sync will still be bounded, but it may rescan recent pages rather than true changed-only records.

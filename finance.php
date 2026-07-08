@@ -218,6 +218,10 @@ function ensure_invoice_tables(): void
     invoice_add_column_if_missing('db_client_companies', 'assigned_manager_keycrm_id', 'INT UNSIGNED NULL');
     invoice_add_column_if_missing('db_client_companies', 'assigned_manager_name', 'VARCHAR(150) NULL');
     invoice_add_column_if_missing('db_client_companies', 'manager_assignment_note', 'TEXT NULL');
+    invoice_add_index_if_missing('db_client_companies', 'idx_display_name', 'display_name(191)');
+    invoice_add_index_if_missing('db_client_companies', 'idx_keycrm_name', 'keycrm_name(191)');
+    invoice_add_index_if_missing('db_client_companies', 'idx_keycrm_title', 'keycrm_title(191)');
+    invoice_add_index_if_missing('db_client_companies', 'idx_manager_id', 'manager_id');
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS db_client_contacts (
@@ -243,6 +247,9 @@ function ensure_invoice_tables(): void
     invoice_add_column_if_missing('db_client_contacts', 'assigned_manager_name', 'VARCHAR(150) NULL');
     invoice_add_column_if_missing('db_client_contacts', 'inherits_company_manager', 'TINYINT(1) NOT NULL DEFAULT 1');
     invoice_add_column_if_missing('db_client_contacts', 'manager_assignment_note', 'TEXT NULL');
+    invoice_add_index_if_missing('db_client_contacts', 'idx_full_name', 'full_name(191)');
+    invoice_add_index_if_missing('db_client_contacts', 'idx_email', 'email(191)');
+    invoice_add_index_if_missing('db_client_contacts', 'idx_phone', 'phone');
 
     $pdo->exec("
         UPDATE db_invoices
@@ -287,6 +294,44 @@ function ensure_invoice_tables(): void
             KEY idx_is_default (is_default)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    invoice_add_index_if_missing('db_client_legal_entities', 'idx_legal_name', 'legal_name(191)');
+    invoice_add_index_if_missing('db_client_legal_entities', 'idx_short_name', 'short_name(191)');
+    invoice_add_index_if_missing('db_client_legal_entities', 'idx_edrpou', 'edrpou');
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_sync_state (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            sync_key VARCHAR(100) NOT NULL UNIQUE,
+            last_successful_sync_at DATETIME NULL,
+            last_attempt_at DATETIME NULL,
+            status ENUM('idle','running','success','failed') NOT NULL DEFAULT 'idle',
+            error_message TEXT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_client_sync_runs (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            sync_type VARCHAR(80) NOT NULL,
+            started_at DATETIME NOT NULL,
+            finished_at DATETIME NULL,
+            status ENUM('running','success','failed') NOT NULL DEFAULT 'running',
+            records_seen INT UNSIGNED NOT NULL DEFAULT 0,
+            companies_upserted INT UNSIGNED NOT NULL DEFAULT 0,
+            contacts_upserted INT UNSIGNED NOT NULL DEFAULT 0,
+            error_message TEXT NULL,
+            created_by_user_id INT UNSIGNED NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_sync_type (sync_type),
+            KEY idx_started_at (started_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        INSERT IGNORE INTO db_sync_state (sync_key, status)
+        VALUES ('keycrm_companies', 'idle'), ('keycrm_buyers', 'idle')
+    ");
 
     $stmt = $pdo->prepare("
         INSERT INTO db_our_companies
@@ -329,6 +374,25 @@ function invoice_add_column_if_missing(string $table, string $column, string $de
 
     if ((int) $stmt->fetchColumn() === 0) {
         db()->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
+    }
+}
+
+function invoice_add_index_if_missing(string $table, string $index, string $columns): void
+{
+    $stmt = db()->prepare("
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = :table_name
+          AND INDEX_NAME = :index_name
+    ");
+    $stmt->execute([
+        'table_name' => $table,
+        'index_name' => $index,
+    ]);
+
+    if ((int) $stmt->fetchColumn() === 0) {
+        db()->exec("ALTER TABLE {$table} ADD INDEX {$index} ({$columns})");
     }
 }
 

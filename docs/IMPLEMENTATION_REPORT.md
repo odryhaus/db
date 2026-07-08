@@ -127,3 +127,34 @@ Do not drop columns yet. These fields are hidden from the main UI but may still 
 - `docs_type`
 
 Recommended later approach: keep them in the database, but move them to an optional advanced/details panel only if the CEO/accountant needs them.
+
+## 2026-07-08 — Client Sync And Fast Local Search
+
+### Files Changed
+
+- `clients_sync.php`
+- `ajax_client_search.php`
+- `finance.php`
+- `invoices.php`
+- `assets/app.css`
+- `config/config.example.php`
+- `index.php`
+- `sync_orders.php`
+- documentation files
+
+### What Changed
+
+- Added `db_sync_state` and `db_client_sync_runs`.
+- Added CEO-only `clients_sync.php` for manual companies/buyers sync.
+- Added bounded delta sync buttons and explicit initial import buttons.
+- Added local-only `ajax_client_search.php` endpoint for company, contact, and legal entity autocomplete.
+- Replaced invoice company dropdown with fast local autocomplete; no large client list is rendered into the browser.
+- Added indexes for local company/contact/legal entity search.
+
+### Safety Rules
+
+- KeyCRM token stays server-side.
+- Browser never searches KeyCRM directly.
+- Local legal entities are not overwritten by KeyCRM sync.
+- Local manager assignment fields are not overwritten by KeyCRM sync.
+- Delta sync tries updated-after parameters and still uses bounded page limits as fallback.

@@ -621,6 +621,7 @@ button:hover,
 }
 
 .invoice-edit-grid label {
+    position: relative;
     flex: 1 1 170px;
     min-width: 150px;
     margin-bottom: 0;
@@ -652,6 +653,45 @@ button:hover,
 
 .invoice-edit-grid .checkbox-row input {
     width: auto;
+}
+
+.autocomplete-results {
+    position: absolute;
+    z-index: 20;
+    width: min(420px, 100%);
+    margin-top: 4px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.autocomplete-result,
+.autocomplete-empty {
+    display: block;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+}
+
+.autocomplete-result:hover {
+    background: var(--surface-muted);
+}
+
+.autocomplete-result strong,
+.autocomplete-result small {
+    display: block;
+}
+
+.autocomplete-result small,
+.autocomplete-empty {
+    color: var(--muted);
+    font-size: 12px;
 }
 
 .invoice-edit-grid input,

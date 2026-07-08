@@ -1811,13 +1811,13 @@ if (is_post()) {
 }
 
 $editId = (int) ($_GET['edit'] ?? $_POST['id'] ?? 0);
-$clientCompanies = invoice_client_companies();
 if ($editId > 0) {
     $editInvoice = invoice_load($editId);
     if ($editInvoice) {
         $editItems = invoice_items($editId);
         $editLegalEntities = invoice_legal_entities(!empty($editInvoice['client_company_id']) ? (int) $editInvoice['client_company_id'] : null);
         $editContacts = invoice_contacts(!empty($editInvoice['client_company_id']) ? (int) $editInvoice['client_company_id'] : null);
+        $editClientCompany = invoice_client_company_by_id(!empty($editInvoice['client_company_id']) ? (int) $editInvoice['client_company_id'] : null);
     }
 }
 
@@ -1897,6 +1897,7 @@ foreach ($invoices as $invoiceRow) {
                 <a href="<?= e(base_path('/expenses.php')) ?>">Витрати</a>
                 <?php if (user_role() === 'ceo'): ?>
                     <a href="<?= e(base_path('/sync_orders.php')) ?>">Синхронізація</a>
+                    <a href="<?= e(base_path('/clients_sync.php')) ?>">Клієнти Sync</a>
                     <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
                 <?php endif; ?>
                 <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>
@@ -1990,15 +1991,17 @@ foreach ($invoices as $invoiceRow) {
                         </div>
                         <label class="wide-field">
                             <span>Компанія</span>
-                            <select name="client_company_id">
-                                <option value="">Без локальної компанії</option>
-                                <?php foreach ($clientCompanies as $clientCompany): ?>
-                                    <?php $clientCompanyName = (string) (($clientCompany['display_name'] ?? '') ?: (($clientCompany['title'] ?? '') ?: ($clientCompany['name'] ?? ''))); ?>
-                                    <option value="<?= e((string) $clientCompany['id']) ?>" <?= (int) ($editInvoice['client_company_id'] ?? 0) === (int) $clientCompany['id'] ? 'selected' : '' ?>>
-                                        <?= e($clientCompanyName !== '' ? $clientCompanyName : 'Client #' . (string) $clientCompany['id']) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                            <input
+                                class="client-autocomplete-input"
+                                data-autocomplete-type="company"
+                                data-target-id="client-company-id"
+                                data-target-label="client-company-label"
+                                value="<?= e(invoice_client_company_label($editClientCompany)) ?>"
+                                autocomplete="off"
+                                placeholder="Почніть вводити назву компанії"
+                            >
+                            <input type="hidden" id="client-company-id" name="client_company_id" value="<?= e((string) ($editInvoice['client_company_id'] ?? '')) ?>">
+                            <small id="client-company-label"><?= e(invoice_client_company_label($editClientCompany) ?: 'Локальна компанія не вибрана') ?></small>
                         </label>
                         <label class="wide-field">
                             <span>Повна назва юрособи-платника</span>
@@ -2007,10 +2010,37 @@ foreach ($invoices as $invoiceRow) {
                                 <small class="field-warning">Немає платника — заповніть або виберіть юрособу</small>
                             <?php endif; ?>
                         </label>
-                        <input type="hidden" name="client_legal_entity_id" value="<?= e((string) ($editInvoice['client_legal_entity_id'] ?? '')) ?>">
+                        <label class="wide-field">
+                            <span>Пошук юрособи</span>
+                            <input
+                                class="client-autocomplete-input"
+                                data-autocomplete-type="legal_entity"
+                                data-target-id="client-legal-entity-id"
+                                data-target-label="client-legal-entity-label"
+                                data-fill-recipient="1"
+                                autocomplete="off"
+                                placeholder="Знайти збережену юрособу"
+                            >
+                            <input type="hidden" id="client-legal-entity-id" name="client_legal_entity_id" value="<?= e((string) ($editInvoice['client_legal_entity_id'] ?? '')) ?>">
+                            <small id="client-legal-entity-label"><?= e((string) ($editInvoice['client_legal_entity_id'] ? 'Юрособа вибрана' : 'Юрособа не вибрана')) ?></small>
+                        </label>
                         <label class="wide-field">
                             <span>Контактна особа</span>
                             <input name="contact_name" value="<?= e((string) (($editInvoice['contact_name'] ?? '') ?: ($editInvoice['buyer_contact_name'] ?? ''))) ?>">
+                        </label>
+                        <label class="wide-field">
+                            <span>Пошук контакту</span>
+                            <input
+                                class="client-autocomplete-input"
+                                data-autocomplete-type="contact"
+                                data-target-id="client-contact-id"
+                                data-target-label="client-contact-label"
+                                data-fill-contact="1"
+                                autocomplete="off"
+                                placeholder="Знайти контакт"
+                            >
+                            <input type="hidden" id="client-contact-id" name="client_contact_id" value="">
+                            <small id="client-contact-label">Контакт вручну або не вибраний</small>
                         </label>
                         <label>
                             <span>Email</span>
@@ -2024,6 +2054,10 @@ foreach ($invoices as $invoiceRow) {
                         <input type="hidden" name="recipient_edrpou" value="<?= e((string) (($editInvoice['recipient_edrpou'] ?? '') ?: ($editInvoice['buyer_edrpou'] ?? ''))) ?>">
                         <input type="hidden" name="recipient_tax_number" value="<?= e((string) (($editInvoice['recipient_tax_number'] ?? '') ?: '')) ?>">
                         <input type="hidden" name="recipient_legal_address" value="<?= e((string) (($editInvoice['recipient_legal_address'] ?? '') ?: ($editInvoice['buyer_address'] ?? ''))) ?>">
+                        <div class="wide-field row-actions">
+                            <button type="submit" name="action" value="save_legal_entity" class="button-secondary">Створити / оновити юрособу</button>
+                            <button type="submit" name="action" value="set_default_legal_entity" class="button-secondary">Зробити default</button>
+                        </div>
                         <div class="section-label">
                             <span class="label">Документ</span>
                         </div>
@@ -2273,6 +2307,118 @@ foreach ($invoices as $invoiceRow) {
         <?= app_version_badge() ?>
     </main>
     <script>
+        (function () {
+            var endpoint = '<?= e(base_path('/ajax_client_search.php')) ?>';
+
+            function debounce(fn, wait) {
+                var timeout;
+                return function () {
+                    var args = arguments;
+                    window.clearTimeout(timeout);
+                    timeout = window.setTimeout(function () {
+                        fn.apply(null, args);
+                    }, wait);
+                };
+            }
+
+            function closeResults(input) {
+                var box = input.parentElement.querySelector('.autocomplete-results');
+                if (box) {
+                    box.remove();
+                }
+            }
+
+            function renderResults(input, results) {
+                closeResults(input);
+                var box = document.createElement('div');
+                box.className = 'autocomplete-results';
+                if (!results.length) {
+                    box.innerHTML = '<div class="autocomplete-empty">Нічого не знайдено</div>';
+                    input.parentElement.appendChild(box);
+                    return;
+                }
+
+                results.forEach(function (item) {
+                    var button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'autocomplete-result';
+                    button.innerHTML = '<strong></strong><small></small>';
+                    button.querySelector('strong').textContent = item.label || '';
+                    button.querySelector('small').textContent = item.subtitle || item.type || '';
+                    button.addEventListener('click', function () {
+                        var target = document.getElementById(input.dataset.targetId || '');
+                        var label = document.getElementById(input.dataset.targetLabel || '');
+                        if (target) {
+                            target.value = item.client_company_id || item.id || '';
+                            if (item.type === 'legal_entity') {
+                                target.value = item.legal_entity_id || item.id || '';
+                            }
+                            if (item.type === 'contact') {
+                                target.value = item.contact_id || item.id || '';
+                            }
+                        }
+                        if (label) {
+                            label.textContent = item.subtitle ? item.label + ' · ' + item.subtitle : item.label;
+                        }
+                        input.value = item.label || '';
+
+                        if (item.client_company_id && input.dataset.autocompleteType !== 'company') {
+                            var companyTarget = document.getElementById('client-company-id');
+                            if (companyTarget && !companyTarget.value) {
+                                companyTarget.value = item.client_company_id;
+                            }
+                        }
+                        if (input.dataset.autocompleteType === 'company') {
+                            var legalTarget = document.getElementById('client-legal-entity-id');
+                            var contactTarget = document.getElementById('client-contact-id');
+                            if (legalTarget) legalTarget.value = '';
+                            if (contactTarget) contactTarget.value = '';
+                        }
+                        if (input.dataset.fillRecipient === '1') {
+                            var recipient = document.querySelector('[name="recipient_legal_name"]');
+                            if (recipient) recipient.value = item.label || '';
+                        }
+                        if (input.dataset.fillContact === '1') {
+                            var contact = document.querySelector('[name="contact_name"]');
+                            if (contact) contact.value = item.label || '';
+                        }
+                        closeResults(input);
+                    });
+                    box.appendChild(button);
+                });
+                input.parentElement.appendChild(box);
+            }
+
+            var search = debounce(function (input) {
+                var q = input.value.trim();
+                if (q.length < 2) {
+                    closeResults(input);
+                    return;
+                }
+                var params = new URLSearchParams({
+                    q: q,
+                    type: input.dataset.autocompleteType || 'all'
+                });
+                var companyId = document.getElementById('client-company-id');
+                if (companyId && companyId.value && input.dataset.autocompleteType !== 'company') {
+                    params.set('client_company_id', companyId.value);
+                }
+                fetch(endpoint + '?' + params.toString(), { credentials: 'same-origin' })
+                    .then(function (response) { return response.json(); })
+                    .then(function (data) { renderResults(input, data.results || []); })
+                    .catch(function () { closeResults(input); });
+            }, 220);
+
+            document.querySelectorAll('.client-autocomplete-input').forEach(function (input) {
+                input.addEventListener('input', function () {
+                    search(input);
+                });
+                input.addEventListener('blur', function () {
+                    window.setTimeout(function () { closeResults(input); }, 180);
+                });
+            });
+        })();
+
         (function () {
             var table = document.getElementById('invoice-items-table');
             var addButton = document.querySelector('.invoice-add-row');

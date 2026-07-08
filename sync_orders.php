@@ -365,6 +365,7 @@ try {
                 <a href="<?= e(base_path('/expenses.php')) ?>">Витрати</a>
                 <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
                 <a class="active" href="<?= e(base_path('/sync_orders.php')) ?>">Синхронізація</a>
+                <a href="<?= e(base_path('/clients_sync.php')) ?>">Клієнти Sync</a>
                 <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>
             </nav>
         </header>

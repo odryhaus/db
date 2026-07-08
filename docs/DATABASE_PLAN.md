@@ -1443,3 +1443,39 @@ Planned audit table:
 - `created_at`
 
 Bulk reassignment is required later for manager changes/offboarding.
+
+## 16. Client Base Sync And Local Search
+
+Tables:
+
+- `db_sync_state`
+- `db_client_sync_runs`
+- `db_client_companies`
+- `db_client_contacts`
+- `db_client_legal_entities`
+
+KeyCRM companies and buyers are synced server-side into local cache tables.
+
+Rules:
+
+- Browser never calls KeyCRM.
+- Browser autocomplete searches local DB only.
+- Do not render all companies or buyers into dropdowns.
+- `db_client_legal_entities` remains local `.BRAND DB` data and is not overwritten by KeyCRM sync.
+- Local manager assignment fields on company/contact are not overwritten by KeyCRM sync.
+- Delta sync should use `updated_after` / `filter[updated_after]` if KeyCRM supports it.
+- If KeyCRM ignores updated-after filters, sync remains bounded by configured page limits.
+
+Manual page:
+
+- `clients_sync.php`
+
+Autocomplete endpoint:
+
+- `ajax_client_search.php`
+
+Search result groups:
+
+- company
+- legal_entity
+- contact

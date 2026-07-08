@@ -229,3 +229,14 @@ Requirements before implementation:
 - Confirm usage limits and legal/commercial terms.
 - Never overwrite invoice snapshots automatically.
 - Fill hidden legal fields only as suggestions for user review.
+
+## Client Sync Follow-up
+
+After deploy:
+
+- Open `clients_sync.php` as CEO.
+- Run small delta sync for companies and buyers first.
+- If results look correct, run explicit initial imports.
+- Verify invoice autocomplete returns companies, legal entities, and contacts from local DB only.
+- Confirm KeyCRM company/buyer endpoint filters support or ignore `updated_after`; bounded page limits remain the fallback.
+- Later add a Clients page for manager assignment and bulk reassignment.
