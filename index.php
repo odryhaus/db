@@ -124,7 +124,7 @@ function dashboard_cached_company(array $order): string
             ");
             $stmt->execute(['keycrm_company_id' => $companyId]);
             $company = $stmt->fetch() ?: [];
-            $companies[$companyId] = (string) (($company['display_name'] ?? '') ?: (($company['keycrm_title'] ?? '') ?: (($company['keycrm_name'] ?? '') ?: (($company['title'] ?? '') ?: ($company['name'] ?? '')))));
+            $companies[$companyId] = (string) (($company['keycrm_name'] ?? '') ?: (($company['name'] ?? '') ?: (($company['display_name'] ?? '') ?: (($company['keycrm_title'] ?? '') ?: ($company['title'] ?? '')))));
         }
         if ($companies[$companyId] !== '') {
             return $companies[$companyId];
@@ -132,6 +132,30 @@ function dashboard_cached_company(array $order): string
     }
 
     return '';
+}
+
+function dashboard_cached_legal_name(array $order): string
+{
+    static $companies = [];
+
+    $companyId = (int) (($order['company_id'] ?? 0) ?: dashboard_raw_id($order, ['company.id', 'company_id', 'buyer.company.id', 'buyer.company_id']));
+    if ($companyId <= 0) {
+        return '';
+    }
+    if (!array_key_exists($companyId, $companies)) {
+        $stmt = db()->prepare("
+            SELECT display_name, keycrm_title, keycrm_name, title, name
+            FROM db_client_companies
+            WHERE keycrm_company_id = :keycrm_company_id
+            ORDER BY id DESC
+            LIMIT 1
+        ");
+        $stmt->execute(['keycrm_company_id' => $companyId]);
+        $company = $stmt->fetch() ?: [];
+        $companies[$companyId] = (string) (($company['keycrm_title'] ?? '') ?: (($company['title'] ?? '') ?: (($company['display_name'] ?? '') ?: (($company['keycrm_name'] ?? '') ?: ($company['name'] ?? '')))));
+    }
+
+    return $companies[$companyId];
 }
 
 function dashboard_cached_contact_name(array $order): string
@@ -212,7 +236,7 @@ function dashboard_raw_legal_name(array $order): string
 
 function dashboard_raw_client_name(array $order): string
 {
-    $company = dashboard_raw_legal_name($order) ?: dashboard_raw_company_name($order);
+    $company = dashboard_raw_company_name($order) ?: dashboard_raw_legal_name($order);
     if ($company !== '') {
         return $company;
     }
@@ -569,7 +593,8 @@ try {
             o.buyer_phone,
             o.buyer_email,
             o.raw_json,
-            COALESCE(NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_title, ''), NULLIF(cc.keycrm_name, '')) AS local_company_name,
+            COALESCE(NULLIF(cc.keycrm_name, ''), NULLIF(cc.name, ''), NULLIF(cc.display_name, '')) AS local_company_name,
+            COALESCE(NULLIF(cc.keycrm_title, ''), NULLIF(cc.title, ''), NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_name, ''), NULLIF(cc.name, '')) AS local_legal_name,
             ct.full_name AS local_contact_name,
             ct.phone AS local_contact_phone,
             ct.email AS local_contact_email
@@ -585,7 +610,7 @@ try {
     foreach ($clientDebtRowsStmt->fetchAll() as $debtRow) {
         $name = dashboard_client_name($debtRow);
         $companyDisplay = (string) (($debtRow['company_name'] ?? '') ?: ($debtRow['local_company_name'] ?? '') ?: dashboard_raw_company_name($debtRow) ?: dashboard_cached_company($debtRow));
-        $legalDisplay = (string) (dashboard_raw_legal_name($debtRow) ?: $companyDisplay);
+        $legalDisplay = (string) (($debtRow['local_legal_name'] ?? '') ?: dashboard_raw_legal_name($debtRow) ?: dashboard_cached_legal_name($debtRow) ?: $companyDisplay);
         $contactName = (string) (($debtRow['buyer_name'] ?? '') ?: ($debtRow['local_contact_name'] ?? '') ?: dashboard_cached_contact_name($debtRow));
         $contactPhone = (string) (($debtRow['buyer_phone'] ?? '') ?: ($debtRow['local_contact_phone'] ?? '') ?: dashboard_raw_contact_value($debtRow, 'phone'));
         $contactEmail = (string) (($debtRow['buyer_email'] ?? '') ?: ($debtRow['local_contact_email'] ?? '') ?: dashboard_raw_contact_value($debtRow, 'email'));
@@ -662,7 +687,7 @@ try {
             o.raw_json,
             o.buyer_name,
             o.company_name,
-            COALESCE(NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_title, ''), NULLIF(cc.keycrm_name, '')) AS local_company_name,
+            COALESCE(NULLIF(cc.keycrm_name, ''), NULLIF(cc.name, ''), NULLIF(cc.display_name, '')) AS local_company_name,
             ct.full_name AS local_contact_name,
             o.manager_name,
             o.total_amount_uah,
@@ -692,7 +717,7 @@ try {
             o.raw_json,
             o.buyer_name,
             o.company_name,
-            COALESCE(NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_title, ''), NULLIF(cc.keycrm_name, '')) AS local_company_name,
+            COALESCE(NULLIF(cc.keycrm_name, ''), NULLIF(cc.name, ''), NULLIF(cc.display_name, '')) AS local_company_name,
             ct.full_name AS local_contact_name,
             o.manager_name,
             o.unpaid_amount_uah,
