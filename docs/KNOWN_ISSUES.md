@@ -79,3 +79,18 @@ Server-level protection or a later lightweight application throttle is recommend
 The code expects a reasonably modern PHP version. Confirm the production PHP version before launch.
 
 Recommended minimum: PHP 7.4+.
+
+## Invoice Recipient Extraction Still Needs Real Data Review
+
+The invoice page now separates recipient snapshots from contact snapshots, but KeyCRM data can vary by order.
+
+Known risks:
+
+- Some old `db_orders.raw_json` rows may not contain `buyer.company`.
+- The optional server-side fallback `/buyer/{id}?include=company` depends on KeyCRM support and production API configuration.
+- Existing invoice rows may have old `buyer_*` fields only; UI uses them as fallback, but those rows should be reviewed gradually.
+- Local legal entities must be curated by the CEO/accountant and should not be overwritten by sync.
+
+## Client Manager Assignment UI Not Built Yet
+
+The database plan includes local company/contact manager ownership, but the Clients page and bulk reassignment UI are not implemented yet.

@@ -127,6 +127,16 @@ function ensure_invoice_tables(): void
     invoice_add_column_if_missing('db_invoices', 'document_status', "ENUM('not_sent','sent','closed','problem') NOT NULL DEFAULT 'not_sent'");
     invoice_add_column_if_missing('db_invoices', 'payment_due_date', 'DATE NULL');
     invoice_add_column_if_missing('db_invoices', 'document_due_date', 'DATE NULL');
+    invoice_add_column_if_missing('db_invoices', 'recipient_legal_name', 'VARCHAR(255) NULL');
+    invoice_add_column_if_missing('db_invoices', 'recipient_short_name', 'VARCHAR(255) NULL');
+    invoice_add_column_if_missing('db_invoices', 'recipient_edrpou', 'VARCHAR(50) NULL');
+    invoice_add_column_if_missing('db_invoices', 'recipient_tax_number', 'VARCHAR(50) NULL');
+    invoice_add_column_if_missing('db_invoices', 'recipient_legal_address', 'TEXT NULL');
+    invoice_add_column_if_missing('db_invoices', 'recipient_email', 'VARCHAR(190) NULL');
+    invoice_add_column_if_missing('db_invoices', 'recipient_phone', 'VARCHAR(80) NULL');
+    invoice_add_column_if_missing('db_invoices', 'contact_name', 'VARCHAR(255) NULL');
+    invoice_add_column_if_missing('db_invoices', 'contact_email', 'VARCHAR(190) NULL');
+    invoice_add_column_if_missing('db_invoices', 'contact_phone', 'VARCHAR(80) NULL');
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS db_invoice_documents (
@@ -155,6 +165,9 @@ function ensure_invoice_tables(): void
     invoice_add_column_if_missing('db_invoice_documents', 'closed_at', 'DATETIME NULL');
     invoice_add_column_if_missing('db_invoice_documents', 'keycrm_file_id', 'VARCHAR(80) NULL');
     invoice_add_column_if_missing('db_invoice_documents', 'note', 'TEXT NULL');
+    invoice_add_column_if_missing('db_invoice_documents', 'document_number', 'VARCHAR(80) NULL');
+    invoice_add_column_if_missing('db_invoice_documents', 'download_count', 'INT UNSIGNED NOT NULL DEFAULT 0');
+    invoice_add_column_if_missing('db_invoice_documents', 'last_downloaded_at', 'DATETIME NULL');
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS db_invoice_items (
@@ -174,6 +187,10 @@ function ensure_invoice_tables(): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     invoice_add_column_if_missing('db_invoice_items', 'item_type', "ENUM('product','service','mixed','other') NOT NULL DEFAULT 'product'");
+    invoice_add_column_if_missing('db_invoice_items', 'source_product_name', 'VARCHAR(255) NULL');
+    invoice_add_column_if_missing('db_invoice_items', 'source_product_sku', 'VARCHAR(120) NULL');
+    invoice_add_column_if_missing('db_invoice_items', 'source_offer_id', 'INT UNSIGNED NULL');
+    invoice_add_column_if_missing('db_invoice_items', 'source_product_json', 'LONGTEXT NULL');
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS db_client_companies (
@@ -197,6 +214,10 @@ function ensure_invoice_tables(): void
     invoice_add_column_if_missing('db_client_companies', 'keycrm_name', 'VARCHAR(255) NULL');
     invoice_add_column_if_missing('db_client_companies', 'keycrm_title', 'VARCHAR(255) NULL');
     invoice_add_column_if_missing('db_client_companies', 'note', 'TEXT NULL');
+    invoice_add_column_if_missing('db_client_companies', 'assigned_manager_user_id', 'INT UNSIGNED NULL');
+    invoice_add_column_if_missing('db_client_companies', 'assigned_manager_keycrm_id', 'INT UNSIGNED NULL');
+    invoice_add_column_if_missing('db_client_companies', 'assigned_manager_name', 'VARCHAR(150) NULL');
+    invoice_add_column_if_missing('db_client_companies', 'manager_assignment_note', 'TEXT NULL');
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS db_client_contacts (
@@ -217,6 +238,11 @@ function ensure_invoice_tables(): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     invoice_add_column_if_missing('db_client_contacts', 'note', 'TEXT NULL');
+    invoice_add_column_if_missing('db_client_contacts', 'assigned_manager_user_id', 'INT UNSIGNED NULL');
+    invoice_add_column_if_missing('db_client_contacts', 'assigned_manager_keycrm_id', 'INT UNSIGNED NULL');
+    invoice_add_column_if_missing('db_client_contacts', 'assigned_manager_name', 'VARCHAR(150) NULL');
+    invoice_add_column_if_missing('db_client_contacts', 'inherits_company_manager', 'TINYINT(1) NOT NULL DEFAULT 1');
+    invoice_add_column_if_missing('db_client_contacts', 'manager_assignment_note', 'TEXT NULL');
 
     $pdo->exec("
         UPDATE db_invoices

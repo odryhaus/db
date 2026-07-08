@@ -193,3 +193,28 @@ Later CRM work should identify:
 - How refunds, cancelled orders, partial payments, and currency are represented.
 
 The first import should cover only current and previous month, not all history.
+
+## Invoice Recipient Snapshot Follow-up
+
+Verify on production with real orders:
+
+- KeyCRM `order.buyer` contains `id`, `full_name`, `email`, and `phone`.
+- If `buyer.company` is absent, server-side buyer fetch with `include=company` succeeds or fails harmlessly.
+- Default local legal entity is reused for the next invoice from the same client company.
+- Edited recipient fields are saved to invoice snapshots and do not change old documents later.
+- Downloading generated files increments `db_invoice_documents.download_count`.
+
+## Clients / Managers Planned Milestone
+
+Create a compact Clients page later:
+
+- List client companies.
+- Show contacts under each company.
+- Show company assigned manager.
+- Show contact assigned/effective manager.
+- Allow changing manager for one company.
+- Allow changing manager for one contact.
+- Allow setting contact to inherit company manager.
+- Allow bulk reassignment when a manager leaves.
+
+Do not write local manager assignments back to KeyCRM.

@@ -236,3 +236,30 @@ The following are intentionally excluded:
 - VAT invoice logic.
 - KeyCRM file attachment.
 - Destructive or broad database migrations.
+
+## Invoice Recipient Snapshot Model
+
+Decision:
+
+- `db_invoices` stores immutable recipient/contact snapshot fields for each invoice.
+- `recipient_*` fields are the legal payer used in PDF documents.
+- `contact_*` fields are the buyer/contact person and are shown separately.
+- `buyer_*` fields remain only for backward compatibility with older invoice rows.
+- Do not write fake `Покупець` values. If no payer is known, show a warning and let the user fill it.
+- `db_client_legal_entities` is local `.BRAND DB` data and must not be overwritten by KeyCRM sync.
+- KeyCRM company full/legal name may be used only as the first draft candidate for a local legal entity.
+
+Reason: old PDF/document history must remain stable even if the client legal entity changes later, and KeyCRM cannot model multiple payers under one client group well enough for `.BRAND` invoicing.
+
+## Local Client Manager Ownership
+
+Decision:
+
+- `.BRAND DB` needs local manager assignment on both client company and contact levels.
+- Contact manager can override company manager.
+- Contact can inherit company manager.
+- KeyCRM manager values remain source/raw data, but local assignment is the source of truth for CEO cockpit reporting once implemented.
+- Local manager assignment must not be overwritten by KeyCRM sync.
+- Bulk reassignment is required for manager changes or employee offboarding.
+
+Reason: one client group may have many contacts and those contacts may belong to different `.BRAND` managers.

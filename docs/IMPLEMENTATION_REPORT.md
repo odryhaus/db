@@ -22,7 +22,7 @@
 - Updated invoice edit UX with compact seller, client company, contact, and legal entity controls.
 - Updated invoice registry with separate payment and document status dropdowns.
 - Simplified invoice editing by removing status controls and document-generation buttons from the edit form.
-- Moved registry work into one compact table: edit, PDF download, payment status, payment deadline, and delete are handled from `Реєстр рахунків`.
+- Moved registry work into one compact table: document downloads, edit, payment status, payment deadline, and delete are handled from `Реєстр рахунків`.
 - New invoices now enter `Очікуємо оплату` immediately with a default payment deadline instead of exposing `Чернетка` in the registry.
 - Added row deletion through a CSRF-protected `×` button.
 
@@ -52,4 +52,44 @@
 5. Change payment status and document status independently in the registry.
 6. Set payment deadline and confirm overdue behavior.
 7. Confirm the edit form only saves/edits invoice data and closes back to the registry.
-8. Confirm PDF download and delete actions are available in the registry action column.
+8. Confirm PDF download buttons are available in the registry `Docs` column and delete is available in the action column.
+
+## 2026-07-08 — Invoice Recipient Snapshots
+
+### Files Changed
+
+- `finance.php`
+- `invoices.php`
+- `assets/app.css`
+- `docs/DATABASE_PLAN.md`
+- `docs/DECISIONS.md`
+- `docs/IMPLEMENTATION_REPORT.md`
+- `docs/NEXT_STEPS.md`
+- `docs/KNOWN_ISSUES.md`
+
+### What Changed
+
+- `db_invoices` now uses recipient/contact snapshot fields as the primary invoice data.
+- Invoice creation no longer writes fake `Покупець` values when KeyCRM does not provide a legal payer.
+- Invoice edit UI now separates seller, client group, contact person, legal payer, and document data.
+- Legal entities can be saved/updated locally and optionally set as default for a client company.
+- Invoice items keep source product name, SKU, offer id, and original product JSON for audit.
+- Generated documents store `document_number`; downloads increment `download_count` and `last_downloaded_at`.
+- Registry shows document buttons, recipient/contact, payment deadline, document status, and action controls.
+
+### Business Rules Reflected
+
+- Seller is our legal entity.
+- Recipient/payer is the client legal entity.
+- Buyer/contact is a person, not the payer.
+- Local legal entities are `.BRAND DB` data and must not be overwritten by KeyCRM sync.
+- FOP 2 group sellers stay products-only, no VAT, with collapsed title `Поліграфічна продукція`.
+
+### Manual Test
+
+1. Create an invoice from a real `db_orders.keycrm_id`.
+2. Confirm empty payer shows `немає платника`, not `Покупець`.
+3. Edit payer/contact fields and save.
+4. Save/update legal entity and set it as default.
+5. Create another invoice for the same client and confirm default legal entity is offered.
+6. Generate/download invoice, delivery note, and act PDFs and confirm names `INV_`, `DN_`, `ACT_`.

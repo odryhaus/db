@@ -639,6 +639,17 @@ button:hover,
     border-top: 1px solid var(--line);
 }
 
+.invoice-edit-grid .checkbox-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+.invoice-edit-grid .checkbox-row input {
+    width: auto;
+}
+
 .invoice-edit-grid input,
 .invoice-edit-grid select,
 .invoice-edit-grid textarea {

@@ -1326,3 +1326,120 @@ These are internal management/control records, not pure CRM order data. They mus
 - Order-linked obligations show expected net cash.
 - Dashboard loads fast.
 - KeyCRM token remains server-side only.
+
+## 14. Invoice Snapshot / Client Entity Model
+
+### Client Company / Group
+
+`db_client_companies` represents the client group:
+
+- Momentum
+- UNDP
+- OSCE
+- Goodwine
+
+KeyCRM fields may update this table:
+
+- `keycrm_company_id`
+- `keycrm_name`
+- `keycrm_title`
+- `display_name`
+- `raw_json`
+
+KeyCRM company title/full legal name is only the first/default legal entity candidate, not the only possible legal entity.
+
+### Contacts
+
+`db_client_contacts` represents buyers/contact people.
+
+Many contacts can belong to one client company.
+
+Contact manager can override company manager. If no contact manager is set and `inherits_company_manager = 1`, the effective manager comes from the company.
+
+### Legal Entities / Payers
+
+`db_client_legal_entities` represents invoice recipients/payers.
+
+Many legal entities can belong to one client company.
+
+This table is local `.BRAND DB` data and must not be overwritten by KeyCRM sync.
+
+Invoice creation priority:
+
+1. Local default `db_client_legal_entities`.
+2. `buyer.company.full_name`.
+3. KeyCRM company title.
+4. `buyer.company.name`.
+5. KeyCRM company name.
+6. Empty payer plus UI warning.
+
+Invoice snapshot fields in `db_invoices`:
+
+- `recipient_legal_name`
+- `recipient_short_name`
+- `recipient_edrpou`
+- `recipient_tax_number`
+- `recipient_legal_address`
+- `recipient_email`
+- `recipient_phone`
+- `contact_name`
+- `contact_email`
+- `contact_phone`
+
+Reason:
+
+If legal entity/contact data changes later, old invoice PDFs and document history must remain unchanged.
+
+### Product Source Audit
+
+`db_invoice_items` stores editable document rows plus source audit fields:
+
+- `source_product_name`
+- `source_product_sku`
+- `source_offer_id`
+- `source_product_json`
+
+Editable document text stays local and can differ from the original CRM product name.
+
+## 15. Local Manager Ownership
+
+Planned local manager fields:
+
+`db_client_companies`:
+
+- `assigned_manager_user_id`
+- `assigned_manager_keycrm_id`
+- `assigned_manager_name`
+- `manager_assignment_note`
+
+`db_client_contacts`:
+
+- `assigned_manager_user_id`
+- `assigned_manager_keycrm_id`
+- `assigned_manager_name`
+- `inherits_company_manager`
+- `manager_assignment_note`
+
+Effective manager priority:
+
+1. Contact assigned manager.
+2. Company assigned manager if contact inherits company manager.
+3. Order manager from `db_orders`.
+4. Unassigned.
+
+Planned audit table:
+
+`db_client_manager_events`
+
+- `entity_type`
+- `entity_id`
+- `old_manager_user_id`
+- `new_manager_user_id`
+- `old_manager_name`
+- `new_manager_name`
+- `action_type`
+- `note`
+- `created_by_user_id`
+- `created_at`
+
+Bulk reassignment is required later for manager changes/offboarding.
