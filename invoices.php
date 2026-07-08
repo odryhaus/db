@@ -409,7 +409,7 @@ function invoice_document_prefix_label(string $type): string
 {
     $labels = [
         'invoice' => 'PDF',
-        'delivery_note' => 'Видаткова',
+        'delivery_note' => 'Накл.',
         'act' => 'Акт',
     ];
 
@@ -2132,7 +2132,7 @@ foreach ($invoices as $invoiceRow) {
                     <div class="invoice-actions">
                         <button type="submit" name="action" value="save_invoice">Зберегти</button>
                         <button type="submit" name="action" value="generate_selected" class="button-secondary">Сформувати PDF</button>
-                        <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php')) ?>">Закрити</a>
+                        <a class="button-secondary" href="<?= e(base_path('/invoices.php')) ?>">Закрити</a>
                     </div>
 
                     <div class="invoice-actions invoice-actions--secondary">
@@ -2254,14 +2254,14 @@ foreach ($invoices as $invoiceRow) {
                                     <div class="invoice-doc-actions">
                                         <?php foreach (['invoice', 'delivery_note', 'act'] as $documentType): ?>
                                             <?php if ($documentButtons[$documentType] !== ''): ?>
-                                                <a class="button-secondary small-button pdf-button" href="<?= e($documentButtons[$documentType]) ?>"><?= e(invoice_document_prefix_label($documentType)) ?></a>
+                                                <a class="file-chip file-chip--ready" href="<?= e($documentButtons[$documentType]) ?>"><?= e(invoice_document_prefix_label($documentType)) ?></a>
                                             <?php else: ?>
                                                 <form method="post" action="<?= e(base_path('/invoices.php')) ?>" class="inline-cell-form">
                                                     <?= csrf_field() ?>
                                                     <input type="hidden" name="action" value="generate_registry_document">
                                                     <input type="hidden" name="id" value="<?= e((string) $invoiceRow['id']) ?>">
                                                     <input type="hidden" name="document_type" value="<?= e($documentType) ?>">
-                                                    <button type="submit" class="button-secondary small-button"><?= e(invoice_document_prefix_label($documentType)) ?></button>
+                                                    <button type="submit" class="file-chip"><?= e(invoice_document_prefix_label($documentType)) ?></button>
                                                 </form>
                                             <?php endif; ?>
                                         <?php endforeach; ?>

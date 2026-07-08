@@ -381,24 +381,45 @@ button:hover,
 
 .invoice-doc-actions {
     display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
+    flex-wrap: nowrap;
+    gap: 4px;
 }
 
 .invoice-doc-actions form {
     margin: 0;
 }
 
-.pdf-button {
-    border-color: var(--accent);
-    background: var(--accent);
-    color: #fff;
+.file-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-muted);
+    padding: 2px 9px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
 }
 
-.pdf-button:hover {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
-    color: #fff;
+.file-chip:hover {
+    border-color: var(--line-strong);
+    background: var(--panel);
+}
+
+.file-chip--ready {
+    border-color: var(--success-border);
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.file-chip--ready:hover {
+    background: var(--success-soft);
+    border-color: var(--success-border);
 }
 
 .inline-cell-form {
@@ -410,6 +431,9 @@ button:hover,
 
 .compact-select,
 .payment-control-form input[type="date"] {
+    width: auto;
+    min-width: 132px;
+    max-width: 160px;
     min-height: 30px;
     border-radius: 999px;
     padding: 5px 10px;
@@ -624,12 +648,14 @@ button:hover,
     position: relative;
     flex: 1 1 170px;
     min-width: 150px;
+    max-width: 240px;
     margin-bottom: 0;
 }
 
 .invoice-edit-grid .wide-field {
     flex: 2 1 320px;
     min-width: 260px;
+    max-width: 420px;
 }
 
 .invoice-edit-grid .full-field {
@@ -657,14 +683,17 @@ button:hover,
 
 .autocomplete-results {
     position: absolute;
+    top: 100%;
+    left: 0;
     z-index: 20;
     width: min(420px, 100%);
+    max-height: 260px;
     margin-top: 4px;
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
-    background: var(--surface);
-    box-shadow: var(--shadow-sm);
-    overflow: hidden;
+    background: var(--panel);
+    box-shadow: 0 4px 12px rgba(16, 17, 20, .08);
+    overflow-y: auto;
 }
 
 .autocomplete-result,
