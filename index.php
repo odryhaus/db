@@ -59,7 +59,14 @@ function money_uah($amount): string
 
 function dashboard_client_name(array $order): string
 {
-    return (string) ($order['company_name'] ?: ($order['buyer_name'] ?: ($order['client_name'] ?: '—')));
+    return (string) (
+        ($order['company_name'] ?? '')
+        ?: ($order['local_company_name'] ?? '')
+        ?: ($order['buyer_name'] ?? '')
+        ?: ($order['local_contact_name'] ?? '')
+        ?: ($order['client_name'] ?? '')
+        ?: '—'
+    );
 }
 
 function dashboard_url(array $params = []): string
@@ -356,17 +363,28 @@ try {
 
     $clientDebtStmt = db()->query("
         SELECT
-            COALESCE(company_id, buyer_id, client_id, 0) AS client_key,
-            COALESCE(MAX(NULLIF(company_name, '')), MAX(NULLIF(buyer_name, '')), MAX(NULLIF(client_name, '')), 'Без клієнта') AS client_name,
-            COALESCE(SUM(unpaid_amount_uah), 0) AS total_unpaid,
+            COALESCE(o.company_id, o.buyer_id, o.client_id, 0) AS client_key,
+            COALESCE(
+                MAX(NULLIF(o.company_name, '')),
+                MAX(NULLIF(cc.display_name, '')),
+                MAX(NULLIF(cc.keycrm_title, '')),
+                MAX(NULLIF(cc.keycrm_name, '')),
+                MAX(NULLIF(o.buyer_name, '')),
+                MAX(NULLIF(ct.full_name, '')),
+                MAX(NULLIF(o.client_name, '')),
+                'Без клієнта'
+            ) AS client_name,
+            COALESCE(SUM(o.unpaid_amount_uah), 0) AS total_unpaid,
             COUNT(*) AS unpaid_count,
-            MIN(ordered_at) AS oldest_ordered_at,
-            MAX(NULLIF(buyer_phone, '')) AS contact_phone,
-            MAX(NULLIF(buyer_email, '')) AS contact_email
-        FROM db_orders
-        WHERE unpaid_amount_uah > 0
+            MIN(o.ordered_at) AS oldest_ordered_at,
+            COALESCE(MAX(NULLIF(o.buyer_phone, '')), MAX(NULLIF(ct.phone, ''))) AS contact_phone,
+            COALESCE(MAX(NULLIF(o.buyer_email, '')), MAX(NULLIF(ct.email, ''))) AS contact_email
+        FROM db_orders o
+        LEFT JOIN db_client_companies cc ON cc.keycrm_company_id = o.company_id
+        LEFT JOIN db_client_contacts ct ON ct.keycrm_buyer_id = o.buyer_id
+        WHERE o.unpaid_amount_uah > 0
           AND {$notCanceledSql}
-        GROUP BY COALESCE(company_id, buyer_id, client_id, 0)
+        GROUP BY COALESCE(o.company_id, o.buyer_id, o.client_id, 0)
         ORDER BY total_unpaid DESC
         LIMIT 50
     ");
@@ -398,20 +416,24 @@ try {
 
     $debtStmt = db()->prepare("
         SELECT
-            order_number,
-            ordered_at,
-            client_name,
-            buyer_name,
-            company_name,
-            manager_name,
-            total_amount_uah,
-            paid_amount_uah,
-            unpaid_amount_uah,
-            payment_status,
-            status_name
-        FROM db_orders
+            o.order_number,
+            o.ordered_at,
+            o.client_name,
+            o.buyer_name,
+            o.company_name,
+            COALESCE(NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_title, ''), NULLIF(cc.keycrm_name, '')) AS local_company_name,
+            ct.full_name AS local_contact_name,
+            o.manager_name,
+            o.total_amount_uah,
+            o.paid_amount_uah,
+            o.unpaid_amount_uah,
+            o.payment_status,
+            o.status_name
+        FROM db_orders o
+        LEFT JOIN db_client_companies cc ON cc.keycrm_company_id = o.company_id
+        LEFT JOIN db_client_contacts ct ON ct.keycrm_buyer_id = o.buyer_id
         WHERE {$debtWhere}
-        ORDER BY unpaid_amount_uah DESC, ordered_at DESC
+        ORDER BY o.unpaid_amount_uah DESC, o.ordered_at DESC
         LIMIT :limit OFFSET :offset
     ");
     foreach ($debtParams as $key => $value) {
@@ -424,19 +446,23 @@ try {
 
     $monthlyUnpaidStmt = db()->prepare("
         SELECT
-            order_number,
-            client_name,
-            buyer_name,
-            company_name,
-            manager_name,
-            unpaid_amount_uah,
-            payment_status,
-            status_name
-        FROM db_orders
-        WHERE order_month = :month
-          AND unpaid_amount_uah > 0
+            o.order_number,
+            o.client_name,
+            o.buyer_name,
+            o.company_name,
+            COALESCE(NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_title, ''), NULLIF(cc.keycrm_name, '')) AS local_company_name,
+            ct.full_name AS local_contact_name,
+            o.manager_name,
+            o.unpaid_amount_uah,
+            o.payment_status,
+            o.status_name
+        FROM db_orders o
+        LEFT JOIN db_client_companies cc ON cc.keycrm_company_id = o.company_id
+        LEFT JOIN db_client_contacts ct ON ct.keycrm_buyer_id = o.buyer_id
+        WHERE o.order_month = :month
+          AND o.unpaid_amount_uah > 0
           AND {$notCanceledSql}
-        ORDER BY unpaid_amount_uah DESC, ordered_at DESC
+        ORDER BY o.unpaid_amount_uah DESC, o.ordered_at DESC
         LIMIT 10
     ");
     $monthlyUnpaidStmt->execute(['month' => $selectedMonth]);
