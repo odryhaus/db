@@ -1479,3 +1479,52 @@ Search result groups:
 - company
 - legal_entity
 - contact
+
+## 17. Our Seller Legal Entities And Payment Accounts
+
+Tables:
+
+- `db_our_companies`
+- `db_our_company_accounts`
+
+`db_our_companies` stores our seller legal entities: FOP, TOV, PP, and other internal sellers.
+
+Key fields:
+
+- `short_name`
+- `legal_name`
+- `company_type`
+- `tax_code`
+- `tax_mode`
+- `single_tax_group`
+- `allowed_item_type`
+- `signer_name`
+- `is_active`
+- `is_default`
+
+`db_our_company_accounts` stores bank/card/payment requisites separately from legal entity identity.
+
+Key fields:
+
+- `company_id`
+- `account_label`
+- `account_type`
+- `currency`
+- `iban`
+- `bank_name`
+- `swift`
+- `recipient_name`
+- `language`
+- `payment_template`
+- `is_default`
+- `is_active`
+
+Rules:
+
+- Seller data in invoice PDFs must come from `db_our_companies` plus `db_our_company_accounts`.
+- Payment/card requisites are not invoices; `payment_requisites.php` only creates copyable payment text for managers.
+- FOP group 2 sellers are products-only.
+- FOP group 3 sellers may allow service wording after review.
+- VAT seller companies are stored now, but VAT 20% PDF templates are future work.
+- EUR/USD account data is stored now, but English currency invoice templates are future work.
+- `db_invoices.seller_account_id` stores the account selected for a generated invoice.

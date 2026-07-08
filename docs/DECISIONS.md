@@ -286,3 +286,16 @@ Decision:
 - Do not overwrite local legal entities or local manager assignments during sync.
 
 Reason: invoice editing must stay fast even when the client base grows, and KeyCRM credentials must never reach the browser.
+
+## Our Seller Requisites Are Structured
+
+Decision:
+
+- Our seller legal entities live in `db_our_companies`.
+- Bank/card/payment requisites live in `db_our_company_accounts`.
+- Invoice PDF seller data must use those tables, not hardcoded template values.
+- `payment_requisites.php` is a manager copy tool, not an invoice generator.
+- FOP group 2 remains products-only; service wording is reserved for reviewed FOP group 3 / service-allowed sellers.
+- VAT and currency invoice templates are stored/planned but not implemented in PDFs yet.
+
+Reason: `.BRAND DB` needs many seller entities and accounts without turning invoice work into accounting ERP.

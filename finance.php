@@ -73,6 +73,52 @@ function ensure_invoice_tables(): void
             KEY idx_short_name (short_name)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    invoice_modify_column_if_exists('db_our_companies', 'tax_mode', "ENUM('single_tax_no_vat','vat_20','no_vat_other') NOT NULL DEFAULT 'single_tax_no_vat'");
+    invoice_modify_column_if_exists('db_our_companies', 'allowed_item_type', "ENUM('products_only','services_allowed','products_and_services') NOT NULL DEFAULT 'products_only'");
+    invoice_modify_column_if_exists('db_our_companies', 'address', 'TEXT NULL');
+    invoice_modify_column_if_exists('db_our_companies', 'email', 'VARCHAR(190) NULL');
+    invoice_modify_column_if_exists('db_our_companies', 'phone', 'VARCHAR(190) NULL');
+    invoice_modify_column_if_exists('db_our_companies', 'accountant_email', 'VARCHAR(190) NULL');
+    invoice_modify_column_if_exists('db_our_companies', 'accountant_phone', 'VARCHAR(190) NULL');
+    invoice_add_column_if_missing('db_our_companies', 'company_type', "ENUM('fop','tov','pp','other') NOT NULL DEFAULT 'fop'");
+    invoice_add_column_if_missing('db_our_companies', 'tax_code', 'VARCHAR(50) NULL');
+    invoice_add_column_if_missing('db_our_companies', 'single_tax_group', 'TINYINT NULL');
+    invoice_add_column_if_missing('db_our_companies', 'website', 'VARCHAR(190) NULL');
+    invoice_add_column_if_missing('db_our_companies', 'signer_name', 'VARCHAR(150) NULL');
+    invoice_add_column_if_missing('db_our_companies', 'signer_position', 'VARCHAR(100) NULL');
+    invoice_add_column_if_missing('db_our_companies', 'is_default', 'TINYINT(1) NOT NULL DEFAULT 0');
+    invoice_add_column_if_missing('db_our_companies', 'note', 'TEXT NULL');
+    invoice_add_index_if_missing('db_our_companies', 'idx_tax_code', 'tax_code');
+    invoice_add_index_if_missing('db_our_companies', 'idx_is_default', 'is_default');
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_our_company_accounts (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            company_id INT UNSIGNED NOT NULL,
+            account_label VARCHAR(150) NOT NULL,
+            account_type ENUM('bank_account','card_requisites','privat','mono','other') NOT NULL DEFAULT 'bank_account',
+            currency VARCHAR(10) NOT NULL DEFAULT 'UAH',
+            iban VARCHAR(80) NULL,
+            bank_name VARCHAR(255) NULL,
+            bank_address TEXT NULL,
+            swift VARCHAR(50) NULL,
+            recipient_name VARCHAR(255) NULL,
+            recipient_address TEXT NULL,
+            tax_code VARCHAR(50) NULL,
+            language ENUM('uk','en') NOT NULL DEFAULT 'uk',
+            is_default TINYINT(1) NOT NULL DEFAULT 0,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            payment_template TEXT NULL,
+            note TEXT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_company_id (company_id),
+            KEY idx_currency (currency),
+            KEY idx_account_type (account_type),
+            KEY idx_is_default (is_default),
+            KEY idx_is_active (is_active)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS db_invoices (
@@ -137,6 +183,8 @@ function ensure_invoice_tables(): void
     invoice_add_column_if_missing('db_invoices', 'contact_name', 'VARCHAR(255) NULL');
     invoice_add_column_if_missing('db_invoices', 'contact_email', 'VARCHAR(190) NULL');
     invoice_add_column_if_missing('db_invoices', 'contact_phone', 'VARCHAR(80) NULL');
+    invoice_add_column_if_missing('db_invoices', 'seller_account_id', 'INT UNSIGNED NULL');
+    invoice_modify_column_if_exists('db_invoices', 'document_type', "ENUM('invoice','delivery_note','act') NOT NULL DEFAULT 'invoice'");
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS db_invoice_documents (
@@ -356,6 +404,8 @@ function ensure_invoice_tables(): void
         )
     ");
     $stmt->execute();
+
+    seed_our_companies_and_accounts();
 }
 
 function invoice_add_column_if_missing(string $table, string $column, string $definition): void
@@ -374,6 +424,29 @@ function invoice_add_column_if_missing(string $table, string $column, string $de
 
     if ((int) $stmt->fetchColumn() === 0) {
         db()->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
+    }
+}
+
+function invoice_modify_column_if_exists(string $table, string $column, string $definition): void
+{
+    $stmt = db()->prepare("
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = :table_name
+          AND COLUMN_NAME = :column_name
+    ");
+    $stmt->execute([
+        'table_name' => $table,
+        'column_name' => $column,
+    ]);
+
+    if ((int) $stmt->fetchColumn() > 0) {
+        try {
+            db()->exec("ALTER TABLE {$table} MODIFY COLUMN {$column} {$definition}");
+        } catch (PDOException $e) {
+            error_log("Could not modify column {$column} on {$table}: " . $e->getMessage());
+        }
     }
 }
 
@@ -400,6 +473,293 @@ function invoice_add_index_if_missing(string $table, string $index, string $colu
     }
 }
 
+function seed_our_companies_and_accounts(): void
+{
+    $shared = [
+        'address' => 'вул. Машинобудівна, 50А, м. Київ, 03067',
+        'email' => 'sales@bws.com.ua',
+        'phone' => '(044) 390-72-80, (093) 390-72-80, (097) 390-72-80, (073) 390-72-80',
+        'website' => 'bws.com.ua',
+        'accountant_email' => 'b@bws.com.ua',
+        'accountant_phone' => '(044) 390-72-80, (093) 644-62-61',
+    ];
+
+    $companies = [
+        [
+            'short_name' => 'ФОП Дарченко А.Б.',
+            'legal_name' => 'ФОП Дарченко Алла Борисівна',
+            'tax_code' => '3032919108',
+            'company_type' => 'fop',
+            'tax_mode' => 'single_tax_no_vat',
+            'single_tax_group' => 2,
+            'allowed_item_type' => 'products_only',
+            'signer_name' => 'Дарченко А.Б.',
+            'signer_position' => 'директор',
+            'is_default' => 1,
+            'accounts' => [
+                ['account_label' => 'ПриватБанк UAH', 'account_type' => 'privat', 'currency' => 'UAH', 'iban' => 'UA873052990000026008015017458', 'bank_name' => 'АТ КБ «ПриватБанк»', 'language' => 'uk', 'is_default' => 1],
+                ['account_label' => 'ПриватБанк EUR', 'currency' => 'EUR', 'iban' => 'UA773052990000026006025031307', 'bank_name' => 'JSC CB "PRIVATBANK"', 'bank_address' => '1D HRUSHEVSKOHO STR., KYIV, 01001, UKRAINE', 'swift' => 'PBANUA2X', 'recipient_name' => 'Alla Darchenko, PE (Private Entrepreneur)', 'recipient_address' => '4A Yakuba Kolasa, app. 51, Kyiv, 03087, UA', 'language' => 'en', 'is_default' => 1],
+                ['account_label' => 'ПриватБанк USD', 'currency' => 'USD', 'iban' => 'UA413052990000026005025024229', 'bank_name' => 'JSC CB "PRIVATBANK"', 'bank_address' => '1D HRUSHEVSKOHO STR., KYIV, 01001, UKRAINE', 'swift' => 'PBANUA2X', 'recipient_name' => 'Alla Darchenko, PE (Private Entrepreneur)', 'recipient_address' => '4A Yakuba Kolasa, app. 51, Kyiv, 03087, UA', 'language' => 'en', 'is_default' => 1],
+                ['account_label' => 'Mono UAH', 'account_type' => 'mono', 'currency' => 'UAH', 'iban' => 'UA983220010000026009340111547', 'bank_name' => 'Monobank', 'language' => 'uk', 'payment_template' => "ФОП Дарченко Алла Борисівна\nIBAN: UA983220010000026009340111547\nЄДРПОУ: 3032919108", 'note' => 'Копіювання реквізитів менеджером'],
+            ],
+        ],
+        [
+            'short_name' => 'ФОП Скибало А.О.',
+            'legal_name' => 'ФОП Скибало Анна Олександрівна',
+            'tax_code' => '2817112883',
+            'company_type' => 'fop',
+            'tax_mode' => 'single_tax_no_vat',
+            'single_tax_group' => 2,
+            'allowed_item_type' => 'products_only',
+            'signer_name' => 'Скибало А.О.',
+            'signer_position' => 'директор',
+            'accounts' => [
+                ['account_label' => 'ПриватБанк UAH', 'account_type' => 'privat', 'currency' => 'UAH', 'iban' => 'UA393052990000026007035001520', 'bank_name' => 'АТ КБ "ПРИВАТБАНК"', 'language' => 'uk', 'is_default' => 1],
+                ['account_label' => 'ПриватБанк EUR', 'currency' => 'EUR', 'iban' => 'UA823052990000026008035023604', 'bank_name' => 'JSC CB "PRIVATBANK"', 'bank_address' => '1D HRUSHEVSKOHO STR., KYIV, 01001, UKRAINE', 'swift' => 'PBANUA2X', 'recipient_name' => 'Skybalo Anna, PE (Private Entrepreneur)', 'recipient_address' => '3 Kolektorna St., app. 38, Kyiv, 01001, UA', 'language' => 'en', 'is_default' => 1],
+            ],
+        ],
+        [
+            'short_name' => 'ФОП Дарченко К.М.',
+            'legal_name' => 'ФОП Дарченко К.М.',
+            'tax_code' => '2046517748',
+            'company_type' => 'fop',
+            'tax_mode' => 'single_tax_no_vat',
+            'single_tax_group' => 2,
+            'allowed_item_type' => 'products_only',
+            'signer_name' => 'Дарченко К.М.',
+            'signer_position' => 'директор',
+            'accounts' => [
+                ['account_label' => 'ПриватБанк UAH', 'account_type' => 'privat', 'currency' => 'UAH', 'iban' => 'UA843052990000026003005006797', 'bank_name' => 'АТ КБ "ПРИВАТБАНК"', 'language' => 'uk', 'is_default' => 1],
+            ],
+        ],
+        [
+            'short_name' => 'ФОП Кубар Т.О.',
+            'legal_name' => 'ФОП Кубар Тетяна Олександрівна',
+            'tax_code' => '3580408149',
+            'company_type' => 'fop',
+            'tax_mode' => 'single_tax_no_vat',
+            'single_tax_group' => 2,
+            'allowed_item_type' => 'products_only',
+            'signer_name' => 'Кубар Т.О.',
+            'signer_position' => 'директор',
+            'accounts' => [
+                ['account_label' => 'ПриватБанк UAH', 'account_type' => 'privat', 'currency' => 'UAH', 'iban' => 'UA813052990000026005045041981', 'bank_name' => 'АТ КБ «ПриватБанк»', 'language' => 'uk', 'is_default' => 1],
+                ['account_label' => 'ПриватБанк EUR', 'currency' => 'EUR', 'iban' => 'UA523052990000026009015035514', 'bank_name' => 'JSC CB "PRIVATBANK"', 'bank_address' => '1D HRUSHEVSKOHO STR., KYIV, 01001, UKRAINE', 'swift' => 'PBANUA2X', 'recipient_name' => 'Tetyana Kubar, PE (Private Entrepreneur)', 'recipient_address' => '3 Kolektorna St., app. 38, Kyiv, 01001, UA', 'language' => 'en', 'is_default' => 1],
+                ['account_label' => 'ПриватБанк USD', 'currency' => 'USD', 'bank_name' => 'JSC CB "PRIVATBANK"', 'swift' => 'PBANUA2X', 'recipient_name' => 'Tetyana Kubar, PE (Private Entrepreneur)', 'recipient_address' => '3 Kolektorna St., app. 38, Kyiv, 01001, UA', 'language' => 'en', 'note' => 'USD IBAN missing, fill later'],
+            ],
+        ],
+        [
+            'short_name' => 'ФОП Скибало О.Г.',
+            'legal_name' => 'ФОП Скибало О.Г.',
+            'tax_code' => '1977900801',
+            'company_type' => 'fop',
+            'tax_mode' => 'single_tax_no_vat',
+            'single_tax_group' => 3,
+            'allowed_item_type' => 'services_allowed',
+            'signer_name' => 'Скибало О.Г.',
+            'signer_position' => 'директор',
+            'accounts' => [
+                ['account_label' => 'ПриватБанк UAH', 'account_type' => 'privat', 'currency' => 'UAH', 'iban' => 'UA573052990000026000005008549', 'bank_name' => 'АТ КБ "ПРИВАТБАНК"', 'language' => 'uk', 'is_default' => 1],
+            ],
+        ],
+        [
+            'short_name' => 'ПП "ВД МЕДIА МIСТ"',
+            'legal_name' => 'ПП "ВД МЕДIА МIСТ"',
+            'tax_code' => '37210573',
+            'company_type' => 'pp',
+            'tax_mode' => 'vat_20',
+            'allowed_item_type' => 'products_and_services',
+            'signer_name' => 'Скибало А.О.',
+            'signer_position' => 'директор',
+            'accounts' => [
+                ['account_label' => 'ПриватБанк UAH', 'account_type' => 'privat', 'currency' => 'UAH', 'iban' => 'UA973052990000026002035019852', 'bank_name' => 'АТ КБ "ПРИВАТБАНК"', 'language' => 'uk', 'is_default' => 1],
+            ],
+        ],
+        [
+            'short_name' => 'ТОВ "ШИОНА"',
+            'legal_name' => 'ТОВ "ШИОНА"',
+            'tax_code' => '32344400',
+            'company_type' => 'tov',
+            'tax_mode' => 'vat_20',
+            'allowed_item_type' => 'products_and_services',
+            'signer_name' => 'Дарченко А.Б.',
+            'signer_position' => 'директор',
+            'accounts' => [
+                ['account_label' => 'ПриватБанк UAH', 'account_type' => 'privat', 'currency' => 'UAH', 'iban' => 'UA833052990000026007025005945', 'bank_name' => 'АТ КБ «ПриватБанк»', 'language' => 'uk', 'is_default' => 1],
+                ['account_label' => 'ПриватБанк USD', 'currency' => 'USD', 'iban' => 'UA613052990000026007035016838', 'bank_name' => 'JSC CB "PRIVATBANK"', 'bank_address' => '1D HRUSHEVSKOHO STR., KYIV, 01001, UKRAINE', 'swift' => 'PBANUA2X', 'recipient_name' => 'SHEONA LLC', 'recipient_address' => '50A, Mashynobudivna Str., Kyiv, 03067, UA', 'language' => 'en', 'is_default' => 1],
+            ],
+        ],
+        [
+            'short_name' => 'ТОВ "ДРУКАРНЯ .БРЕНД"',
+            'legal_name' => 'ТОВ "ДРУКАРНЯ .БРЕНД"',
+            'tax_code' => '45567881',
+            'company_type' => 'tov',
+            'tax_mode' => 'vat_20',
+            'allowed_item_type' => 'products_and_services',
+            'accounts' => [
+                ['account_label' => 'Укрсиббанк UAH', 'account_type' => 'bank_account', 'currency' => 'UAH', 'iban' => 'UA083510050000026008879243549', 'bank_name' => 'АТ "УКРСИББАНК"', 'language' => 'uk', 'is_default' => 1],
+            ],
+        ],
+    ];
+
+    foreach ($companies as $company) {
+        $companyId = seed_our_company(array_merge($shared, $company));
+        foreach ($company['accounts'] as $account) {
+            seed_our_company_account($companyId, array_merge([
+                'recipient_name' => $company['legal_name'],
+                'tax_code' => $company['tax_code'],
+            ], $account));
+        }
+    }
+}
+
+function seed_our_company(array $company): int
+{
+    $stmt = db()->prepare("
+        SELECT id
+        FROM db_our_companies
+        WHERE tax_code = :tax_code
+           OR edrpou = :edrpou_search
+           OR legal_name = :legal_name
+           OR short_name = :short_name
+        ORDER BY id ASC
+        LIMIT 1
+    ");
+    $stmt->execute([
+        'tax_code' => $company['tax_code'],
+        'edrpou_search' => $company['tax_code'],
+        'legal_name' => $company['legal_name'],
+        'short_name' => $company['short_name'],
+    ]);
+    $id = (int) ($stmt->fetchColumn() ?: 0);
+
+    if ($id > 0) {
+        $stmt = db()->prepare("
+            UPDATE db_our_companies
+            SET short_name = CASE WHEN tax_code IS NULL OR tax_code = '' THEN :short_name ELSE short_name END,
+                legal_name = CASE WHEN tax_code IS NULL OR tax_code = '' THEN :legal_name ELSE legal_name END,
+                edrpou = COALESCE(NULLIF(edrpou, ''), :edrpou),
+                tax_code = COALESCE(NULLIF(tax_code, ''), :tax_code),
+                company_type = CASE WHEN tax_code IS NULL OR tax_code = '' THEN :company_type ELSE company_type END,
+                tax_mode = CASE WHEN tax_code IS NULL OR tax_code = '' THEN :tax_mode ELSE tax_mode END,
+                single_tax_group = COALESCE(single_tax_group, :single_tax_group),
+                allowed_item_type = CASE WHEN tax_code IS NULL OR tax_code = '' THEN :allowed_item_type ELSE allowed_item_type END,
+                address = COALESCE(NULLIF(address, ''), :address),
+                email = COALESCE(NULLIF(email, ''), :email),
+                phone = COALESCE(NULLIF(phone, ''), :phone),
+                website = COALESCE(NULLIF(website, ''), :website),
+                accountant_email = COALESCE(NULLIF(accountant_email, ''), :accountant_email),
+                accountant_phone = COALESCE(NULLIF(accountant_phone, ''), :accountant_phone),
+                signer_name = COALESCE(NULLIF(signer_name, ''), :signer_name),
+                signer_position = COALESCE(NULLIF(signer_position, ''), :signer_position),
+                is_default = GREATEST(is_default, :is_default)
+            WHERE id = :id
+        ");
+        $stmt->execute([
+            'short_name' => $company['short_name'],
+            'legal_name' => $company['legal_name'],
+            'edrpou' => $company['tax_code'],
+            'tax_code' => $company['tax_code'],
+            'company_type' => $company['company_type'],
+            'tax_mode' => $company['tax_mode'],
+            'single_tax_group' => $company['single_tax_group'] ?? null,
+            'allowed_item_type' => $company['allowed_item_type'],
+            'address' => $company['address'],
+            'email' => $company['email'],
+            'phone' => $company['phone'],
+            'website' => $company['website'],
+            'accountant_email' => $company['accountant_email'],
+            'accountant_phone' => $company['accountant_phone'],
+            'signer_name' => $company['signer_name'] ?? null,
+            'signer_position' => $company['signer_position'] ?? null,
+            'is_default' => (int) ($company['is_default'] ?? 0),
+            'id' => $id,
+        ]);
+
+        return $id;
+    }
+
+    $stmt = db()->prepare("
+        INSERT INTO db_our_companies
+            (short_name, legal_name, edrpou, tax_code, company_type, tax_mode, single_tax_group,
+             allowed_item_type, address, email, phone, website, accountant_email, accountant_phone,
+             signer_name, signer_position, is_active, is_default)
+        VALUES
+            (:short_name, :legal_name, :edrpou, :tax_code, :company_type, :tax_mode, :single_tax_group,
+             :allowed_item_type, :address, :email, :phone, :website, :accountant_email, :accountant_phone,
+             :signer_name, :signer_position, 1, :is_default)
+    ");
+    $stmt->execute([
+        'short_name' => $company['short_name'],
+        'legal_name' => $company['legal_name'],
+        'edrpou' => $company['tax_code'],
+        'tax_code' => $company['tax_code'],
+        'company_type' => $company['company_type'],
+        'tax_mode' => $company['tax_mode'],
+        'single_tax_group' => $company['single_tax_group'] ?? null,
+        'allowed_item_type' => $company['allowed_item_type'],
+        'address' => $company['address'],
+        'email' => $company['email'],
+        'phone' => $company['phone'],
+        'website' => $company['website'],
+        'accountant_email' => $company['accountant_email'],
+        'accountant_phone' => $company['accountant_phone'],
+        'signer_name' => $company['signer_name'] ?? null,
+        'signer_position' => $company['signer_position'] ?? null,
+        'is_default' => (int) ($company['is_default'] ?? 0),
+    ]);
+
+    return (int) db()->lastInsertId();
+}
+
+function seed_our_company_account(int $companyId, array $account): void
+{
+    $stmt = db()->prepare("
+        SELECT id
+        FROM db_our_company_accounts
+        WHERE company_id = :company_id
+          AND account_label = :account_label
+          AND currency = :currency
+          AND (iban <=> :iban)
+        LIMIT 1
+    ");
+    $stmt->execute([
+        'company_id' => $companyId,
+        'account_label' => $account['account_label'],
+        'currency' => $account['currency'],
+        'iban' => $account['iban'] ?? null,
+    ]);
+    if ($stmt->fetchColumn()) {
+        return;
+    }
+
+    $stmt = db()->prepare("
+        INSERT INTO db_our_company_accounts
+            (company_id, account_label, account_type, currency, iban, bank_name, bank_address, swift,
+             recipient_name, recipient_address, tax_code, language, is_default, is_active, payment_template, note)
+        VALUES
+            (:company_id, :account_label, :account_type, :currency, :iban, :bank_name, :bank_address, :swift,
+             :recipient_name, :recipient_address, :tax_code, :language, :is_default, 1, :payment_template, :note)
+    ");
+    $stmt->execute([
+        'company_id' => $companyId,
+        'account_label' => $account['account_label'],
+        'account_type' => $account['account_type'] ?? 'bank_account',
+        'currency' => $account['currency'],
+        'iban' => ($account['iban'] ?? '') !== '' ? $account['iban'] : null,
+        'bank_name' => $account['bank_name'] ?? null,
+        'bank_address' => $account['bank_address'] ?? null,
+        'swift' => $account['swift'] ?? null,
+        'recipient_name' => $account['recipient_name'] ?? null,
+        'recipient_address' => $account['recipient_address'] ?? null,
+        'tax_code' => $account['tax_code'] ?? null,
+        'language' => $account['language'] ?? 'uk',
+        'is_default' => (int) ($account['is_default'] ?? 0),
+        'payment_template' => $account['payment_template'] ?? null,
+        'note' => $account['note'] ?? null,
+    ]);
+}
+
 function expense_types(): array
 {
     return ['one_time', 'monthly_subscription', 'loan_payment', 'operational_debt', 'strategic_debt', 'other'];
@@ -418,6 +778,111 @@ function can_manage_expenses(): bool
 function can_manage_invoices(): bool
 {
     return in_array(user_role(), ['ceo', 'accountant'], true);
+}
+
+function can_edit_our_companies(): bool
+{
+    return user_role() === 'ceo';
+}
+
+function can_view_payment_requisites(): bool
+{
+    return in_array(user_role(), ['ceo', 'accountant', 'manager'], true);
+}
+
+function our_companies(bool $activeOnly = true): array
+{
+    $sql = 'SELECT * FROM db_our_companies';
+    if ($activeOnly) {
+        $sql .= ' WHERE is_active = 1';
+    }
+    $sql .= ' ORDER BY is_default DESC, is_active DESC, short_name ASC, id ASC';
+
+    return db()->query($sql)->fetchAll();
+}
+
+function our_company_accounts(?int $companyId = null, bool $activeOnly = true): array
+{
+    $sql = 'SELECT a.*, c.short_name, c.legal_name, c.tax_code AS company_tax_code, c.edrpou
+            FROM db_our_company_accounts a
+            LEFT JOIN db_our_companies c ON c.id = a.company_id
+            WHERE 1=1';
+    $params = [];
+    if ($companyId) {
+        $sql .= ' AND a.company_id = :company_id';
+        $params['company_id'] = $companyId;
+    }
+    if ($activeOnly) {
+        $sql .= ' AND a.is_active = 1';
+    }
+    $sql .= ' ORDER BY c.is_default DESC, c.short_name ASC, a.currency ASC, a.is_default DESC, a.account_label ASC';
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+function our_default_account_id(int $companyId, string $currency = 'UAH'): ?int
+{
+    $stmt = db()->prepare("
+        SELECT id
+        FROM db_our_company_accounts
+        WHERE company_id = :company_id
+          AND currency = :currency
+          AND is_active = 1
+        ORDER BY is_default DESC, id ASC
+        LIMIT 1
+    ");
+    $stmt->execute([
+        'company_id' => $companyId,
+        'currency' => strtoupper($currency),
+    ]);
+    $id = $stmt->fetchColumn();
+    return $id ? (int) $id : null;
+}
+
+function our_account_label(array $account): string
+{
+    $parts = [
+        (string) ($account['currency'] ?? 'UAH'),
+        (string) ($account['account_label'] ?? ''),
+        (string) (($account['iban'] ?? '') ?: ($account['bank_name'] ?? '')),
+    ];
+    return trim(implode(' · ', array_filter($parts, static fn($value) => trim($value) !== '')));
+}
+
+function payment_requisites_text(array $company, array $account, string $orderNumber, string $amount, string $language = 'uk'): string
+{
+    $currency = strtoupper((string) ($account['currency'] ?? 'UAH'));
+    $language = $language === 'en' ? 'en' : 'uk';
+    $amount = trim($amount);
+    $orderNumber = trim($orderNumber);
+
+    if ($language === 'en' || $currency !== 'UAH') {
+        return implode("\n", array_filter([
+            'Recipient: ' . (($account['recipient_name'] ?? '') ?: ($company['legal_name'] ?? '')),
+            !empty($account['iban']) ? 'IBAN: ' . $account['iban'] : '',
+            !empty($account['bank_name']) ? 'Bank: ' . $account['bank_name'] : '',
+            !empty($account['swift']) ? 'SWIFT: ' . $account['swift'] : '',
+            !empty($account['bank_address']) ? 'Bank address: ' . $account['bank_address'] : '',
+            !empty($account['recipient_address']) ? 'Address: ' . $account['recipient_address'] : '',
+            $orderNumber !== '' ? 'Payment for order № ' . $orderNumber : '',
+            $amount !== '' ? 'Amount: ' . $amount . ' ' . $currency : '',
+        ], static fn($line) => trim($line) !== ''));
+    }
+
+    $template = trim((string) ($account['payment_template'] ?? ''));
+    $base = $template !== '' ? $template : implode("\n", array_filter([
+        (string) ($company['legal_name'] ?? ''),
+        !empty($account['bank_name']) ? 'Банк: ' . $account['bank_name'] : '',
+        !empty($account['iban']) ? 'IBAN: ' . $account['iban'] : '',
+        !empty($account['tax_code'] ?: ($company['tax_code'] ?? $company['edrpou'] ?? '')) ? 'ЄДРПОУ: ' . (($account['tax_code'] ?? '') ?: (($company['tax_code'] ?? '') ?: ($company['edrpou'] ?? ''))) : '',
+    ], static fn($line) => trim($line) !== ''));
+
+    return $base . "\n" . implode("\n", array_filter([
+        $orderNumber !== '' ? 'Оплата за замовлення № ' . $orderNumber : '',
+        $amount !== '' ? 'Сума: ' . $amount . ' грн' : '',
+    ], static fn($line) => trim($line) !== ''));
 }
 
 function month_end_date(string $month): string

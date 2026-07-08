@@ -100,3 +100,14 @@ The database plan includes local company/contact manager ownership, but the Clie
 Client sync sends updated-after style parameters where possible and keeps bounded page limits as fallback. Confirm in production whether KeyCRM company/buyer endpoints honor those filters.
 
 If they do not, delta sync will still be bounded, but it may rescan recent pages rather than true changed-only records.
+
+## Seller Accounts Need Production Review
+
+Seeded seller companies and accounts should be reviewed by CEO/accounting after deploy.
+
+Known gaps:
+
+- VAT 20% invoice PDF templates are not implemented.
+- English EUR/USD invoice templates are not implemented.
+- `ФОП Кубар Т.О.` USD IBAN is intentionally empty until confirmed.
+- `payment_requisites.php` creates copyable payment text only; it does not create invoices, payments, or KeyCRM records.

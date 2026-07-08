@@ -723,10 +723,29 @@ function invoice_insert_items(PDO $pdo, int $invoiceId, array $items): void
 function invoice_load(int $id): ?array
 {
     $stmt = db()->prepare("
-        SELECT i.*, c.short_name, c.legal_name, c.edrpou, c.iban, c.bank, c.address, c.email, c.phone,
-               c.accountant_email, c.accountant_phone, c.tax_mode, c.allowed_item_type
+        SELECT i.*,
+               c.short_name,
+               c.legal_name,
+               COALESCE(NULLIF(c.tax_code, ''), c.edrpou) AS edrpou,
+               COALESCE(NULLIF(selected_account.iban, ''), NULLIF(default_account.iban, ''), c.iban) AS iban,
+               COALESCE(NULLIF(selected_account.bank_name, ''), NULLIF(default_account.bank_name, ''), c.bank) AS bank,
+               COALESCE(NULLIF(selected_account.account_label, ''), NULLIF(default_account.account_label, '')) AS account_label,
+               COALESCE(NULLIF(selected_account.currency, ''), NULLIF(default_account.currency, ''), 'UAH') AS account_currency,
+               COALESCE(NULLIF(selected_account.swift, ''), NULLIF(default_account.swift, '')) AS swift,
+               COALESCE(NULLIF(selected_account.bank_address, ''), NULLIF(default_account.bank_address, '')) AS bank_address,
+               COALESCE(NULLIF(selected_account.recipient_name, ''), NULLIF(default_account.recipient_name, ''), c.legal_name) AS account_recipient_name,
+               COALESCE(NULLIF(selected_account.recipient_address, ''), NULLIF(default_account.recipient_address, '')) AS account_recipient_address,
+               c.address, c.email, c.phone, c.website,
+               c.accountant_email, c.accountant_phone, c.tax_mode, c.allowed_item_type,
+               c.company_type, c.single_tax_group, c.signer_name, c.signer_position
         FROM db_invoices i
         LEFT JOIN db_our_companies c ON c.id = i.seller_company_id
+        LEFT JOIN db_our_company_accounts selected_account ON selected_account.id = i.seller_account_id
+        LEFT JOIN db_our_company_accounts default_account
+               ON default_account.company_id = i.seller_company_id
+              AND default_account.currency = 'UAH'
+              AND default_account.is_default = 1
+              AND default_account.is_active = 1
         WHERE i.id = :id
         LIMIT 1
     ");
@@ -740,6 +759,26 @@ function invoice_items(int $invoiceId): array
     $stmt = db()->prepare('SELECT * FROM db_invoice_items WHERE invoice_id = :invoice_id ORDER BY sort_order ASC, id ASC');
     $stmt->execute(['invoice_id' => $invoiceId]);
     return $stmt->fetchAll();
+}
+
+function invoice_account_id_for_seller(int $sellerId, int $accountId, string $currency = 'UAH'): ?int
+{
+    if ($sellerId <= 0) {
+        return null;
+    }
+    if ($accountId > 0) {
+        $stmt = db()->prepare('SELECT id FROM db_our_company_accounts WHERE id = :id AND company_id = :company_id AND is_active = 1 LIMIT 1');
+        $stmt->execute([
+            'id' => $accountId,
+            'company_id' => $sellerId,
+        ]);
+        $id = $stmt->fetchColumn();
+        if ($id) {
+            return (int) $id;
+        }
+    }
+
+    return our_default_account_id($sellerId, $currency);
 }
 
 function invoice_legal_entities(?int $clientCompanyId): array
@@ -1140,7 +1179,8 @@ function invoice_download_path(string $relative): void
     exit;
 }
 
-$companies = db()->query('SELECT * FROM db_our_companies WHERE is_active = 1 ORDER BY id ASC')->fetchAll();
+$companies = our_companies(true);
+$companyAccounts = our_company_accounts(null, true);
 $defaultCompany = $companies[0] ?? [];
 
 if (isset($_GET['download'])) {
@@ -1177,6 +1217,7 @@ if (is_post()) {
                 break;
             }
         }
+        $sellerAccountId = invoice_account_id_for_seller($sellerId, (int) ($_POST['seller_account_id'] ?? 0), 'UAH');
 
         $stmt = db()->prepare('SELECT * FROM db_orders WHERE keycrm_id = :keycrm_id LIMIT 1');
         $stmt->execute(['keycrm_id' => $orderId]);
@@ -1211,7 +1252,7 @@ if (is_post()) {
 
             $stmt = db()->prepare("
                 INSERT INTO db_invoices
-                    (keycrm_order_id, invoice_number, invoice_date, document_type, seller_company_id, buyer_id,
+                    (keycrm_order_id, invoice_number, invoice_date, document_type, seller_company_id, seller_account_id, buyer_id,
                      buyer_company_id, client_company_id, buyer_display_name, buyer_contact_name,
                      buyer_edrpou, buyer_address, buyer_email, buyer_phone,
                      recipient_legal_name, recipient_short_name, recipient_edrpou, recipient_tax_number,
@@ -1220,7 +1261,7 @@ if (is_post()) {
                      total_amount_uah, vat_mode, vat_amount_uah, total_with_vat_uah, payment_purpose,
                      payment_status, document_status, status, sent_at, payment_due_date, expected_payment_date, created_by_user_id)
                 VALUES
-                    (:keycrm_order_id, :invoice_number, CURDATE(), 'invoice', :seller_company_id, :buyer_id,
+                    (:keycrm_order_id, :invoice_number, CURDATE(), 'invoice', :seller_company_id, :seller_account_id, :buyer_id,
                      :buyer_company_id, :client_company_id, :buyer_display_name, :buyer_contact_name,
                      :buyer_edrpou, :buyer_address, :buyer_email, :buyer_phone,
                      :recipient_legal_name, :recipient_short_name, :recipient_edrpou, :recipient_tax_number,
@@ -1233,6 +1274,7 @@ if (is_post()) {
                 'keycrm_order_id' => $orderId,
                 'invoice_number' => $number,
                 'seller_company_id' => $sellerId,
+                'seller_account_id' => $sellerAccountId,
                 'buyer_id' => $payload['buyer_id'] ?: null,
                 'buyer_company_id' => $payload['buyer_company_id'] ?: null,
                 'client_company_id' => $clientSnapshot['client_company_id'] ?: null,
@@ -1392,6 +1434,7 @@ if (is_post()) {
                     break;
                 }
             }
+            $sellerAccountId = invoice_account_id_for_seller($sellerId, (int) ($_POST['seller_account_id'] ?? ($invoice['seller_account_id'] ?? 0)), 'UAH');
 
             if ($action === 'save_legal_entity') {
                 $legalName = trim((string) ($_POST['recipient_legal_name'] ?? ($_POST['buyer_display_name'] ?? '')));
@@ -1689,6 +1732,7 @@ if (is_post()) {
                         SET invoice_number = :invoice_number,
                             invoice_date = :invoice_date,
                             seller_company_id = :seller_company_id,
+                            seller_account_id = :seller_account_id,
                             client_company_id = :client_company_id,
                             client_legal_entity_id = :client_legal_entity_id,
                             buyer_display_name = :buyer_display_name,
@@ -1723,6 +1767,7 @@ if (is_post()) {
                         'invoice_number' => $invoiceNumber,
                         'invoice_date' => $invoiceDate,
                         'seller_company_id' => $sellerId,
+                        'seller_account_id' => $sellerAccountId > 0 ? $sellerAccountId : null,
                         'client_company_id' => $clientCompanyId > 0 ? $clientCompanyId : null,
                         'client_legal_entity_id' => $clientLegalEntityId > 0 ? $clientLegalEntityId : null,
                         'buyer_display_name' => $recipientLegalName !== '' ? $recipientLegalName : null,
@@ -1891,6 +1936,10 @@ foreach ($invoices as $invoiceRow) {
             <nav class="nav">
                 <a href="<?= e(base_path('/index.php')) ?>">Дашборд</a>
                 <a class="active" href="<?= e(base_path('/invoices.php')) ?>">Рахунки</a>
+                <a href="<?= e(base_path('/payment_requisites.php')) ?>">Реквізити оплати</a>
+                <?php if (in_array(user_role(), ['ceo', 'accountant'], true)): ?>
+                    <a href="<?= e(base_path('/our_companies.php')) ?>">Наші компанії</a>
+                <?php endif; ?>
                 <?php if (user_role() === 'ceo'): ?>
                     <a href="<?= e(base_path('/targets.php')) ?>">Плани</a>
                 <?php endif; ?>
@@ -1941,10 +1990,21 @@ foreach ($invoices as $invoiceRow) {
                 </label>
                 <label>
                     <span>Від кого рахунок</span>
-                    <select name="seller_company_id">
+                    <select name="seller_company_id" data-company-account-source>
                         <?php foreach ($companies as $company): ?>
                             <option value="<?= e((string) $company['id']) ?>">
                                 <?= e((string) $company['short_name']) ?> · <?= e((string) $company['tax_mode']) ?> · <?= e((string) $company['allowed_item_type']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <label>
+                    <span>Рахунок / IBAN</span>
+                    <select name="seller_account_id" data-company-account-target>
+                        <option value="">Default UAH</option>
+                        <?php foreach ($companyAccounts as $account): ?>
+                            <option value="<?= e((string) $account['id']) ?>" data-company-id="<?= e((string) $account['company_id']) ?>">
+                                <?= e((string) ($account['short_name'] ?? '')) ?> · <?= e(our_account_label($account)) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -1973,7 +2033,7 @@ foreach ($invoices as $invoiceRow) {
                         </div>
                         <label>
                             <span>Від кого рахунок</span>
-                            <select name="seller_company_id">
+                            <select name="seller_company_id" data-company-account-source>
                                 <?php foreach ($companies as $company): ?>
                                     <option value="<?= e((string) $company['id']) ?>" <?= (int) $editInvoice['seller_company_id'] === (int) $company['id'] ? 'selected' : '' ?>>
                                         <?= e((string) $company['short_name']) ?> · <?= e((string) $company['tax_mode']) ?> · <?= e((string) $company['allowed_item_type']) ?>
@@ -1981,10 +2041,24 @@ foreach ($invoices as $invoiceRow) {
                                 <?php endforeach; ?>
                             </select>
                         </label>
+                        <label>
+                            <span>Рахунок / IBAN</span>
+                            <select name="seller_account_id" data-company-account-target>
+                                <option value="">Default UAH</option>
+                                <?php foreach ($companyAccounts as $account): ?>
+                                    <option value="<?= e((string) $account['id']) ?>" data-company-id="<?= e((string) $account['company_id']) ?>" <?= (int) ($editInvoice['seller_account_id'] ?? 0) === (int) $account['id'] ? 'selected' : '' ?>>
+                                        <?= e((string) ($account['short_name'] ?? '')) ?> · <?= e(our_account_label($account)) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </label>
                         <div class="wide-field seller-details">
                             <span class="label">Дані продавця</span>
                             <strong><?= e((string) ($editInvoice['legal_name'] ?: $editInvoice['short_name'])) ?></strong>
-                            <small><?= e((string) $editInvoice['iban']) ?> · <?= e((string) $editInvoice['edrpou']) ?> · <?= e((string) $editInvoice['bank']) ?></small>
+                            <small><?= e((string) $editInvoice['iban']) ?> · <?= e((string) $editInvoice['edrpou']) ?> · <?= e((string) $editInvoice['bank']) ?><?= !empty($editInvoice['account_label']) ? ' · ' . e((string) $editInvoice['account_label']) : '' ?></small>
+                            <?php if (($editInvoice['tax_mode'] ?? '') === 'vat_20'): ?>
+                                <small class="field-warning">VAT template not implemented yet — PDF зараз без ПДВ.</small>
+                            <?php endif; ?>
                         </div>
                         <div class="section-label">
                             <span class="label">Клієнт</span>
@@ -2307,6 +2381,34 @@ foreach ($invoices as $invoiceRow) {
         <?= app_version_badge() ?>
     </main>
     <script>
+        (function () {
+            function syncAccountOptions(select) {
+                var form = select.closest('form');
+                if (!form) return;
+                var accountSelect = form.querySelector('[data-company-account-target]');
+                if (!accountSelect) return;
+                var companyId = select.value || '';
+                var selectedVisible = false;
+                accountSelect.querySelectorAll('option').forEach(function (option) {
+                    var optionCompanyId = option.dataset.companyId || '';
+                    var visible = option.value === '' || optionCompanyId === companyId;
+                    option.hidden = !visible;
+                    option.disabled = !visible;
+                    if (visible && option.selected) selectedVisible = true;
+                });
+                if (!selectedVisible) {
+                    accountSelect.value = '';
+                }
+            }
+
+            document.querySelectorAll('[data-company-account-source]').forEach(function (select) {
+                syncAccountOptions(select);
+                select.addEventListener('change', function () {
+                    syncAccountOptions(select);
+                });
+            });
+        })();
+
         (function () {
             var endpoint = '<?= e(base_path('/ajax_client_search.php')) ?>';
 

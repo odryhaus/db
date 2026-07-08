@@ -572,11 +572,13 @@ try {
                     <?php if (user_role() === 'ceo'): ?>
                         <a href="<?= e(base_path('/targets.php?month=' . urlencode($selectedMonth))) ?>">Плани</a>
                     <?php endif; ?>
+                    <a href="<?= e(base_path('/payment_requisites.php')) ?>">Реквізити оплати</a>
                     <?php if (can_manage_expenses()): ?>
                         <a href="<?= e(base_path('/invoices.php')) ?>">Рахунки</a>
                         <a href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">Витрати</a>
                     <?php endif; ?>
                     <?php if (user_role() === 'ceo'): ?>
+                        <a href="<?= e(base_path('/our_companies.php')) ?>">Наші компанії</a>
                         <a href="<?= e(base_path('/sync_orders.php')) ?>">Синхронізація</a>
                         <a href="<?= e(base_path('/clients_sync.php')) ?>">Клієнти Sync</a>
                         <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>

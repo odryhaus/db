@@ -240,3 +240,14 @@ After deploy:
 - Verify invoice autocomplete returns companies, legal entities, and contacts from local DB only.
 - Confirm KeyCRM company/buyer endpoint filters support or ignore `updated_after`; bounded page limits remain the fallback.
 - Later add a Clients page for manager assignment and bulk reassignment.
+
+## Our Companies Follow-up
+
+After deploy:
+
+- Open `our_companies.php` as CEO and verify seeded FOP/TOV/PP companies.
+- Confirm each active seller has a default UAH account.
+- Fill missing USD IBAN for `ФОП Кубар Т.О.` when available.
+- Open `payment_requisites.php` as manager and copy UAH/EUR/USD payment texts.
+- Later add VAT 20% PDF templates for VAT sellers.
+- Later add English EUR/USD invoice templates.

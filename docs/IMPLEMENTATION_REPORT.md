@@ -163,3 +163,31 @@ Recommended later approach: keep them in the database, but move them to an optio
 
 - Fixed production MySQL error `1089 Incorrect prefix key` caused by creating `idx_email` as `email(191)` while the column is `VARCHAR(190)`.
 - Made safe index creation best-effort: if a non-critical index cannot be added on a legacy production column, the error is logged instead of breaking `invoices.php`.
+
+## 2026-07-08 — Our Companies And Payment Requisites
+
+### Files Changed
+
+- `finance.php`
+- `invoices.php`
+- `index.php`
+- `our_companies.php`
+- `payment_requisites.php`
+- documentation files
+
+### What Changed
+
+- Expanded `db_our_companies` for seller legal entity structure.
+- Added `db_our_company_accounts` for bank/card/payment requisites.
+- Seeded initial .BRAND FOP/TOV/PP seller entities and UAH/EUR/USD/Mono accounts.
+- Added CEO/accountant view page `our_companies.php`; CEO can edit companies/accounts.
+- Added `payment_requisites.php` for copyable payment text by order/amount/company/account.
+- Added `db_invoices.seller_account_id` and invoice account selector.
+- Invoice PDFs now read seller bank details from selected/default company account with legacy fallback.
+
+### Not Implemented
+
+- VAT 20% PDF templates.
+- English EUR/USD invoice templates.
+- KeyCRM payment writes.
+- Payment creation/accounting ledger.
