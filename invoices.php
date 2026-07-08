@@ -2055,8 +2055,8 @@ foreach ($invoices as $invoiceRow) {
                         <input type="hidden" name="recipient_tax_number" value="<?= e((string) (($editInvoice['recipient_tax_number'] ?? '') ?: '')) ?>">
                         <input type="hidden" name="recipient_legal_address" value="<?= e((string) (($editInvoice['recipient_legal_address'] ?? '') ?: ($editInvoice['buyer_address'] ?? ''))) ?>">
                         <div class="wide-field row-actions">
-                            <button type="submit" name="action" value="save_legal_entity" class="button-secondary">Створити / оновити юрособу</button>
-                            <button type="submit" name="action" value="set_default_legal_entity" class="button-secondary">Зробити default</button>
+                            <button type="submit" name="action" value="save_legal_entity" class="button-secondary small-button">Створити / оновити юрособу</button>
+                            <button type="submit" name="action" value="set_default_legal_entity" class="button-secondary small-button">Зробити default</button>
                         </div>
                         <div class="section-label">
                             <span class="label">Документ</span>

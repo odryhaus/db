@@ -819,7 +819,13 @@ button:hover,
 .collapse-field {
     flex: 1 1 260px;
     min-width: 220px;
+    max-width: 300px;
     margin-bottom: 0;
+}
+
+.collapse-field input {
+    padding: 6px 10px;
+    font-size: 12px;
 }
 
 .field-warning {
