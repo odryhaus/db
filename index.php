@@ -59,14 +59,60 @@ function money_uah($amount): string
 
 function dashboard_client_name(array $order): string
 {
+    $rawClient = dashboard_raw_client_name($order);
+
     return (string) (
         ($order['company_name'] ?? '')
         ?: ($order['local_company_name'] ?? '')
         ?: ($order['buyer_name'] ?? '')
         ?: ($order['local_contact_name'] ?? '')
         ?: ($order['client_name'] ?? '')
+        ?: $rawClient
         ?: '—'
     );
+}
+
+function dashboard_raw_client_name(array $order): string
+{
+    $raw = json_decode((string) ($order['raw_json'] ?? ''), true);
+    if (!is_array($raw)) {
+        return '';
+    }
+
+    $buyer = is_array($raw['buyer'] ?? null) ? $raw['buyer'] : [];
+    $buyerCompany = is_array($buyer['company'] ?? null) ? $buyer['company'] : [];
+    $company = is_array($raw['company'] ?? null) ? $raw['company'] : $buyerCompany;
+    $client = is_array($raw['client'] ?? null) ? $raw['client'] : [];
+
+    foreach ([
+        $company['title'] ?? null,
+        $company['full_name'] ?? null,
+        $company['name'] ?? null,
+        $buyerCompany['title'] ?? null,
+        $buyerCompany['full_name'] ?? null,
+        $buyerCompany['name'] ?? null,
+        $buyer['full_name'] ?? null,
+        $buyer['name'] ?? null,
+        $client['full_name'] ?? null,
+        $client['name'] ?? null,
+    ] as $value) {
+        $value = trim((string) $value);
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    return '';
+}
+
+function dashboard_raw_contact_value(array $order, string $field): string
+{
+    $raw = json_decode((string) ($order['raw_json'] ?? ''), true);
+    if (!is_array($raw)) {
+        return '';
+    }
+    $buyer = is_array($raw['buyer'] ?? null) ? $raw['buyer'] : [];
+    return trim((string) ($buyer[$field] ?? ''));
 }
 
 function dashboard_url(array $params = []): string
@@ -361,34 +407,56 @@ try {
     ");
     $aging = $agingStmt->fetch() ?: [];
 
-    $clientDebtStmt = db()->query("
+    $clientDebtRowsStmt = db()->query("
         SELECT
-            COALESCE(o.company_id, o.buyer_id, o.client_id, 0) AS client_key,
-            COALESCE(
-                MAX(NULLIF(o.company_name, '')),
-                MAX(NULLIF(cc.display_name, '')),
-                MAX(NULLIF(cc.keycrm_title, '')),
-                MAX(NULLIF(cc.keycrm_name, '')),
-                MAX(NULLIF(o.buyer_name, '')),
-                MAX(NULLIF(ct.full_name, '')),
-                MAX(NULLIF(o.client_name, '')),
-                'Без клієнта'
-            ) AS client_name,
-            COALESCE(SUM(o.unpaid_amount_uah), 0) AS total_unpaid,
-            COUNT(*) AS unpaid_count,
-            MIN(o.ordered_at) AS oldest_ordered_at,
-            COALESCE(MAX(NULLIF(o.buyer_phone, '')), MAX(NULLIF(ct.phone, ''))) AS contact_phone,
-            COALESCE(MAX(NULLIF(o.buyer_email, '')), MAX(NULLIF(ct.email, ''))) AS contact_email
+            o.company_id,
+            o.buyer_id,
+            o.client_id,
+            o.ordered_at,
+            o.unpaid_amount_uah,
+            o.company_name,
+            o.buyer_name,
+            o.client_name,
+            o.buyer_phone,
+            o.buyer_email,
+            o.raw_json,
+            COALESCE(NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_title, ''), NULLIF(cc.keycrm_name, '')) AS local_company_name,
+            ct.full_name AS local_contact_name,
+            ct.phone AS local_contact_phone,
+            ct.email AS local_contact_email
         FROM db_orders o
         LEFT JOIN db_client_companies cc ON cc.keycrm_company_id = o.company_id
         LEFT JOIN db_client_contacts ct ON ct.keycrm_buyer_id = o.buyer_id
         WHERE o.unpaid_amount_uah > 0
           AND {$notCanceledSql}
-        GROUP BY COALESCE(o.company_id, o.buyer_id, o.client_id, 0)
-        ORDER BY total_unpaid DESC
-        LIMIT 50
+        ORDER BY o.unpaid_amount_uah DESC, o.ordered_at ASC
+        LIMIT 1000
     ");
-    $clientDebt = $clientDebtStmt->fetchAll();
+    $clientDebtMap = [];
+    foreach ($clientDebtRowsStmt->fetchAll() as $debtRow) {
+        $name = dashboard_client_name($debtRow);
+        $keyId = (int) (($debtRow['company_id'] ?? 0) ?: ($debtRow['buyer_id'] ?? 0) ?: ($debtRow['client_id'] ?? 0));
+        $key = $keyId > 0 ? 'id:' . $keyId : 'name:' . strtolower($name);
+        if (!isset($clientDebtMap[$key])) {
+            $clientDebtMap[$key] = [
+                'client_key' => $keyId,
+                'client_name' => $name !== '—' ? $name : 'Без клієнта',
+                'total_unpaid' => 0,
+                'unpaid_count' => 0,
+                'oldest_ordered_at' => $debtRow['ordered_at'] ?? null,
+                'contact_phone' => (string) (($debtRow['buyer_phone'] ?? '') ?: ($debtRow['local_contact_phone'] ?? '') ?: dashboard_raw_contact_value($debtRow, 'phone')),
+                'contact_email' => (string) (($debtRow['buyer_email'] ?? '') ?: ($debtRow['local_contact_email'] ?? '') ?: dashboard_raw_contact_value($debtRow, 'email')),
+            ];
+        }
+        $clientDebtMap[$key]['total_unpaid'] += (float) ($debtRow['unpaid_amount_uah'] ?? 0);
+        $clientDebtMap[$key]['unpaid_count']++;
+        if (!empty($debtRow['ordered_at']) && (empty($clientDebtMap[$key]['oldest_ordered_at']) || strtotime((string) $debtRow['ordered_at']) < strtotime((string) $clientDebtMap[$key]['oldest_ordered_at']))) {
+            $clientDebtMap[$key]['oldest_ordered_at'] = $debtRow['ordered_at'];
+        }
+    }
+    $clientDebt = array_values($clientDebtMap);
+    usort($clientDebt, static fn($a, $b) => ($b['total_unpaid'] <=> $a['total_unpaid']));
+    $clientDebt = array_slice($clientDebt, 0, 50);
 
     $debtWhere = "unpaid_amount_uah > 0 AND {$notCanceledSql}";
     $debtParams = [];
@@ -419,6 +487,7 @@ try {
             o.order_number,
             o.ordered_at,
             o.client_name,
+            o.raw_json,
             o.buyer_name,
             o.company_name,
             COALESCE(NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_title, ''), NULLIF(cc.keycrm_name, '')) AS local_company_name,
@@ -448,6 +517,7 @@ try {
         SELECT
             o.order_number,
             o.client_name,
+            o.raw_json,
             o.buyer_name,
             o.company_name,
             COALESCE(NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_title, ''), NULLIF(cc.keycrm_name, '')) AS local_company_name,
