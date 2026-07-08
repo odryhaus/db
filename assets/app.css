@@ -1257,27 +1257,27 @@ tr:last-child td {
 
 .client-stack {
     display: grid;
-    gap: 6px;
-    min-width: 260px;
+    gap: 2px;
+    min-width: 220px;
+    max-width: 360px;
 }
 
-.client-stack div {
-    display: grid;
-    gap: 1px;
-}
-
-.client-stack strong,
-.client-stack span {
+.client-stack-company {
     color: var(--text);
     font-size: 13px;
+    font-weight: 700;
     line-height: 1.25;
 }
 
-.client-stack small {
+.client-stack-legal,
+.client-stack-contact {
     color: var(--muted);
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
+    font-size: 11px;
+    line-height: 1.2;
+}
+
+.client-stack-legal {
+    max-width: 100%;
 }
 
 /* ==========================================================================

@@ -288,6 +288,50 @@ function dashboard_raw_contact_value(array $order, string $field): string
     return trim((string) ($contacts[$buyerId][$field] ?? ''));
 }
 
+function dashboard_client_stack(array $order): string
+{
+    $company = trim((string) (
+        ($order['company_name'] ?? '')
+        ?: ($order['local_company_name'] ?? '')
+        ?: dashboard_raw_company_name($order)
+        ?: dashboard_cached_company($order)
+        ?: dashboard_client_name($order)
+    ));
+    $legal = trim((string) (
+        ($order['local_legal_name'] ?? '')
+        ?: dashboard_raw_legal_name($order)
+        ?: dashboard_cached_legal_name($order)
+    ));
+    $contactName = trim((string) (
+        ($order['buyer_name'] ?? '')
+        ?: ($order['local_contact_name'] ?? '')
+        ?: dashboard_cached_contact_name($order)
+    ));
+    $contactEmail = trim((string) (
+        ($order['buyer_email'] ?? '')
+        ?: ($order['local_contact_email'] ?? '')
+        ?: dashboard_raw_contact_value($order, 'email')
+    ));
+    $contactPhone = trim((string) (
+        ($order['buyer_phone'] ?? '')
+        ?: ($order['local_contact_phone'] ?? '')
+        ?: dashboard_raw_contact_value($order, 'phone')
+    ));
+    $contactParts = array_values(array_filter([$contactName, $contactEmail, $contactPhone], static fn($value) => $value !== ''));
+
+    $html = '<div class="client-stack">';
+    $html .= '<strong class="client-stack-company">' . e($company !== '' ? $company : 'Без клієнта') . '</strong>';
+    if ($legal !== '' && $legal !== $company) {
+        $html .= '<span class="client-stack-legal">' . e($legal) . '</span>';
+    }
+    if ($contactParts) {
+        $html .= '<span class="client-stack-contact">' . e(implode(' / ', $contactParts)) . '</span>';
+    }
+    $html .= '</div>';
+
+    return $html;
+}
+
 function dashboard_url(array $params = []): string
 {
     return base_path('/index.php') . '?' . http_build_query($params);
@@ -592,6 +636,7 @@ try {
             o.client_name,
             o.buyer_phone,
             o.buyer_email,
+            o.manager_name,
             o.raw_json,
             COALESCE(NULLIF(cc.keycrm_name, ''), NULLIF(cc.name, ''), NULLIF(cc.display_name, '')) AS local_company_name,
             COALESCE(NULLIF(cc.keycrm_title, ''), NULLIF(cc.title, ''), NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_name, ''), NULLIF(cc.name, '')) AS local_legal_name,
@@ -623,6 +668,7 @@ try {
                 'company_display' => $companyDisplay,
                 'legal_display' => $legalDisplay,
                 'contact_display' => $contactName,
+                'manager_name' => dashboard_manager_key($debtRow['manager_name'] ?? ''),
                 'total_unpaid' => 0,
                 'unpaid_count' => 0,
                 'oldest_ordered_at' => $debtRow['ordered_at'] ?? null,
@@ -644,6 +690,9 @@ try {
         }
         if ($clientDebtMap[$key]['contact_email'] === '' && $contactEmail !== '') {
             $clientDebtMap[$key]['contact_email'] = $contactEmail;
+        }
+        if ($clientDebtMap[$key]['manager_name'] === 'Без менеджера' && dashboard_manager_key($debtRow['manager_name'] ?? '') !== 'Без менеджера') {
+            $clientDebtMap[$key]['manager_name'] = dashboard_manager_key($debtRow['manager_name'] ?? '');
         }
         $clientDebtMap[$key]['total_unpaid'] += (float) ($debtRow['unpaid_amount_uah'] ?? 0);
         $clientDebtMap[$key]['unpaid_count']++;
@@ -683,12 +732,20 @@ try {
         SELECT
             o.order_number,
             o.ordered_at,
+            o.company_id,
+            o.buyer_id,
+            o.client_id,
             o.client_name,
             o.raw_json,
             o.buyer_name,
+            o.buyer_phone,
+            o.buyer_email,
             o.company_name,
             COALESCE(NULLIF(cc.keycrm_name, ''), NULLIF(cc.name, ''), NULLIF(cc.display_name, '')) AS local_company_name,
+            COALESCE(NULLIF(cc.keycrm_title, ''), NULLIF(cc.title, ''), NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_name, ''), NULLIF(cc.name, '')) AS local_legal_name,
             ct.full_name AS local_contact_name,
+            ct.phone AS local_contact_phone,
+            ct.email AS local_contact_email,
             o.manager_name,
             o.total_amount_uah,
             o.paid_amount_uah,
@@ -713,12 +770,20 @@ try {
     $monthlyUnpaidStmt = db()->prepare("
         SELECT
             o.order_number,
+            o.company_id,
+            o.buyer_id,
+            o.client_id,
             o.client_name,
             o.raw_json,
             o.buyer_name,
+            o.buyer_phone,
+            o.buyer_email,
             o.company_name,
             COALESCE(NULLIF(cc.keycrm_name, ''), NULLIF(cc.name, ''), NULLIF(cc.display_name, '')) AS local_company_name,
+            COALESCE(NULLIF(cc.keycrm_title, ''), NULLIF(cc.title, ''), NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_name, ''), NULLIF(cc.name, '')) AS local_legal_name,
             ct.full_name AS local_contact_name,
+            ct.phone AS local_contact_phone,
+            ct.email AS local_contact_email,
             o.manager_name,
             o.unpaid_amount_uah,
             o.payment_status,
@@ -1093,7 +1158,7 @@ try {
                                 <td><?= e((string) ($order['order_number'] ?: '—')) ?></td>
                                 <td><?= e((string) ($order['ordered_at'] ?: '—')) ?></td>
                                 <td><?= dashboard_age_badge($order['ordered_at'] ?? null) ?></td>
-                                <td><?= e(dashboard_client_name($order)) ?></td>
+                                <td><?= dashboard_client_stack($order) ?></td>
                                 <td><?= e(dashboard_manager_key($order['manager_name'] ?? '')) ?></td>
                                 <td class="num"><?= e(money_uah($order['total_amount_uah'] ?? 0)) ?></td>
                                 <td class="num"><?= e(money_uah($order['paid_amount_uah'] ?? 0)) ?></td>
@@ -1131,7 +1196,7 @@ try {
                         <?php foreach ($monthlyUnpaidOrders as $order): ?>
                             <tr>
                                 <td><?= e((string) ($order['order_number'] ?: '—')) ?></td>
-                                <td><?= e(dashboard_client_name($order)) ?></td>
+                                <td><?= dashboard_client_stack($order) ?></td>
                                 <td><?= e(dashboard_manager_key($order['manager_name'] ?? '')) ?></td>
                                 <td class="num"><strong><?= e(money_uah($order['unpaid_amount_uah'] ?? 0)) ?></strong></td>
                             </tr>
@@ -1153,6 +1218,7 @@ try {
                     <thead>
                         <tr>
                             <th>Клієнт</th>
+                            <th>Менеджер</th>
                             <th>Найстаріше</th>
                             <th class="num">Борг</th>
                             <th class="num">Замовлень</th>
@@ -1161,33 +1227,21 @@ try {
                     </thead>
                     <tbody>
                         <?php if (!$clientDebt): ?>
-                            <tr><td colspan="5">Клієнтів з боргом немає.</td></tr>
+                            <tr><td colspan="6">Клієнтів з боргом немає.</td></tr>
                         <?php endif; ?>
                         <?php foreach ($clientDebt as $client): ?>
                             <tr>
                                 <td>
-                                    <div class="client-stack">
-                                        <div>
-                                            <strong><?= e((string) (($client['company_display'] ?? '') ?: ($client['client_name'] ?? 'Без клієнта'))) ?></strong>
-                                            <small>Компанія</small>
-                                        </div>
-                                        <div>
-                                            <span><?= e((string) (($client['legal_display'] ?? '') ?: ($client['client_name'] ?? '—'))) ?></span>
-                                            <small>Повна назва юрособи</small>
-                                        </div>
-                                        <div>
-                                            <?php
-                                            $contactParts = array_filter([
-                                                (string) ($client['contact_display'] ?? ''),
-                                                (string) ($client['contact_email'] ?? ''),
-                                                (string) ($client['contact_phone'] ?? ''),
-                                            ], static fn($value) => trim($value) !== '');
-                                            ?>
-                                            <span><?= e($contactParts ? implode(' / ', $contactParts) : '—') ?></span>
-                                            <small>Покупець та контакти</small>
-                                        </div>
-                                    </div>
+                                    <?= dashboard_client_stack([
+                                        'company_name' => $client['company_display'] ?? '',
+                                        'local_legal_name' => $client['legal_display'] ?? '',
+                                        'buyer_name' => $client['contact_display'] ?? '',
+                                        'buyer_email' => $client['contact_email'] ?? '',
+                                        'buyer_phone' => $client['contact_phone'] ?? '',
+                                        'client_name' => $client['client_name'] ?? '',
+                                    ]) ?>
                                 </td>
+                                <td><?= e((string) ($client['manager_name'] ?? 'Без менеджера')) ?></td>
                                 <td><?= dashboard_age_badge($client['oldest_ordered_at'] ?? null) ?></td>
                                 <td class="num"><strong><?= e(money_uah($client['total_unpaid'] ?? 0)) ?></strong></td>
                                 <td class="num"><?= e((string) $client['unpaid_count']) ?></td>
