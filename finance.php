@@ -782,7 +782,7 @@ function can_manage_invoices(): bool
 
 function can_edit_our_companies(): bool
 {
-    return user_role() === 'ceo';
+    return in_array(user_role(), ['ceo', 'accountant'], true);
 }
 
 function can_view_payment_requisites(): bool
@@ -801,7 +801,7 @@ function our_companies(bool $activeOnly = true): array
     return db()->query($sql)->fetchAll();
 }
 
-function our_company_accounts(?int $companyId = null, bool $activeOnly = true): array
+function our_company_accounts(?int $companyId = null, bool $activeOnly = true, bool $requireIban = false): array
 {
     $sql = 'SELECT a.*, c.short_name, c.legal_name, c.tax_code AS company_tax_code, c.edrpou
             FROM db_our_company_accounts a
@@ -814,6 +814,9 @@ function our_company_accounts(?int $companyId = null, bool $activeOnly = true): 
     }
     if ($activeOnly) {
         $sql .= ' AND a.is_active = 1';
+    }
+    if ($requireIban) {
+        $sql .= " AND NULLIF(TRIM(a.iban), '') IS NOT NULL";
     }
     $sql .= ' ORDER BY c.is_default DESC, c.short_name ASC, a.currency ASC, a.is_default DESC, a.account_label ASC';
 
@@ -830,6 +833,7 @@ function our_default_account_id(int $companyId, string $currency = 'UAH'): ?int
         WHERE company_id = :company_id
           AND currency = :currency
           AND is_active = 1
+          AND NULLIF(TRIM(iban), '') IS NOT NULL
         ORDER BY is_default DESC, id ASC
         LIMIT 1
     ");

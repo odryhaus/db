@@ -1523,6 +1523,8 @@ Rules:
 
 - Seller data in invoice PDFs must come from `db_our_companies` plus `db_our_company_accounts`.
 - Payment/card requisites are not invoices; `payment_requisites.php` only creates copyable payment text for managers.
+- Invoice and payment-requisite account selectors must use active accounts with non-empty IBAN.
+- Empty-IBAN accounts may remain in `db_our_company_accounts` for future completion, but should not be selectable for documents/payment text.
 - FOP group 2 sellers are products-only.
 - FOP group 3 sellers may allow service wording after review.
 - VAT seller companies are stored now, but VAT 20% PDF templates are future work.

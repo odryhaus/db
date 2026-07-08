@@ -299,3 +299,14 @@ Decision:
 - VAT and currency invoice templates are stored/planned but not implemented in PDFs yet.
 
 Reason: `.BRAND DB` needs many seller entities and accounts without turning invoice work into accounting ERP.
+
+## Seller Account Selection Requires IBAN
+
+Decision:
+
+- Invoice and payment-requisite account selectors show only active seller accounts with a non-empty IBAN.
+- `our_companies.php` still shows inactive/empty-IBAN accounts for review and maintenance.
+- CEO and accountant can edit seller companies/accounts; managers can only generate copyable payment text.
+- `payment_requisites.php` remains a copy tool and does not create invoices, payments, or KeyCRM records.
+
+Reason: production has intentional inactive/empty accounts, and they must not accidentally appear in invoice/payment text selection.

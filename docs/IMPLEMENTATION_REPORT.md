@@ -191,3 +191,41 @@ Recommended later approach: keep them in the database, but move them to an optio
 - English EUR/USD invoice templates.
 - KeyCRM payment writes.
 - Payment creation/accounting ledger.
+
+## 2026-07-09 — Seller Companies / Payment Requisites Verification
+
+### Pages Checked
+
+- `our_companies.php` existed before this task.
+- `payment_requisites.php` existed before this task.
+- `invoices.php`, `finance.php`, and `assets/app.css` existed before this task.
+
+### Files Changed
+
+- `finance.php`
+- `invoices.php`
+- `our_companies.php`
+- `payment_requisites.php`
+- documentation files
+
+### What Changed
+
+- Allowed CEO and accountant roles to edit `our_companies.php`.
+- Kept managers on `payment_requisites.php` only; managers cannot edit seller company/account data.
+- Added visible `language` and `note` fields to seller account rows.
+- `payment_requisites.php` now filters accounts by selected company and currency.
+- Active account lists used by invoices/requisites now exclude accounts with empty IBAN.
+- Invoice selected/default account lookup now requires active account + matching currency + non-empty IBAN.
+- Invoice edit shows explicit warnings for VAT sellers and English/non-UAH account templates.
+
+### Database Changes
+
+- No new table was created.
+- No destructive schema change was made.
+- Existing safe column `db_invoices.seller_account_id` remains the invoice/account link.
+
+### Still Not Implemented
+
+- VAT 20% PDF templates.
+- English EUR/USD invoice PDF templates.
+- KeyCRM payment writes or file attachments.

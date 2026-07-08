@@ -731,6 +731,7 @@ function invoice_load(int $id): ?array
                COALESCE(NULLIF(selected_account.bank_name, ''), NULLIF(default_account.bank_name, ''), c.bank) AS bank,
                COALESCE(NULLIF(selected_account.account_label, ''), NULLIF(default_account.account_label, '')) AS account_label,
                COALESCE(NULLIF(selected_account.currency, ''), NULLIF(default_account.currency, ''), 'UAH') AS account_currency,
+               COALESCE(NULLIF(selected_account.language, ''), NULLIF(default_account.language, ''), 'uk') AS account_language,
                COALESCE(NULLIF(selected_account.swift, ''), NULLIF(default_account.swift, '')) AS swift,
                COALESCE(NULLIF(selected_account.bank_address, ''), NULLIF(default_account.bank_address, '')) AS bank_address,
                COALESCE(NULLIF(selected_account.recipient_name, ''), NULLIF(default_account.recipient_name, ''), c.legal_name) AS account_recipient_name,
@@ -746,6 +747,7 @@ function invoice_load(int $id): ?array
               AND default_account.currency = 'UAH'
               AND default_account.is_default = 1
               AND default_account.is_active = 1
+              AND NULLIF(TRIM(default_account.iban), '') IS NOT NULL
         WHERE i.id = :id
         LIMIT 1
     ");
@@ -767,10 +769,20 @@ function invoice_account_id_for_seller(int $sellerId, int $accountId, string $cu
         return null;
     }
     if ($accountId > 0) {
-        $stmt = db()->prepare('SELECT id FROM db_our_company_accounts WHERE id = :id AND company_id = :company_id AND is_active = 1 LIMIT 1');
+        $stmt = db()->prepare("
+            SELECT id
+            FROM db_our_company_accounts
+            WHERE id = :id
+              AND company_id = :company_id
+              AND currency = :currency
+              AND is_active = 1
+              AND NULLIF(TRIM(iban), '') IS NOT NULL
+            LIMIT 1
+        ");
         $stmt->execute([
             'id' => $accountId,
             'company_id' => $sellerId,
+            'currency' => strtoupper($currency),
         ]);
         $id = $stmt->fetchColumn();
         if ($id) {
@@ -1180,7 +1192,7 @@ function invoice_download_path(string $relative): void
 }
 
 $companies = our_companies(true);
-$companyAccounts = our_company_accounts(null, true);
+$companyAccounts = our_company_accounts(null, true, true);
 $defaultCompany = $companies[0] ?? [];
 
 if (isset($_GET['download'])) {
@@ -2057,7 +2069,10 @@ foreach ($invoices as $invoiceRow) {
                             <strong><?= e((string) ($editInvoice['legal_name'] ?: $editInvoice['short_name'])) ?></strong>
                             <small><?= e((string) $editInvoice['iban']) ?> · <?= e((string) $editInvoice['edrpou']) ?> · <?= e((string) $editInvoice['bank']) ?><?= !empty($editInvoice['account_label']) ? ' · ' . e((string) $editInvoice['account_label']) : '' ?></small>
                             <?php if (($editInvoice['tax_mode'] ?? '') === 'vat_20'): ?>
-                                <small class="field-warning">VAT template not implemented yet — PDF зараз без ПДВ.</small>
+                                <small class="field-warning">ПДВ шаблон ще не реалізований.</small>
+                            <?php endif; ?>
+                            <?php if (($editInvoice['account_language'] ?? 'uk') === 'en' || strtoupper((string) ($editInvoice['account_currency'] ?? 'UAH')) !== 'UAH'): ?>
+                                <small class="field-warning">English currency invoice template is not implemented yet.</small>
                             <?php endif; ?>
                         </div>
                         <div class="section-label">

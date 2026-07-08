@@ -245,9 +245,11 @@ After deploy:
 
 After deploy:
 
-- Open `our_companies.php` as CEO and verify seeded FOP/TOV/PP companies.
+- Open `our_companies.php` as CEO/accountant and verify seeded FOP/TOV/PP companies.
 - Confirm each active seller has a default UAH account.
 - Fill missing USD IBAN for `ФОП Кубар Т.О.` when available.
 - Open `payment_requisites.php` as manager and copy UAH/EUR/USD payment texts.
+- Confirm account selector hides inactive accounts and accounts without IBAN.
+- Confirm `payment_requisites.php` filters accounts by selected company and currency.
 - Later add VAT 20% PDF templates for VAT sellers.
 - Later add English EUR/USD invoice templates.

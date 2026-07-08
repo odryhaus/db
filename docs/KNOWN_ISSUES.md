@@ -110,4 +110,5 @@ Known gaps:
 - VAT 20% invoice PDF templates are not implemented.
 - English EUR/USD invoice templates are not implemented.
 - `ФОП Кубар Т.О.` USD IBAN is intentionally empty until confirmed.
+- Invoice and payment-requisite selectors intentionally hide active accounts with empty IBAN; maintain them in `our_companies.php`.
 - `payment_requisites.php` creates copyable payment text only; it does not create invoices, payments, or KeyCRM records.

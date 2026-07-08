@@ -21,7 +21,7 @@ function company_post_bool(string $key): int
 
 if (is_post()) {
     if (!$canEdit) {
-        $error = 'Only CEO can edit our companies.';
+        $error = 'Only CEO/accountant can edit our companies.';
     } elseif (!csrf_is_valid()) {
         $error = 'Invalid request. Refresh the page and try again.';
     } else {
@@ -209,7 +209,7 @@ foreach ($accounts as $account) {
 
         <?php if ($message !== ''): ?><div class="notice"><?= e($message) ?></div><?php endif; ?>
         <?php if ($error !== ''): ?><div class="alert"><?= e($error) ?></div><?php endif; ?>
-        <?php if (!$canEdit): ?><div class="notice">Перегляд доступний бухгалтеру. Редагувати може тільки CEO.</div><?php endif; ?>
+        <?php if (!$canEdit): ?><div class="notice">Перегляд доступний бухгалтеру. Редагувати можуть CEO та бухгалтер.</div><?php endif; ?>
 
         <?php if ($canEdit): ?>
             <section class="panel form-section dashboard-section">
@@ -277,7 +277,7 @@ foreach ($accounts as $account) {
 
                 <div class="table-wrap">
                     <table>
-                        <thead><tr><th>Рахунок</th><th>Тип</th><th>Валюта</th><th>IBAN</th><th>Банк</th><th>SWIFT</th><th>Default</th><th>Активний</th><?php if ($canEdit): ?><th></th><?php endif; ?></tr></thead>
+                        <thead><tr><th>Рахунок</th><th>Тип</th><th>Валюта</th><th>IBAN</th><th>Банк</th><th>SWIFT</th><th>Мова</th><th>Default</th><th>Активний</th><th>Нотатка</th><?php if ($canEdit): ?><th></th><?php endif; ?></tr></thead>
                         <tbody>
                             <?php foreach (($accountsByCompany[(int) $company['id']] ?? []) as $account): ?>
                                 <tr>
@@ -292,16 +292,16 @@ foreach ($accounts as $account) {
                                         <td><input name="iban" value="<?= e((string) $account['iban']) ?>" <?= !$canEdit ? 'readonly' : '' ?>></td>
                                         <td><input name="bank_name" value="<?= e((string) $account['bank_name']) ?>" <?= !$canEdit ? 'readonly' : '' ?>></td>
                                         <td><input name="swift" value="<?= e((string) $account['swift']) ?>" <?= !$canEdit ? 'readonly' : '' ?>></td>
+                                        <td><select name="language" <?= !$canEdit ? 'disabled' : '' ?>><option value="uk" <?= (string) $account['language'] !== 'en' ? 'selected' : '' ?>>uk</option><option value="en" <?= (string) $account['language'] === 'en' ? 'selected' : '' ?>>en</option></select></td>
                                         <td><input type="checkbox" name="is_default" <?= (int) $account['is_default'] === 1 ? 'checked' : '' ?> <?= !$canEdit ? 'disabled' : '' ?>></td>
                                         <td><input type="checkbox" name="is_active" <?= (int) $account['is_active'] === 1 ? 'checked' : '' ?> <?= !$canEdit ? 'disabled' : '' ?>></td>
+                                        <td><input name="note" value="<?= e((string) $account['note']) ?>" <?= !$canEdit ? 'readonly' : '' ?>></td>
                                         <?php if ($canEdit): ?><td><button type="submit" class="small-button">Save</button></td><?php endif; ?>
                                         <input type="hidden" name="bank_address" value="<?= e((string) $account['bank_address']) ?>">
                                         <input type="hidden" name="recipient_name" value="<?= e((string) $account['recipient_name']) ?>">
                                         <input type="hidden" name="recipient_address" value="<?= e((string) $account['recipient_address']) ?>">
                                         <input type="hidden" name="tax_code" value="<?= e((string) $account['tax_code']) ?>">
-                                        <input type="hidden" name="language" value="<?= e((string) $account['language']) ?>">
                                         <input type="hidden" name="payment_template" value="<?= e((string) $account['payment_template']) ?>">
-                                        <input type="hidden" name="note" value="<?= e((string) $account['note']) ?>">
                                     </form>
                                 </tr>
                             <?php endforeach; ?>
@@ -317,8 +317,10 @@ foreach ($accounts as $account) {
                                         <td><input name="iban"></td>
                                         <td><input name="bank_name"></td>
                                         <td><input name="swift"></td>
+                                        <td><select name="language"><option value="uk">uk</option><option value="en">en</option></select></td>
                                         <td><input type="checkbox" name="is_default"></td>
                                         <td><input type="checkbox" name="is_active" checked></td>
+                                        <td><input name="note"></td>
                                         <td><button type="submit" class="small-button">Add</button></td>
                                     </form>
                                 </tr>

@@ -11,12 +11,23 @@ if (!can_view_payment_requisites()) {
 }
 
 $companies = our_companies(true);
-$accounts = our_company_accounts(null, true);
+$accounts = our_company_accounts(null, true, true);
 $companyId = (int) ($_REQUEST['company_id'] ?? ($companies[0]['id'] ?? 0));
 $accountId = (int) ($_REQUEST['account_id'] ?? 0);
 $orderNumber = trim((string) ($_REQUEST['order_number'] ?? ''));
 $amount = trim((string) ($_REQUEST['amount'] ?? ''));
+$currency = strtoupper(trim((string) ($_REQUEST['currency'] ?? 'UAH')));
+if ($currency === '') {
+    $currency = 'UAH';
+}
 $language = (string) ($_REQUEST['language'] ?? 'uk');
+$availableCurrencies = array_values(array_unique(array_map(static fn($account) => strtoupper((string) ($account['currency'] ?? 'UAH')), $accounts)));
+if (!$availableCurrencies) {
+    $availableCurrencies = ['UAH'];
+}
+if (!in_array($currency, $availableCurrencies, true)) {
+    $currency = in_array('UAH', $availableCurrencies, true) ? 'UAH' : $availableCurrencies[0];
+}
 
 $selectedCompany = $companies[0] ?? [];
 foreach ($companies as $company) {
@@ -28,19 +39,19 @@ foreach ($companies as $company) {
 
 $companyId = (int) ($selectedCompany['id'] ?? 0);
 if ($accountId <= 0 && $companyId > 0) {
-    $accountId = (int) (our_default_account_id($companyId, 'UAH') ?? 0);
+    $accountId = (int) (our_default_account_id($companyId, $currency) ?? 0);
 }
 
 $selectedAccount = [];
 foreach ($accounts as $account) {
-    if ((int) $account['id'] === $accountId && (int) $account['company_id'] === $companyId) {
+    if ((int) $account['id'] === $accountId && (int) $account['company_id'] === $companyId && strtoupper((string) $account['currency']) === $currency) {
         $selectedAccount = $account;
         break;
     }
 }
 if (!$selectedAccount) {
     foreach ($accounts as $account) {
-        if ((int) $account['company_id'] === $companyId) {
+        if ((int) $account['company_id'] === $companyId && strtoupper((string) $account['currency']) === $currency) {
             $selectedAccount = $account;
             break;
         }
@@ -95,6 +106,14 @@ $paymentText = ($selectedCompany && $selectedAccount)
                         <input name="amount" value="<?= e($amount) ?>" placeholder="12500">
                     </label>
                     <label>
+                        <span>Валюта</span>
+                        <select name="currency" data-currency-source>
+                            <?php foreach ($availableCurrencies as $currencyOption): ?>
+                                <option value="<?= e($currencyOption) ?>" <?= $currencyOption === $currency ? 'selected' : '' ?>><?= e($currencyOption) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <label>
                         <span>Наша компанія</span>
                         <select name="company_id" data-company-account-source>
                             <?php foreach ($companies as $company): ?>
@@ -108,7 +127,7 @@ $paymentText = ($selectedCompany && $selectedAccount)
                         <span>Рахунок</span>
                         <select name="account_id" data-company-account-target>
                             <?php foreach ($accounts as $account): ?>
-                                <option value="<?= e((string) $account['id']) ?>" data-company-id="<?= e((string) $account['company_id']) ?>" <?= (int) $account['id'] === (int) ($selectedAccount['id'] ?? 0) ? 'selected' : '' ?>>
+                                <option value="<?= e((string) $account['id']) ?>" data-company-id="<?= e((string) $account['company_id']) ?>" data-currency="<?= e(strtoupper((string) $account['currency'])) ?>" <?= (int) $account['id'] === (int) ($selectedAccount['id'] ?? 0) ? 'selected' : '' ?>>
                                     <?= e((string) ($account['short_name'] ?? '')) ?> · <?= e(our_account_label($account)) ?>
                                 </option>
                             <?php endforeach; ?>
@@ -154,9 +173,11 @@ $paymentText = ($selectedCompany && $selectedAccount)
                 var accountSelect = form.querySelector('[data-company-account-target]');
                 if (!accountSelect) return;
                 var companyId = select.value || '';
+                var currencySelect = form.querySelector('[data-currency-source]');
+                var currency = currencySelect ? (currencySelect.value || '') : '';
                 var selectedVisible = false;
                 accountSelect.querySelectorAll('option').forEach(function (option) {
-                    var visible = (option.dataset.companyId || '') === companyId;
+                    var visible = (option.dataset.companyId || '') === companyId && (!currency || (option.dataset.currency || '') === currency);
                     option.hidden = !visible;
                     option.disabled = !visible;
                     if (visible && option.selected) selectedVisible = true;
@@ -170,6 +191,12 @@ $paymentText = ($selectedCompany && $selectedAccount)
             document.querySelectorAll('[data-company-account-source]').forEach(function (select) {
                 syncAccountOptions(select);
                 select.addEventListener('change', function () { syncAccountOptions(select); });
+            });
+            document.querySelectorAll('[data-currency-source]').forEach(function (select) {
+                var companySelect = select.closest('form').querySelector('[data-company-account-source]');
+                select.addEventListener('change', function () {
+                    if (companySelect) syncAccountOptions(companySelect);
+                });
             });
 
             var copyButton = document.getElementById('copy-payment-text');
