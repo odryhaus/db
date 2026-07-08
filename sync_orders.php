@@ -3,7 +3,7 @@
 require_once __DIR__ . '/bootstrap.php';
 require_role('ceo');
 
-$includeFull = 'products,products.offer,status,shipping,manager,buyer,company';
+$includeFull = 'products,products.offer,status,shipping,manager,buyer';
 $includeSafe = 'products,products.offer,status,shipping,manager';
 $perPage = 50;
 $maxPages = 20;

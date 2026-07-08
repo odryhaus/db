@@ -3,13 +3,13 @@
 require_once __DIR__ . '/bootstrap.php';
 require_role('ceo');
 
-$defaultOrderId = 9232;
+$defaultOrderId = 9124;
 $orderId = isset($_GET['order_id']) ? (int) $_GET['order_id'] : $defaultOrderId;
 if ($orderId <= 0) {
     $orderId = $defaultOrderId;
 }
 
-$include = 'products,products.offer,status,shipping,manager';
+$include = 'products,products.offer,status,shipping,manager,buyer';
 $baseUrl = rtrim((string) app_config('keycrm.base_url', 'https://openapi.keycrm.app/v1'), '/');
 $apiKey = (string) app_config('keycrm.api_key', '');
 $placeholderKey = 'CHANGE_ME_IN_REAL_CONFIG';
@@ -180,6 +180,9 @@ $managerId = $order ? keycrm_debug_get_path($order, ['manager.id', 'manager_id',
 $managerName = $order ? keycrm_debug_get_path($order, ['manager.name', 'manager.full_name', 'manager.username', 'manager.email', 'manager_name', 'managerName']) : null;
 $clientId = $order ? keycrm_debug_get_path($order, ['client.id', 'customer.id', 'buyer.id', 'contact.id', 'client_id', 'customer_id', 'buyer_id']) : null;
 $clientName = $order ? keycrm_debug_get_path($order, ['client.name', 'client.full_name', 'customer.name', 'customer.full_name', 'buyer.name', 'buyer.full_name', 'contact.name', 'client_name', 'customer_name', 'buyer_name']) : null;
+$buyerCompanyId = $order ? keycrm_debug_get_path($order, ['buyer.company_id', 'company_id', 'buyer.company.id', 'company.id']) : null;
+$buyerEmail = $order ? keycrm_debug_get_path($order, ['buyer.email', 'customer.email', 'client.email', 'buyer_email']) : null;
+$buyerPhone = $order ? keycrm_debug_get_path($order, ['buyer.phone', 'customer.phone', 'client.phone', 'buyer_phone']) : null;
 
 $totalCandidates = $order ? keycrm_debug_collect_candidates($order, ['/^(grand_)?total/i', '/amount/i', '/sum/i', '/price/i', '/cost/i']) : [];
 $paidCandidates = $order ? keycrm_debug_collect_candidates($order, ['/paid/i', '/payed/i']) : [];
@@ -257,6 +260,12 @@ $currencyCandidates = $order ? keycrm_debug_collect_candidates($order, ['/curren
                 <dd><?= e(trim(($managerId ?? 'not detected') . ' / ' . ($managerName ?? 'not detected'))) ?></dd>
                 <dt>Detected client/customer/buyer</dt>
                 <dd><?= e(trim(($clientId ?? 'not detected') . ' / ' . ($clientName ?? 'not detected'))) ?></dd>
+                <dt>Detected buyer company id</dt>
+                <dd><?= e($buyerCompanyId ?? 'not detected') ?></dd>
+                <dt>Detected buyer email</dt>
+                <dd><?= e($buyerEmail ?? 'not detected') ?></dd>
+                <dt>Detected buyer phone</dt>
+                <dd><?= e($buyerPhone ?? 'not detected') ?></dd>
             </dl>
         </section>
 
