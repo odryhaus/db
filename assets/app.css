@@ -705,6 +705,30 @@ button:hover,
     background: var(--surface-muted);
 }
 
+.invoice-actions--secondary {
+    margin-top: var(--space-2);
+    padding: var(--space-2) var(--space-2) var(--space-2) 0;
+    border: 0;
+    background: none;
+    font-size: 12px;
+}
+
+.invoice-actions--secondary > .label {
+    margin: 0 var(--space-1) 0 0;
+}
+
+.seller-details {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--panel);
+}
+
+.seller-details strong {
+    display: block;
+    margin-top: 2px;
+}
+
 .invoice-status-actions {
     margin-top: var(--space-2);
     padding: var(--space-2);

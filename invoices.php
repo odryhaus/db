@@ -22,7 +22,7 @@ $editInvoice = null;
 $editItems = [];
 $editLegalEntities = [];
 $editContacts = [];
-$clientCompanies = [];
+$editClientCompany = null;
 $companies = [];
 
 function invoice_money($value): string
@@ -766,6 +766,27 @@ function invoice_client_companies(): array
         ORDER BY COALESCE(display_name, title, name) ASC, id DESC
         LIMIT 500
     ")->fetchAll();
+}
+
+function invoice_client_company_by_id(?int $id): ?array
+{
+    if (!$id) {
+        return null;
+    }
+
+    $stmt = db()->prepare('SELECT * FROM db_client_companies WHERE id = :id LIMIT 1');
+    $stmt->execute(['id' => $id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function invoice_client_company_label(?array $company): string
+{
+    if (!$company) {
+        return '';
+    }
+
+    return (string) (($company['display_name'] ?? '') ?: (($company['keycrm_title'] ?? '') ?: (($company['keycrm_name'] ?? '') ?: (($company['title'] ?? '') ?: ($company['name'] ?? '')))));
 }
 
 function invoice_contacts(?int $clientCompanyId): array
@@ -2076,15 +2097,19 @@ foreach ($invoices as $invoiceRow) {
 
                     <div class="invoice-actions">
                         <button type="submit" name="action" value="save_invoice">Зберегти</button>
-                        <button type="submit" name="action" value="generate_selected" class="button-secondary">PDF</button>
+                        <button type="submit" name="action" value="generate_selected" class="button-secondary">Сформувати PDF</button>
                         <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php')) ?>">Закрити</a>
-                        <button type="submit" name="action" value="use_detailed" class="button-secondary">Детальні товари CRM</button>
-                        <button type="submit" name="action" value="collapse_one" class="button-secondary">Один рядок</button>
+                    </div>
+
+                    <div class="invoice-actions invoice-actions--secondary">
+                        <span class="label">Товари з CRM</span>
+                        <button type="submit" name="action" value="use_detailed" class="button-secondary small-button">Детальні товари CRM</button>
+                        <button type="submit" name="action" value="collapse_one" class="button-secondary small-button">Один рядок</button>
                         <label class="collapse-field">
                             <span>Назва згорнутого рядка</span>
                             <input name="collapse_title" value="Поліграфічна продукція">
                         </label>
-                        <button type="submit" name="action" value="collapse_manual" class="button-secondary">Згорнути з цією назвою</button>
+                        <button type="submit" name="action" value="collapse_manual" class="button-secondary small-button">Згорнути з цією назвою</button>
                     </div>
                 </form>
             </section>
@@ -2102,14 +2127,14 @@ foreach ($invoices as $invoiceRow) {
                     <thead>
                         <tr>
                             <th>Номер</th>
-                            <th>Docs</th>
-                            <th>Дата</th>
                             <th>Платник / контакт</th>
-                            <th>Від кого</th>
                             <th class="num">Сума</th>
                             <th>Оплата</th>
-                            <th>Дата оплати / deadline</th>
-                            <th>Документи</th>
+                            <th>Дедлайн оплати</th>
+                            <th>Дата</th>
+                            <th>Від кого</th>
+                            <th>Файли</th>
+                            <th>Статус документів</th>
                             <th>Дія</th>
                         </tr>
                     </thead>
@@ -2143,27 +2168,6 @@ foreach ($invoices as $invoiceRow) {
                             ?>
                             <tr>
                                 <td class="<?= invoice_is_overdue($invoiceRow) ? 'flag-danger-cell' : '' ?>"><strong><?= e((string) $invoiceRow['invoice_number']) ?></strong></td>
-                                <td>
-                                    <div class="invoice-doc-actions">
-                                        <?php foreach (['invoice', 'delivery_note', 'act'] as $documentType): ?>
-                                            <?php if ($documentButtons[$documentType] !== ''): ?>
-                                                <a class="button-secondary small-button pdf-button" href="<?= e($documentButtons[$documentType]) ?>"><?= e(invoice_document_prefix_label($documentType)) ?></a>
-                                            <?php else: ?>
-                                                <form method="post" action="<?= e(base_path('/invoices.php')) ?>" class="inline-cell-form">
-                                                    <?= csrf_field() ?>
-                                                    <input type="hidden" name="action" value="generate_registry_document">
-                                                    <input type="hidden" name="id" value="<?= e((string) $invoiceRow['id']) ?>">
-                                                    <input type="hidden" name="document_type" value="<?= e($documentType) ?>">
-                                                    <button type="submit" class="button-secondary small-button pdf-button"><?= e(invoice_document_prefix_label($documentType)) ?></button>
-                                                </form>
-                                            <?php endif; ?>
-                                        <?php endforeach; ?>
-                                    </div>
-                                </td>
-                                <td class="registry-date">
-                                    <?= e(invoice_date_label((string) $invoiceRow['invoice_date'])) ?>
-                                    <small>/ <?= e(invoice_datetime_time_label((string) ($invoiceRow['updated_at'] ?: $invoiceRow['created_at']))) ?></small>
-                                </td>
                                 <td class="wrap">
                                     <?php if ($recipientName !== ''): ?>
                                         <strong><?= e($recipientName) ?></strong>
@@ -2174,7 +2178,6 @@ foreach ($invoices as $invoiceRow) {
                                         <small><?= e($contactName) ?></small>
                                     <?php endif; ?>
                                 </td>
-                                <td><?= e((string) ($invoiceRow['seller_short_name'] ?: '—')) ?></td>
                                 <td class="num"><?= e(invoice_money($invoiceRow['total_with_vat_uah'] ?? 0)) ?></td>
                                 <td>
                                     <form method="post" action="<?= e(base_path('/invoices.php')) ?>" class="inline-cell-form">
@@ -2207,6 +2210,28 @@ foreach ($invoices as $invoiceRow) {
                                         <input type="hidden" name="id" value="<?= e((string) $invoiceRow['id']) ?>">
                                         <input class="deadline-date <?= e(invoice_deadline_class($invoiceRow)) ?>" type="date" name="payment_due_date" value="<?= e((string) (($invoiceRow['payment_due_date'] ?? '') ?: ($invoiceRow['expected_payment_date'] ?? ''))) ?>" onchange="this.form.submit()">
                                     </form>
+                                </td>
+                                <td class="registry-date">
+                                    <?= e(invoice_date_label((string) $invoiceRow['invoice_date'])) ?>
+                                    <small>/ <?= e(invoice_datetime_time_label((string) ($invoiceRow['updated_at'] ?: $invoiceRow['created_at']))) ?></small>
+                                </td>
+                                <td><?= e((string) ($invoiceRow['seller_short_name'] ?: '—')) ?></td>
+                                <td>
+                                    <div class="invoice-doc-actions">
+                                        <?php foreach (['invoice', 'delivery_note', 'act'] as $documentType): ?>
+                                            <?php if ($documentButtons[$documentType] !== ''): ?>
+                                                <a class="button-secondary small-button pdf-button" href="<?= e($documentButtons[$documentType]) ?>"><?= e(invoice_document_prefix_label($documentType)) ?></a>
+                                            <?php else: ?>
+                                                <form method="post" action="<?= e(base_path('/invoices.php')) ?>" class="inline-cell-form">
+                                                    <?= csrf_field() ?>
+                                                    <input type="hidden" name="action" value="generate_registry_document">
+                                                    <input type="hidden" name="id" value="<?= e((string) $invoiceRow['id']) ?>">
+                                                    <input type="hidden" name="document_type" value="<?= e($documentType) ?>">
+                                                    <button type="submit" class="button-secondary small-button"><?= e(invoice_document_prefix_label($documentType)) ?></button>
+                                                </form>
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </div>
                                 </td>
                                 <td>
                                     <form method="post" action="<?= e(base_path('/invoices.php')) ?>" class="inline-cell-form">
@@ -2248,60 +2273,6 @@ foreach ($invoices as $invoiceRow) {
         <?= app_version_badge() ?>
     </main>
     <script>
-        (function () {
-            var select = document.getElementById('legal-entity-select');
-            if (!select) {
-                return;
-            }
-
-            var fields = {
-                legalName: document.querySelector('[name="recipient_legal_name"]'),
-                shortName: document.querySelector('[name="recipient_short_name"]'),
-                edrpou: document.querySelector('[name="recipient_edrpou"]'),
-                taxNumber: document.querySelector('[name="recipient_tax_number"]'),
-                address: document.querySelector('[name="recipient_legal_address"]'),
-                email: document.querySelector('[name="recipient_email"]'),
-                phone: document.querySelector('[name="recipient_phone"]')
-            };
-
-            select.addEventListener('change', function () {
-                var option = select.options[select.selectedIndex];
-                if (!option || !option.value) {
-                    return;
-                }
-                if (fields.legalName) fields.legalName.value = option.dataset.legalName || '';
-                if (fields.shortName) fields.shortName.value = option.dataset.shortName || '';
-                if (fields.edrpou) fields.edrpou.value = option.dataset.edrpou || '';
-                if (fields.taxNumber) fields.taxNumber.value = option.dataset.taxNumber || '';
-                if (fields.address) fields.address.value = option.dataset.address || '';
-                if (fields.email) fields.email.value = option.dataset.email || '';
-                if (fields.phone) fields.phone.value = option.dataset.phone || '';
-            });
-        })();
-
-        (function () {
-            var select = document.getElementById('client-contact-select');
-            if (!select) {
-                return;
-            }
-
-            var fields = {
-                contactName: document.querySelector('[name="contact_name"]'),
-                email: document.querySelector('[name="contact_email"]'),
-                phone: document.querySelector('[name="contact_phone"]')
-            };
-
-            select.addEventListener('change', function () {
-                var option = select.options[select.selectedIndex];
-                if (!option || !option.value) {
-                    return;
-                }
-                if (fields.contactName) fields.contactName.value = option.dataset.contactName || '';
-                if (fields.email && option.dataset.email) fields.email.value = option.dataset.email;
-                if (fields.phone && option.dataset.phone) fields.phone.value = option.dataset.phone;
-            });
-        })();
-
         (function () {
             var table = document.getElementById('invoice-items-table');
             var addButton = document.querySelector('.invoice-add-row');
