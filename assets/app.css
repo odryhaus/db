@@ -1162,6 +1162,13 @@ th.wrap {
     white-space: normal;
 }
 
+.client-cell {
+    width: 30%;
+    min-width: 260px;
+    max-width: 420px;
+    white-space: normal;
+}
+
 th {
     position: sticky;
     top: 0;
@@ -1258,7 +1265,7 @@ tr:last-child td {
 .client-stack {
     display: grid;
     gap: 2px;
-    min-width: 220px;
+    min-width: 0;
     max-width: 360px;
 }
 
@@ -1274,10 +1281,17 @@ tr:last-child td {
     color: var(--muted);
     font-size: 11px;
     line-height: 1.2;
+    overflow-wrap: anywhere;
+    word-break: normal;
 }
 
 .client-stack-legal {
     max-width: 100%;
+}
+
+.client-stack-company {
+    overflow-wrap: anywhere;
+    word-break: normal;
 }
 
 /* ==========================================================================

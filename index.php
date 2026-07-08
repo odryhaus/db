@@ -1140,7 +1140,7 @@ try {
                             <th>№</th>
                             <th>Дата</th>
                             <th>Термін</th>
-                            <th>Клієнт</th>
+                            <th class="client-cell">Клієнт</th>
                             <th>Менеджер</th>
                             <th class="num">Сума</th>
                             <th class="num">Оплачено</th>
@@ -1158,7 +1158,7 @@ try {
                                 <td><?= e((string) ($order['order_number'] ?: '—')) ?></td>
                                 <td><?= e((string) ($order['ordered_at'] ?: '—')) ?></td>
                                 <td><?= dashboard_age_badge($order['ordered_at'] ?? null) ?></td>
-                                <td><?= dashboard_client_stack($order) ?></td>
+                                <td class="client-cell"><?= dashboard_client_stack($order) ?></td>
                                 <td><?= e(dashboard_manager_key($order['manager_name'] ?? '')) ?></td>
                                 <td class="num"><?= e(money_uah($order['total_amount_uah'] ?? 0)) ?></td>
                                 <td class="num"><?= e(money_uah($order['paid_amount_uah'] ?? 0)) ?></td>
@@ -1184,7 +1184,7 @@ try {
                     <thead>
                         <tr>
                             <th>№</th>
-                            <th>Клієнт</th>
+                            <th class="client-cell">Клієнт</th>
                             <th>Менеджер</th>
                             <th class="num">Борг</th>
                         </tr>
@@ -1196,7 +1196,7 @@ try {
                         <?php foreach ($monthlyUnpaidOrders as $order): ?>
                             <tr>
                                 <td><?= e((string) ($order['order_number'] ?: '—')) ?></td>
-                                <td><?= dashboard_client_stack($order) ?></td>
+                                <td class="client-cell"><?= dashboard_client_stack($order) ?></td>
                                 <td><?= e(dashboard_manager_key($order['manager_name'] ?? '')) ?></td>
                                 <td class="num"><strong><?= e(money_uah($order['unpaid_amount_uah'] ?? 0)) ?></strong></td>
                             </tr>
@@ -1217,7 +1217,7 @@ try {
                 <table class="compact-table">
                     <thead>
                         <tr>
-                            <th>Клієнт</th>
+                            <th class="client-cell">Клієнт</th>
                             <th>Менеджер</th>
                             <th>Найстаріше</th>
                             <th class="num">Борг</th>
@@ -1231,7 +1231,7 @@ try {
                         <?php endif; ?>
                         <?php foreach ($clientDebt as $client): ?>
                             <tr>
-                                <td>
+                                <td class="client-cell">
                                     <?= dashboard_client_stack([
                                         'company_name' => $client['company_display'] ?? '',
                                         'local_legal_name' => $client['legal_display'] ?? '',
