@@ -158,3 +158,8 @@ Recommended later approach: keep them in the database, but move them to an optio
 - Local legal entities are not overwritten by KeyCRM sync.
 - Local manager assignment fields are not overwritten by KeyCRM sync.
 - Delta sync tries updated-after parameters and still uses bounded page limits as fallback.
+
+### Hotfix
+
+- Fixed production MySQL error `1089 Incorrect prefix key` caused by creating `idx_email` as `email(191)` while the column is `VARCHAR(190)`.
+- Made safe index creation best-effort: if a non-critical index cannot be added on a legacy production column, the error is logged instead of breaking `invoices.php`.

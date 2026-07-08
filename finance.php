@@ -248,7 +248,7 @@ function ensure_invoice_tables(): void
     invoice_add_column_if_missing('db_client_contacts', 'inherits_company_manager', 'TINYINT(1) NOT NULL DEFAULT 1');
     invoice_add_column_if_missing('db_client_contacts', 'manager_assignment_note', 'TEXT NULL');
     invoice_add_index_if_missing('db_client_contacts', 'idx_full_name', 'full_name(191)');
-    invoice_add_index_if_missing('db_client_contacts', 'idx_email', 'email(191)');
+    invoice_add_index_if_missing('db_client_contacts', 'idx_email', 'email');
     invoice_add_index_if_missing('db_client_contacts', 'idx_phone', 'phone');
 
     $pdo->exec("
@@ -392,7 +392,11 @@ function invoice_add_index_if_missing(string $table, string $index, string $colu
     ]);
 
     if ((int) $stmt->fetchColumn() === 0) {
-        db()->exec("ALTER TABLE {$table} ADD INDEX {$index} ({$columns})");
+        try {
+            db()->exec("ALTER TABLE {$table} ADD INDEX {$index} ({$columns})");
+        } catch (PDOException $e) {
+            error_log("Could not add index {$index} on {$table}: " . $e->getMessage());
+        }
     }
 }
 
