@@ -405,6 +405,17 @@ function invoice_document_short_label(string $type): string
     return $labels[$type] ?? 'PDF';
 }
 
+function invoice_document_prefix_label(string $type): string
+{
+    $labels = [
+        'invoice' => 'PDF',
+        'delivery_note' => 'Видаткова',
+        'act' => 'Акт',
+    ];
+
+    return $labels[$type] ?? 'PDF';
+}
+
 function invoice_keycrm_fetch_buyer(int $buyerId): array
 {
     $apiKey = trim((string) app_config('keycrm.api_key', ''));
@@ -1249,6 +1260,41 @@ if (is_post()) {
             db()->prepare('DELETE FROM db_invoices WHERE id = :id')->execute(['id' => $invoiceId]);
             db()->commit();
             redirect_to('/invoices.php');
+        } elseif ($action === 'generate_registry_document') {
+            $documentType = (string) ($_POST['document_type'] ?? 'invoice');
+            if (!in_array($documentType, ['invoice', 'delivery_note', 'act'], true)) {
+                $error = 'Invalid document type.';
+            } else {
+                $items = invoice_items($invoiceId);
+                $documentDate = (string) (($invoice['document_due_date'] ?? '') ?: ($invoice['invoice_date'] ?? date('Y-m-d')));
+                $documentInvoice = $invoice;
+                if ($documentType !== 'invoice') {
+                    $documentInvoice['invoice_date'] = $documentDate;
+                }
+                $generated = invoice_generate_document($documentInvoice, $items, $documentType);
+                $documentId = invoice_store_document($invoiceId, $documentType, $documentDate, (string) $generated['path'], (string) $invoice['invoice_number']);
+                $legacyDocumentType = $documentType === 'act' ? (string) $invoice['document_type'] : $documentType;
+                db()->prepare("
+                    UPDATE db_invoices
+                    SET document_type = :document_type,
+                        pdf_file_path = :pdf_file_path,
+                        payment_status = CASE WHEN payment_status = 'paid' THEN payment_status ELSE 'waiting_payment' END,
+                        status = CASE WHEN status = 'paid' THEN status ELSE 'sent' END,
+                        sent_at = COALESCE(sent_at, NOW()),
+                        payment_due_date = COALESCE(payment_due_date, DATE_ADD(CURDATE(), INTERVAL 3 DAY)),
+                        expected_payment_date = COALESCE(expected_payment_date, payment_due_date, DATE_ADD(CURDATE(), INTERVAL 3 DAY))
+                    WHERE id = :id
+                ")->execute([
+                    'document_type' => $legacyDocumentType,
+                    'pdf_file_path' => $generated['path'],
+                    'id' => $invoiceId,
+                ]);
+
+                if ($generated['is_pdf']) {
+                    redirect_to('/invoices.php?document=' . $documentId);
+                }
+                $error = 'PDF не створено: збережено HTML-шаблон для діагностики.';
+            }
         } elseif ($action === 'status') {
             $statusType = (string) ($_POST['status_type'] ?? 'payment');
             $statusAction = (string) ($_POST['status_action'] ?? '');
@@ -1316,7 +1362,7 @@ if (is_post()) {
                 ]);
                 redirect_to('/invoices.php');
             }
-        } elseif (in_array($action, ['save_invoice', 'save_legal_entity', 'save_contact', 'set_default_legal_entity', 'collapse_one', 'collapse_manual', 'use_detailed', 'generate_invoice', 'generate_delivery', 'generate_act'], true)) {
+        } elseif (in_array($action, ['save_invoice', 'save_legal_entity', 'save_contact', 'set_default_legal_entity', 'collapse_one', 'collapse_manual', 'use_detailed', 'generate_invoice', 'generate_delivery', 'generate_act', 'generate_selected'], true)) {
             $sellerId = (int) ($_POST['seller_company_id'] ?? $invoice['seller_company_id']);
             $seller = $defaultCompany;
             foreach ($companies as $company) {
@@ -1334,8 +1380,8 @@ if (is_post()) {
                 $recipientEdrpou = trim((string) ($_POST['recipient_edrpou'] ?? ($_POST['buyer_edrpou'] ?? '')));
                 $recipientTaxNumber = trim((string) ($_POST['recipient_tax_number'] ?? ''));
                 $recipientAddress = trim((string) ($_POST['recipient_legal_address'] ?? ($_POST['buyer_address'] ?? '')));
-                $recipientEmail = trim((string) ($_POST['recipient_email'] ?? ($_POST['buyer_email'] ?? '')));
-                $recipientPhone = trim((string) ($_POST['recipient_phone'] ?? ($_POST['buyer_phone'] ?? '')));
+                $recipientEmail = trim((string) ($_POST['recipient_email'] ?? ($_POST['buyer_email'] ?? ($_POST['contact_email'] ?? ''))));
+                $recipientPhone = trim((string) ($_POST['recipient_phone'] ?? ($_POST['buyer_phone'] ?? ($_POST['contact_phone'] ?? ''))));
                 if ($legalName === '') {
                     $error = 'Вкажіть юрособу-платника перед збереженням.';
                 } else {
@@ -1538,11 +1584,11 @@ if (is_post()) {
                 $recipientEdrpou = trim((string) ($_POST['recipient_edrpou'] ?? ($_POST['buyer_edrpou'] ?? '')));
                 $recipientTaxNumber = trim((string) ($_POST['recipient_tax_number'] ?? ''));
                 $recipientAddress = trim((string) ($_POST['recipient_legal_address'] ?? ($_POST['buyer_address'] ?? '')));
-                $recipientEmail = trim((string) ($_POST['recipient_email'] ?? ($_POST['buyer_email'] ?? '')));
-                $recipientPhone = trim((string) ($_POST['recipient_phone'] ?? ($_POST['buyer_phone'] ?? '')));
                 $contactName = substr(trim((string) ($_POST['contact_name'] ?? ($_POST['buyer_contact_name'] ?? ''))), 0, 255);
                 $contactEmail = trim((string) ($_POST['contact_email'] ?? ''));
                 $contactPhone = trim((string) ($_POST['contact_phone'] ?? ''));
+                $recipientEmail = trim((string) ($_POST['recipient_email'] ?? ($_POST['buyer_email'] ?? $contactEmail)));
+                $recipientPhone = trim((string) ($_POST['recipient_phone'] ?? ($_POST['buyer_phone'] ?? $contactPhone)));
                 $paymentPurpose = substr(trim((string) ($_POST['payment_purpose'] ?? '')), 0, 255);
                 if ($paymentPurpose === '') {
                     $paymentPurpose = 'за продукцію згідно рахунку № ' . $invoiceNumber . ' від ' . invoice_ua_date_label($invoiceDate);
@@ -1688,12 +1734,17 @@ if (is_post()) {
                     invoice_insert_items(db(), $invoiceId, $items);
                     db()->commit();
 
-                    if ($action === 'generate_invoice' || $action === 'generate_delivery' || $action === 'generate_act') {
+                    if ($action === 'generate_invoice' || $action === 'generate_delivery' || $action === 'generate_act' || $action === 'generate_selected') {
                         $updatedInvoice = invoice_load($invoiceId);
                         $updatedItems = invoice_items($invoiceId);
                         if ($updatedInvoice) {
                             $documentType = 'invoice';
-                            if ($action === 'generate_delivery') {
+                            if ($action === 'generate_selected') {
+                                $documentType = (string) ($_POST['document_type'] ?? 'invoice');
+                                if (!in_array($documentType, ['invoice', 'delivery_note', 'act'], true)) {
+                                    $documentType = 'invoice';
+                                }
+                            } elseif ($action === 'generate_delivery') {
                                 $documentType = 'delivery_note';
                             } elseif ($action === 'generate_act') {
                                 $documentType = 'act';
@@ -1917,7 +1968,7 @@ foreach ($invoices as $invoiceRow) {
                             <span class="label">Клієнт</span>
                         </div>
                         <label class="wide-field">
-                            <span>Компанія клієнта / група</span>
+                            <span>Компанія</span>
                             <select name="client_company_id">
                                 <option value="">Без локальної компанії</option>
                                 <?php foreach ($clientCompanies as $clientCompany): ?>
@@ -1929,106 +1980,40 @@ foreach ($invoices as $invoiceRow) {
                             </select>
                         </label>
                         <label class="wide-field">
-                            <span>Контактна особа</span>
-                            <input name="contact_name" value="<?= e((string) (($editInvoice['contact_name'] ?? '') ?: ($editInvoice['buyer_contact_name'] ?? ''))) ?>">
-                        </label>
-                        <label>
-                            <span>Email контакту</span>
-                            <input name="contact_email" value="<?= e((string) (($editInvoice['contact_email'] ?? '') ?: '')) ?>">
-                        </label>
-                        <label>
-                            <span>Телефон контакту</span>
-                            <input name="contact_phone" value="<?= e((string) (($editInvoice['contact_phone'] ?? '') ?: '')) ?>">
-                        </label>
-                        <?php if ($editContacts): ?>
-                            <label class="wide-field">
-                                <span>Вибрати збережений контакт</span>
-                                <select name="client_contact_id" id="client-contact-select">
-                                    <option value="">Поточні поля вручну</option>
-                                    <?php foreach ($editContacts as $contact): ?>
-                                        <option
-                                            value="<?= e((string) $contact['id']) ?>"
-                                            data-contact-name="<?= e((string) ($contact['full_name'] ?? '')) ?>"
-                                            data-email="<?= e((string) ($contact['email'] ?? '')) ?>"
-                                            data-phone="<?= e((string) ($contact['phone'] ?? '')) ?>"
-                                        >
-                                            <?= e((string) ($contact['full_name'] ?: 'Contact #' . $contact['id'])) ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </label>
-                        <?php endif; ?>
-                        <div class="section-label">
-                            <span class="label">Платник / юрособа</span>
-                        </div>
-                        <?php if ($editLegalEntities): ?>
-                            <label class="wide-field">
-                                <span>Вибрати юрособу</span>
-                                <select name="client_legal_entity_id" id="legal-entity-select">
-                                    <option value="">Поточні поля вручну</option>
-                                    <?php foreach ($editLegalEntities as $entity): ?>
-                                        <option
-                                            value="<?= e((string) $entity['id']) ?>"
-                                            <?= (int) ($editInvoice['client_legal_entity_id'] ?? 0) === (int) $entity['id'] ? 'selected' : '' ?>
-                                            data-legal-name="<?= e((string) $entity['legal_name']) ?>"
-                                            data-short-name="<?= e((string) ($entity['short_name'] ?? '')) ?>"
-                                            data-edrpou="<?= e((string) ($entity['edrpou'] ?? '')) ?>"
-                                            data-tax-number="<?= e((string) ($entity['tax_number'] ?? '')) ?>"
-                                            data-address="<?= e((string) ($entity['legal_address'] ?? '')) ?>"
-                                            data-email="<?= e((string) ($entity['email'] ?? '')) ?>"
-                                            data-phone="<?= e((string) ($entity['phone'] ?? '')) ?>"
-                                        >
-                                            <?= e((string) $entity['legal_name']) ?><?= !empty($entity['edrpou']) ? ' · ' . e((string) $entity['edrpou']) : '' ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </label>
-                        <?php else: ?>
-                            <input type="hidden" name="client_legal_entity_id" value="<?= e((string) ($editInvoice['client_legal_entity_id'] ?? '')) ?>">
-                        <?php endif; ?>
-                        <label class="wide-field">
                             <span>Повна назва юрособи-платника</span>
                             <input name="recipient_legal_name" value="<?= e(invoice_recipient_name($editInvoice)) ?>" placeholder="Заповніть юрособу-платника">
                             <?php if (invoice_recipient_name($editInvoice) === ''): ?>
                                 <small class="field-warning">Немає платника — заповніть або виберіть юрособу</small>
                             <?php endif; ?>
                         </label>
-                        <label>
-                            <span>Коротка назва</span>
-                            <input name="recipient_short_name" value="<?= e((string) (($editInvoice['recipient_short_name'] ?? '') ?: '')) ?>">
+                        <input type="hidden" name="client_legal_entity_id" value="<?= e((string) ($editInvoice['client_legal_entity_id'] ?? '')) ?>">
+                        <label class="wide-field">
+                            <span>Контактна особа</span>
+                            <input name="contact_name" value="<?= e((string) (($editInvoice['contact_name'] ?? '') ?: ($editInvoice['buyer_contact_name'] ?? ''))) ?>">
                         </label>
                         <label>
-                            <span>ЄДРПОУ</span>
-                            <input name="recipient_edrpou" value="<?= e((string) (($editInvoice['recipient_edrpou'] ?? '') ?: ($editInvoice['buyer_edrpou'] ?? ''))) ?>">
+                            <span>Email</span>
+                            <input name="contact_email" value="<?= e((string) (($editInvoice['contact_email'] ?? '') ?: ($editInvoice['buyer_email'] ?? ''))) ?>">
                         </label>
                         <label>
-                            <span>ІПН</span>
-                            <input name="recipient_tax_number" value="<?= e((string) (($editInvoice['recipient_tax_number'] ?? '') ?: '')) ?>">
+                            <span>Телефон</span>
+                            <input name="contact_phone" value="<?= e((string) (($editInvoice['contact_phone'] ?? '') ?: ($editInvoice['buyer_phone'] ?? ''))) ?>">
                         </label>
-                        <label>
-                            <span>Email платника</span>
-                            <input name="recipient_email" value="<?= e((string) (($editInvoice['recipient_email'] ?? '') ?: ($editInvoice['buyer_email'] ?? ''))) ?>">
-                        </label>
-                        <label>
-                            <span>Телефон платника</span>
-                            <input name="recipient_phone" value="<?= e((string) (($editInvoice['recipient_phone'] ?? '') ?: ($editInvoice['buyer_phone'] ?? ''))) ?>">
-                        </label>
-                        <label class="full-field">
-                            <span>Юридична адреса</span>
-                            <input name="recipient_legal_address" value="<?= e((string) (($editInvoice['recipient_legal_address'] ?? '') ?: ($editInvoice['buyer_address'] ?? ''))) ?>">
-                        </label>
-                        <label class="wide-field checkbox-row">
-                            <input type="checkbox" name="set_as_default" value="1">
-                            <span>Зробити цю юрособу default для клієнта</span>
-                        </label>
-                        <div class="wide-field row-actions">
-                            <button type="submit" name="action" value="save_legal_entity" class="button-secondary">Зберегти / оновити юрособу</button>
-                            <button type="submit" name="action" value="save_contact" class="button-secondary">Зберегти контакт</button>
-                            <button type="submit" name="action" value="set_default_legal_entity" class="button-secondary">Зробити default юрособою</button>
-                        </div>
+                        <input type="hidden" name="recipient_short_name" value="<?= e((string) (($editInvoice['recipient_short_name'] ?? '') ?: '')) ?>">
+                        <input type="hidden" name="recipient_edrpou" value="<?= e((string) (($editInvoice['recipient_edrpou'] ?? '') ?: ($editInvoice['buyer_edrpou'] ?? ''))) ?>">
+                        <input type="hidden" name="recipient_tax_number" value="<?= e((string) (($editInvoice['recipient_tax_number'] ?? '') ?: '')) ?>">
+                        <input type="hidden" name="recipient_legal_address" value="<?= e((string) (($editInvoice['recipient_legal_address'] ?? '') ?: ($editInvoice['buyer_address'] ?? ''))) ?>">
                         <div class="section-label">
                             <span class="label">Документ</span>
                         </div>
+                        <label>
+                            <span>Тип документа</span>
+                            <select name="document_type">
+                                <?php foreach (['invoice' => 'Рахунок', 'delivery_note' => 'Видаткова', 'act' => 'Акт'] as $value => $label): ?>
+                                    <option value="<?= e($value) ?>" <?= (string) $editInvoice['document_type'] === $value ? 'selected' : '' ?>><?= e($label) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </label>
                         <label>
                             <span>Номер</span>
                             <input name="invoice_number" required value="<?= e((string) $editInvoice['invoice_number']) ?>">
@@ -2037,34 +2022,12 @@ foreach ($invoices as $invoiceRow) {
                             <span>Дата рахунку</span>
                             <input type="date" name="invoice_date" required value="<?= e((string) $editInvoice['invoice_date']) ?>">
                         </label>
-                        <label>
-                            <span>Дата оплати</span>
-                            <input type="date" name="payment_due_date" value="<?= e((string) (($editInvoice['payment_due_date'] ?? '') ?: ($editInvoice['expected_payment_date'] ?? ''))) ?>">
-                        </label>
-                        <label>
-                            <span>Дата документів</span>
-                            <input type="date" name="document_due_date" value="<?= e((string) (($editInvoice['document_due_date'] ?? '') ?: $editInvoice['invoice_date'])) ?>">
-                        </label>
-                        <label>
-                            <span>Тип документів</span>
-                            <select name="docs_type">
-                                <?php foreach (['none' => 'немає', 'paper' => 'паперові', 'electronic' => 'електронні', 'both' => 'обидва'] as $value => $label): ?>
-                                    <option value="<?= e($value) ?>" <?= (string) $editInvoice['docs_type'] === $value ? 'selected' : '' ?>><?= e($label) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </label>
-                        <label>
-                            <span>Дата видаткової/акта</span>
-                            <input type="date" name="document_date" value="<?= e((string) (($editInvoice['document_due_date'] ?? '') ?: $editInvoice['invoice_date'])) ?>">
-                        </label>
-                        <label class="full-field">
-                            <span>Призначення платежу</span>
-                            <input name="payment_purpose" value="<?= e((string) $editInvoice['payment_purpose']) ?>">
-                        </label>
-                        <label class="full-field">
-                            <span>Нотатка</span>
-                            <textarea name="note" rows="2"><?= e((string) $editInvoice['note']) ?></textarea>
-                        </label>
+                        <input type="hidden" name="payment_due_date" value="<?= e((string) (($editInvoice['payment_due_date'] ?? '') ?: ($editInvoice['expected_payment_date'] ?? ''))) ?>">
+                        <input type="hidden" name="document_due_date" value="<?= e((string) (($editInvoice['document_due_date'] ?? '') ?: $editInvoice['invoice_date'])) ?>">
+                        <input type="hidden" name="document_date" value="<?= e((string) (($editInvoice['document_due_date'] ?? '') ?: $editInvoice['invoice_date'])) ?>">
+                        <input type="hidden" name="docs_type" value="<?= e((string) (($editInvoice['docs_type'] ?? '') ?: 'none')) ?>">
+                        <input type="hidden" name="payment_purpose" value="<?= e((string) $editInvoice['payment_purpose']) ?>">
+                        <input type="hidden" name="note" value="<?= e((string) $editInvoice['note']) ?>">
                     </div>
 
                     <div class="section-heading invoice-items-heading">
@@ -2113,6 +2076,7 @@ foreach ($invoices as $invoiceRow) {
 
                     <div class="invoice-actions">
                         <button type="submit" name="action" value="save_invoice">Зберегти</button>
+                        <button type="submit" name="action" value="generate_selected" class="button-secondary">PDF</button>
                         <a class="button-secondary small-button" href="<?= e(base_path('/invoices.php')) ?>">Закрити</a>
                         <button type="submit" name="action" value="use_detailed" class="button-secondary">Детальні товари CRM</button>
                         <button type="submit" name="action" value="collapse_one" class="button-secondary">Один рядок</button>
@@ -2155,25 +2119,24 @@ foreach ($invoices as $invoiceRow) {
                         <?php endif; ?>
                         <?php foreach ($invoices as $invoiceRow): ?>
                             <?php
-                            $primaryPdfUrl = '';
-                            $documentButtons = [];
+                            $documentButtons = [
+                                'invoice' => '',
+                                'delivery_note' => '',
+                                'act' => '',
+                            ];
                             if (!empty($invoiceDocuments[(int) $invoiceRow['id']])) {
                                 foreach ($invoiceDocuments[(int) $invoiceRow['id']] as $documentRow) {
                                     if (strtolower(pathinfo((string) $documentRow['file_path'], PATHINFO_EXTENSION)) === 'pdf') {
                                         $documentUrl = base_path('/invoices.php?document=' . (int) $documentRow['id']);
-                                        $documentButtons[] = [
-                                            'url' => $documentUrl,
-                                            'label' => invoice_document_short_label((string) $documentRow['document_type']),
-                                        ];
-                                        if ($primaryPdfUrl === '') {
-                                            $primaryPdfUrl = $documentUrl;
+                                        $documentType = (string) $documentRow['document_type'];
+                                        if (array_key_exists($documentType, $documentButtons) && $documentButtons[$documentType] === '') {
+                                            $documentButtons[$documentType] = $documentUrl;
                                         }
                                     }
                                 }
                             }
-                            if ($primaryPdfUrl === '' && invoice_pdf_available($invoiceRow)) {
-                                $primaryPdfUrl = base_path('/invoices.php?download=' . (int) $invoiceRow['id']);
-                                $documentButtons[] = ['url' => $primaryPdfUrl, 'label' => 'PDF'];
+                            if ($documentButtons['invoice'] === '' && invoice_pdf_available($invoiceRow)) {
+                                $documentButtons['invoice'] = base_path('/invoices.php?download=' . (int) $invoiceRow['id']);
                             }
                             $recipientName = invoice_recipient_name($invoiceRow);
                             $contactName = invoice_contact_name($invoiceRow);
@@ -2182,13 +2145,19 @@ foreach ($invoices as $invoiceRow) {
                                 <td class="<?= invoice_is_overdue($invoiceRow) ? 'flag-danger-cell' : '' ?>"><strong><?= e((string) $invoiceRow['invoice_number']) ?></strong></td>
                                 <td>
                                     <div class="invoice-doc-actions">
-                                        <?php if ($documentButtons): ?>
-                                            <?php foreach ($documentButtons as $documentButton): ?>
-                                                <a class="button-secondary small-button pdf-button" href="<?= e($documentButton['url']) ?>"><?= e($documentButton['label']) ?></a>
-                                            <?php endforeach; ?>
-                                        <?php else: ?>
-                                            <span class="status-badge status-badge--muted">немає</span>
-                                        <?php endif; ?>
+                                        <?php foreach (['invoice', 'delivery_note', 'act'] as $documentType): ?>
+                                            <?php if ($documentButtons[$documentType] !== ''): ?>
+                                                <a class="button-secondary small-button pdf-button" href="<?= e($documentButtons[$documentType]) ?>"><?= e(invoice_document_prefix_label($documentType)) ?></a>
+                                            <?php else: ?>
+                                                <form method="post" action="<?= e(base_path('/invoices.php')) ?>" class="inline-cell-form">
+                                                    <?= csrf_field() ?>
+                                                    <input type="hidden" name="action" value="generate_registry_document">
+                                                    <input type="hidden" name="id" value="<?= e((string) $invoiceRow['id']) ?>">
+                                                    <input type="hidden" name="document_type" value="<?= e($documentType) ?>">
+                                                    <button type="submit" class="button-secondary small-button pdf-button"><?= e(invoice_document_prefix_label($documentType)) ?></button>
+                                                </form>
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
                                     </div>
                                 </td>
                                 <td class="registry-date">

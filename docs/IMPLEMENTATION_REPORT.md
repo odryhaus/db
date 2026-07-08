@@ -93,3 +93,37 @@
 4. Save/update legal entity and set it as default.
 5. Create another invoice for the same client and confirm default legal entity is offered.
 6. Generate/download invoice, delivery note, and act PDFs and confirm names `INV_`, `DN_`, `ACT_`.
+
+## 2026-07-08 — Minimal Invoice Edit Form
+
+### What Changed
+
+- Simplified invoice edit form to the daily fields only:
+  - seller company
+  - client company
+  - recipient legal name
+  - contact person
+  - email
+  - phone
+  - document type
+  - document number
+  - invoice date
+- Removed visible edit fields for short name, EDRPOU, tax number, payer email, payer phone, legal address, payment due date, document due date, docs type, and separate document date.
+- Kept those removed fields as hidden compatibility values so saving a simple edit does not accidentally erase existing invoice data.
+- Added working `Docs` buttons in the invoice registry for invoice PDF, delivery note, and act. If a PDF does not exist yet, the button generates it and downloads it, so `Docs` no longer stops at `немає`.
+
+### Database Cleanup Notes
+
+Do not drop columns yet. These fields are hidden from the main UI but may still be useful for PDF history, future automation, or imported legal details:
+
+- `recipient_short_name`
+- `recipient_edrpou`
+- `recipient_tax_number`
+- `recipient_legal_address`
+- `recipient_email`
+- `recipient_phone`
+- `payment_due_date`
+- `document_due_date`
+- `docs_type`
+
+Recommended later approach: keep them in the database, but move them to an optional advanced/details panel only if the CEO/accountant needs them.

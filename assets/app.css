@@ -385,6 +385,10 @@ button:hover,
     gap: 5px;
 }
 
+.invoice-doc-actions form {
+    margin: 0;
+}
+
 .pdf-button {
     border-color: var(--accent);
     background: var(--accent);

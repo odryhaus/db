@@ -263,3 +263,14 @@ Decision:
 - Bulk reassignment is required for manager changes or employee offboarding.
 
 Reason: one client group may have many contacts and those contacts may belong to different `.BRAND` managers.
+
+## Minimal Invoice Editing
+
+Decision:
+
+- The invoice edit page shows only daily editing fields.
+- Legal/tax detail fields remain stored in the database but are hidden from the main form.
+- The registry `Docs` column is the main place to generate/download invoice PDF, delivery note, and act.
+- Do not drop hidden invoice columns yet; they may be needed for document history or future automated legal-data enrichment.
+
+Reason: invoice work should be fast and compact; rare legal details should not make every invoice edit screen heavy.

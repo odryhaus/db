@@ -218,3 +218,14 @@ Create a compact Clients page later:
 - Allow bulk reassignment when a manager leaves.
 
 Do not write local manager assignments back to KeyCRM.
+
+## Optional Legal Data Enrichment
+
+Later, evaluate whether `.BRAND DB` should auto-fill legal entity data by EDRPOU/tax number.
+
+Requirements before implementation:
+
+- Choose a reliable public registry/API source.
+- Confirm usage limits and legal/commercial terms.
+- Never overwrite invoice snapshots automatically.
+- Fill hidden legal fields only as suggestions for user review.
