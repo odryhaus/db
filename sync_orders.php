@@ -127,6 +127,10 @@ function sync_extract_order(array $order): array
     $orderedAt = sync_compact_date($order['ordered_at'] ?? null);
     $buyer = is_array($order['buyer'] ?? null) ? $order['buyer'] : [];
     $company = is_array($order['company'] ?? null) ? $order['company'] : [];
+    $buyerCompany = is_array($buyer['company'] ?? null) ? $buyer['company'] : [];
+    if (!$company && $buyerCompany) {
+        $company = $buyerCompany;
+    }
     $rawJson = json_encode($order, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
     return [
@@ -147,12 +151,12 @@ function sync_extract_order(array $order): array
         'manager_email' => sync_get_path($order, ['manager.email']),
         'client_id' => $order['client_id'] ?? sync_get_path($order, ['client.id']),
         'client_name' => sync_get_path($order, ['client.name', 'client.full_name']),
-        'buyer_id' => $buyer['id'] ?? null,
-        'buyer_name' => $buyer['full_name'] ?? ($buyer['name'] ?? null),
-        'buyer_email' => $buyer['email'] ?? null,
-        'buyer_phone' => $buyer['phone'] ?? null,
-        'company_id' => $company['id'] ?? null,
-        'company_name' => $company['name'] ?? null,
+        'buyer_id' => ($buyer['id'] ?? null) ?: ($order['buyer_id'] ?? null),
+        'buyer_name' => ($buyer['full_name'] ?? null) ?: ($buyer['name'] ?? null) ?: ($order['buyer_full_name'] ?? null) ?: ($order['buyer_name'] ?? null),
+        'buyer_email' => ($buyer['email'] ?? null) ?: ($order['buyer_email'] ?? null),
+        'buyer_phone' => ($buyer['phone'] ?? null) ?: ($order['buyer_phone'] ?? null),
+        'company_id' => ($company['id'] ?? null) ?: ($order['company_id'] ?? null) ?: ($buyer['company_id'] ?? null),
+        'company_name' => ($company['title'] ?? null) ?: ($company['full_name'] ?? null) ?: ($company['name'] ?? null) ?: ($order['company_name'] ?? null),
         'total_amount_uah' => $grandTotal,
         'paid_amount_uah' => $paidTotal,
         'unpaid_amount_uah' => $unpaid,

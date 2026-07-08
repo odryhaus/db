@@ -60,6 +60,7 @@ function money_uah($amount): string
 function dashboard_client_name(array $order): string
 {
     $rawClient = dashboard_raw_client_name($order);
+    $cachedClient = dashboard_cached_client_name($order);
 
     return (string) (
         ($order['company_name'] ?? '')
@@ -68,8 +69,79 @@ function dashboard_client_name(array $order): string
         ?: ($order['local_contact_name'] ?? '')
         ?: ($order['client_name'] ?? '')
         ?: $rawClient
+        ?: $cachedClient
         ?: '—'
     );
+}
+
+function dashboard_raw_id(array $order, array $paths): int
+{
+    $raw = json_decode((string) ($order['raw_json'] ?? ''), true);
+    if (!is_array($raw)) {
+        return 0;
+    }
+
+    foreach ($paths as $path) {
+        $current = $raw;
+        foreach (explode('.', $path) as $part) {
+            if (!is_array($current) || !array_key_exists($part, $current)) {
+                $current = null;
+                break;
+            }
+            $current = $current[$part];
+        }
+        if (is_numeric($current) && (int) $current > 0) {
+            return (int) $current;
+        }
+    }
+
+    return 0;
+}
+
+function dashboard_cached_client_name(array $order): string
+{
+    static $companies = [];
+    static $contacts = [];
+
+    $companyId = (int) (($order['company_id'] ?? 0) ?: dashboard_raw_id($order, ['company.id', 'company_id', 'buyer.company.id', 'buyer.company_id']));
+    if ($companyId > 0) {
+        if (!array_key_exists($companyId, $companies)) {
+            $stmt = db()->prepare("
+                SELECT display_name, keycrm_title, keycrm_name, title, name
+                FROM db_client_companies
+                WHERE keycrm_company_id = :keycrm_company_id
+                ORDER BY id DESC
+                LIMIT 1
+            ");
+            $stmt->execute(['keycrm_company_id' => $companyId]);
+            $company = $stmt->fetch() ?: [];
+            $companies[$companyId] = (string) (($company['display_name'] ?? '') ?: (($company['keycrm_title'] ?? '') ?: (($company['keycrm_name'] ?? '') ?: (($company['title'] ?? '') ?: ($company['name'] ?? '')))));
+        }
+        if ($companies[$companyId] !== '') {
+            return $companies[$companyId];
+        }
+    }
+
+    $buyerId = (int) (($order['buyer_id'] ?? 0) ?: dashboard_raw_id($order, ['buyer.id', 'buyer_id']));
+    if ($buyerId > 0) {
+        if (!array_key_exists($buyerId, $contacts)) {
+            $stmt = db()->prepare("
+                SELECT full_name, email, phone
+                FROM db_client_contacts
+                WHERE keycrm_buyer_id = :keycrm_buyer_id
+                ORDER BY id DESC
+                LIMIT 1
+            ");
+            $stmt->execute(['keycrm_buyer_id' => $buyerId]);
+            $contact = $stmt->fetch() ?: [];
+            $contacts[$buyerId] = (string) (($contact['full_name'] ?? '') ?: (($contact['email'] ?? '') ?: ($contact['phone'] ?? '')));
+        }
+        if ($contacts[$buyerId] !== '') {
+            return $contacts[$buyerId];
+        }
+    }
+
+    return '';
 }
 
 function dashboard_raw_client_name(array $order): string
@@ -107,12 +179,26 @@ function dashboard_raw_client_name(array $order): string
 
 function dashboard_raw_contact_value(array $order, string $field): string
 {
+    static $contacts = [];
+
     $raw = json_decode((string) ($order['raw_json'] ?? ''), true);
-    if (!is_array($raw)) {
+    $buyer = is_array($raw['buyer'] ?? null) ? $raw['buyer'] : [];
+    $value = trim((string) ($buyer[$field] ?? ''));
+    if ($value !== '') {
+        return $value;
+    }
+
+    $buyerId = (int) (($order['buyer_id'] ?? 0) ?: dashboard_raw_id($order, ['buyer.id', 'buyer_id']));
+    if ($buyerId <= 0) {
         return '';
     }
-    $buyer = is_array($raw['buyer'] ?? null) ? $raw['buyer'] : [];
-    return trim((string) ($buyer[$field] ?? ''));
+    if (!array_key_exists($buyerId, $contacts)) {
+        $stmt = db()->prepare('SELECT email, phone FROM db_client_contacts WHERE keycrm_buyer_id = :keycrm_buyer_id ORDER BY id DESC LIMIT 1');
+        $stmt->execute(['keycrm_buyer_id' => $buyerId]);
+        $contacts[$buyerId] = $stmt->fetch() ?: [];
+    }
+
+    return trim((string) ($contacts[$buyerId][$field] ?? ''));
 }
 
 function dashboard_url(array $params = []): string
