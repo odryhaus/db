@@ -265,3 +265,27 @@ ORDER BY c.short_name, a.currency;
 ```
 
 Do not delete duplicates blindly. First verify which row is used by existing invoices through `db_invoices.seller_account_id`.
+
+## 2026-07-10 — Invoice Client/Contact Selection Fix
+
+### Problem Found
+
+- Invoice edit field `Компанія` could show the payer legal name instead of the short client company/group name.
+- Contact autocomplete was too narrow when an invoice already had a selected company, so existing buyers could be hard to find.
+- Selecting a contact did not fill email/phone automatically.
+- The UI had backend support for saving a contact, but no visible compact button near contact fields.
+
+### What Changed
+
+- Client company labels now prefer KeyCRM/local short company name over legal title.
+- New invoice snapshots store local company `display_name` from short company name when available.
+- Contact autocomplete searches all matching contacts and ranks contacts from the selected company first.
+- Contact autocomplete returns and fills contact email/phone.
+- Added `Зберегти контакт` button on invoice edit.
+- Saving a selected contact updates/links it to the current client company; manually typed contacts create a new local contact.
+
+### Business Rule
+
+- `Компанія` = client company/group short name.
+- `Повна назва юрособи-платника` = legal payer name for invoice/PDF.
+- `Контактна особа` = buyer/contact person; many contacts can belong to one company.

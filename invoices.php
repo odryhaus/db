@@ -538,7 +538,7 @@ function invoice_store_client_snapshot(array $payload): array
                 WHERE id = :id
             ");
             $stmt->execute([
-                'display_name' => ($payload['company_title'] ?: $payload['company_name']) ?: null,
+                'display_name' => ($payload['company_name'] ?: $payload['company_title']) ?: null,
                 'keycrm_name' => $payload['company_name'] ?: null,
                 'keycrm_title' => $payload['company_title'] ?: null,
                 'name' => $payload['company_name'] ?: null,
@@ -556,7 +556,7 @@ function invoice_store_client_snapshot(array $payload): array
             ");
             $stmt->execute([
                 'keycrm_company_id' => $keycrmCompanyId > 0 ? $keycrmCompanyId : null,
-                'display_name' => ($payload['company_title'] ?: $payload['company_name']) ?: null,
+                'display_name' => ($payload['company_name'] ?: $payload['company_title']) ?: null,
                 'keycrm_name' => $payload['company_name'] ?: null,
                 'keycrm_title' => $payload['company_title'] ?: null,
                 'name' => $payload['company_name'] ?: null,
@@ -837,7 +837,7 @@ function invoice_client_company_label(?array $company): string
         return '';
     }
 
-    return (string) (($company['display_name'] ?? '') ?: (($company['keycrm_title'] ?? '') ?: (($company['keycrm_name'] ?? '') ?: (($company['title'] ?? '') ?: ($company['name'] ?? '')))));
+    return (string) (($company['keycrm_name'] ?? '') ?: (($company['name'] ?? '') ?: (($company['display_name'] ?? '') ?: (($company['keycrm_title'] ?? '') ?: ($company['title'] ?? '')))));
 }
 
 function invoice_contacts(?int $clientCompanyId): array
@@ -1578,23 +1578,48 @@ if (is_post()) {
             } elseif ($action === 'save_contact') {
                 $contactName = trim((string) ($_POST['contact_name'] ?? ($_POST['buyer_contact_name'] ?? '')));
                 $clientCompanyId = (int) ($_POST['client_company_id'] ?? ($invoice['client_company_id'] ?? 0));
+                $clientContactId = (int) ($_POST['client_contact_id'] ?? 0);
+                $contactEmail = trim((string) ($_POST['contact_email'] ?? ''));
+                $contactPhone = trim((string) ($_POST['contact_phone'] ?? ''));
                 if ($contactName === '') {
                     $error = 'Вкажіть контактну особу перед збереженням контакту.';
                 } else {
-                    $stmt = db()->prepare("
-                        INSERT INTO db_client_contacts
-                            (keycrm_buyer_id, client_company_id, full_name, email, phone, note, synced_at)
-                        VALUES
-                            (:keycrm_buyer_id, :client_company_id, :full_name, :email, :phone, :note, NOW())
-                    ");
-                    $stmt->execute([
-                        'keycrm_buyer_id' => !empty($invoice['buyer_id']) ? (int) $invoice['buyer_id'] : null,
-                        'client_company_id' => $clientCompanyId > 0 ? $clientCompanyId : null,
-                        'full_name' => $contactName,
-                        'email' => trim((string) ($_POST['contact_email'] ?? '')) ?: null,
-                        'phone' => trim((string) ($_POST['contact_phone'] ?? '')) ?: null,
-                        'note' => trim((string) ($_POST['note'] ?? '')) ?: null,
-                    ]);
+                    if ($clientContactId > 0) {
+                        $stmt = db()->prepare("
+                            UPDATE db_client_contacts
+                            SET client_company_id = :client_company_id,
+                                full_name = :full_name,
+                                email = :email,
+                                phone = :phone,
+                                note = COALESCE(NULLIF(note, ''), :note),
+                                synced_at = NOW()
+                            WHERE id = :id
+                        ");
+                        $stmt->execute([
+                            'client_company_id' => $clientCompanyId > 0 ? $clientCompanyId : null,
+                            'full_name' => $contactName,
+                            'email' => $contactEmail !== '' ? $contactEmail : null,
+                            'phone' => $contactPhone !== '' ? $contactPhone : null,
+                            'note' => trim((string) ($_POST['note'] ?? '')) ?: null,
+                            'id' => $clientContactId,
+                        ]);
+                    } else {
+                        $stmt = db()->prepare("
+                            INSERT INTO db_client_contacts
+                                (keycrm_buyer_id, client_company_id, full_name, email, phone, note, synced_at)
+                            VALUES
+                                (:keycrm_buyer_id, :client_company_id, :full_name, :email, :phone, :note, NOW())
+                        ");
+                        $stmt->execute([
+                            'keycrm_buyer_id' => !empty($invoice['buyer_id']) ? (int) $invoice['buyer_id'] : null,
+                            'client_company_id' => $clientCompanyId > 0 ? $clientCompanyId : null,
+                            'full_name' => $contactName,
+                            'email' => $contactEmail !== '' ? $contactEmail : null,
+                            'phone' => $contactPhone !== '' ? $contactPhone : null,
+                            'note' => trim((string) ($_POST['note'] ?? '')) ?: null,
+                        ]);
+                        $clientContactId = (int) db()->lastInsertId();
+                    }
                     db()->prepare("
                         UPDATE db_invoices
                         SET buyer_contact_name = :buyer_contact_name,
@@ -1602,15 +1627,17 @@ if (is_post()) {
                             buyer_phone = :buyer_phone,
                             contact_name = :contact_name,
                             contact_email = :contact_email,
-                            contact_phone = :contact_phone
+                            contact_phone = :contact_phone,
+                            client_company_id = :client_company_id
                         WHERE id = :id
                     ")->execute([
                         'buyer_contact_name' => $contactName,
-                        'buyer_email' => trim((string) ($_POST['contact_email'] ?? '')) ?: null,
-                        'buyer_phone' => trim((string) ($_POST['contact_phone'] ?? '')) ?: null,
+                        'buyer_email' => $contactEmail !== '' ? $contactEmail : null,
+                        'buyer_phone' => $contactPhone !== '' ? $contactPhone : null,
                         'contact_name' => $contactName,
-                        'contact_email' => trim((string) ($_POST['contact_email'] ?? '')) ?: null,
-                        'contact_phone' => trim((string) ($_POST['contact_phone'] ?? '')) ?: null,
+                        'contact_email' => $contactEmail !== '' ? $contactEmail : null,
+                        'contact_phone' => $contactPhone !== '' ? $contactPhone : null,
+                        'client_company_id' => $clientCompanyId > 0 ? $clientCompanyId : null,
                         'id' => $invoiceId,
                     ]);
                     redirect_to('/invoices.php?edit=' . $invoiceId);
@@ -2139,6 +2166,9 @@ foreach ($invoices as $invoiceRow) {
                             <span>Телефон</span>
                             <input name="contact_phone" value="<?= e((string) (($editInvoice['contact_phone'] ?? '') ?: ($editInvoice['buyer_phone'] ?? ''))) ?>">
                         </label>
+                        <div class="wide-field row-actions">
+                            <button type="submit" name="action" value="save_contact" class="button-secondary small-button">Зберегти контакт</button>
+                        </div>
                         <input type="hidden" name="recipient_short_name" value="<?= e((string) (($editInvoice['recipient_short_name'] ?? '') ?: '')) ?>">
                         <input type="hidden" name="recipient_edrpou" value="<?= e((string) (($editInvoice['recipient_edrpou'] ?? '') ?: ($editInvoice['buyer_edrpou'] ?? ''))) ?>">
                         <input type="hidden" name="recipient_tax_number" value="<?= e((string) (($editInvoice['recipient_tax_number'] ?? '') ?: '')) ?>">
@@ -2498,6 +2528,10 @@ foreach ($invoices as $invoiceRow) {
                         if (input.dataset.fillContact === '1') {
                             var contact = document.querySelector('[name="contact_name"]');
                             if (contact) contact.value = item.label || '';
+                            var contactEmail = document.querySelector('[name="contact_email"]');
+                            if (contactEmail && item.email) contactEmail.value = item.email || '';
+                            var contactPhone = document.querySelector('[name="contact_phone"]');
+                            if (contactPhone && item.phone) contactPhone.value = item.phone || '';
                         }
                         closeResults(input);
                     });

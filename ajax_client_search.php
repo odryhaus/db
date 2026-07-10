@@ -24,13 +24,13 @@ if (strlen($q) < 2) {
 $like = '%' . $q . '%';
 $results = [];
 
-function ajax_result(array &$results, string $type, int $id, string $label, string $subtitle = '', ?int $companyId = null, ?int $contactId = null, ?int $legalEntityId = null): void
+function ajax_result(array &$results, string $type, int $id, string $label, string $subtitle = '', ?int $companyId = null, ?int $contactId = null, ?int $legalEntityId = null, array $extra = []): void
 {
     if ($label === '' || count($results) >= 20) {
         return;
     }
 
-    $results[] = [
+    $results[] = array_merge([
         'type' => $type,
         'id' => $id,
         'label' => $label,
@@ -38,7 +38,7 @@ function ajax_result(array &$results, string $type, int $id, string $label, stri
         'client_company_id' => $companyId,
         'contact_id' => $contactId,
         'legal_entity_id' => $legalEntityId,
-    ];
+    ], $extra);
 }
 
 if ($type === 'all' || $type === 'company') {
@@ -50,13 +50,14 @@ if ($type === 'all' || $type === 'company') {
            OR keycrm_title LIKE :q
            OR name LIKE :q
            OR title LIKE :q
-        ORDER BY COALESCE(display_name, keycrm_title, keycrm_name, title, name) ASC, id DESC
+        ORDER BY COALESCE(keycrm_name, name, display_name, keycrm_title, title) ASC, id DESC
         LIMIT 20
     ");
     $stmt->execute(['q' => $like]);
     foreach ($stmt->fetchAll() as $row) {
-        $label = (string) (($row['display_name'] ?? '') ?: (($row['keycrm_title'] ?? '') ?: (($row['keycrm_name'] ?? '') ?: (($row['title'] ?? '') ?: ($row['name'] ?? '')))));
-        ajax_result($results, 'company', (int) $row['id'], $label, 'Компанія', (int) $row['id']);
+        $label = (string) (($row['keycrm_name'] ?? '') ?: (($row['name'] ?? '') ?: (($row['display_name'] ?? '') ?: (($row['keycrm_title'] ?? '') ?: ($row['title'] ?? '')))));
+        $subtitle = (string) (($row['keycrm_title'] ?? '') ?: ($row['title'] ?? 'Компанія'));
+        ajax_result($results, 'company', (int) $row['id'], $label, $subtitle, (int) $row['id']);
     }
 }
 
@@ -90,20 +91,31 @@ if (count($results) < 20 && ($type === 'all' || $type === 'legal_entity')) {
 
 if (count($results) < 20 && ($type === 'all' || $type === 'contact')) {
     $sql = "
-        SELECT id, client_company_id, full_name, email, phone
-        FROM db_client_contacts
-        WHERE (full_name LIKE :q OR email LIKE :q OR phone LIKE :q)
+        SELECT
+            ct.id,
+            ct.client_company_id,
+            ct.full_name,
+            ct.email,
+            ct.phone,
+            COALESCE(NULLIF(cc.keycrm_name, ''), NULLIF(cc.name, ''), NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_title, ''), NULLIF(cc.title, '')) AS company_label
+        FROM db_client_contacts ct
+        LEFT JOIN db_client_companies cc ON cc.id = ct.client_company_id
+        WHERE (ct.full_name LIKE :q OR ct.email LIKE :q OR ct.phone LIKE :q)
     ";
-    $params = ['q' => $like];
-    if ($clientCompanyId > 0) {
-        $sql .= ' AND client_company_id = :client_company_id';
-        $params['client_company_id'] = $clientCompanyId;
-    }
-    $sql .= ' ORDER BY full_name ASC, id DESC LIMIT 20';
+    $params = [
+        'q' => $like,
+        'client_company_id' => $clientCompanyId,
+        'client_company_id_sort' => $clientCompanyId,
+    ];
+    $sql .= ' ORDER BY CASE WHEN :client_company_id_sort > 0 AND ct.client_company_id = :client_company_id THEN 0 ELSE 1 END, ct.full_name ASC, ct.id DESC LIMIT 20';
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
     foreach ($stmt->fetchAll() as $row) {
-        $subtitle = trim((string) (($row['email'] ?? '') . ' ' . ($row['phone'] ?? '')));
+        $subtitle = trim(implode(' · ', array_filter([
+            (string) ($row['company_label'] ?? ''),
+            (string) ($row['email'] ?? ''),
+            (string) ($row['phone'] ?? ''),
+        ], static fn($value) => trim($value) !== '')));
         ajax_result(
             $results,
             'contact',
@@ -111,7 +123,12 @@ if (count($results) < 20 && ($type === 'all' || $type === 'contact')) {
             (string) (($row['full_name'] ?? '') ?: (($row['email'] ?? '') ?: ($row['phone'] ?? ''))),
             $subtitle,
             !empty($row['client_company_id']) ? (int) $row['client_company_id'] : null,
-            (int) $row['id']
+            (int) $row['id'],
+            null,
+            [
+                'email' => (string) ($row['email'] ?? ''),
+                'phone' => (string) ($row['phone'] ?? ''),
+            ]
         );
     }
 }
