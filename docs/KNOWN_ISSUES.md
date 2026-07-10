@@ -111,4 +111,5 @@ Known gaps:
 - English EUR/USD invoice templates are not implemented.
 - `ФОП Кубар Т.О.` USD IBAN is intentionally empty until confirmed.
 - Invoice and payment-requisite selectors intentionally hide active accounts with empty IBAN; maintain them in `our_companies.php`.
+- Duplicate account rows may exist from earlier/manual account labels. Selectors dedupe by `company_id + currency + IBAN`, and `our_companies.php` marks duplicates for review.
 - `payment_requisites.php` creates copyable payment text only; it does not create invoices, payments, or KeyCRM records.

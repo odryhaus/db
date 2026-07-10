@@ -229,3 +229,39 @@ Recommended later approach: keep them in the database, but move them to an optio
 - VAT 20% PDF templates.
 - English EUR/USD invoice PDF templates.
 - KeyCRM payment writes or file attachments.
+
+## 2026-07-10 — Seller Account Duplicate Cleanup Guard
+
+### Problem Found
+
+- Production can contain duplicate seller account rows with the same `company_id + currency + IBAN` but different labels, for example `EUR ПриватБанк` and `ПриватБанк EUR`.
+- This made invoice account dropdowns look duplicated.
+
+### What Changed
+
+- Seed logic now matches seller accounts by `company_id + currency + IBAN`, not by `account_label`.
+- Invoice/payment account dropdowns deduplicate active non-empty-IBAN accounts before rendering.
+- Account labels no longer repeat currency twice in dropdown text.
+- `our_companies.php` still shows all raw account rows and marks duplicate IBAN rows with `дубль IBAN` for manual review.
+
+### Manual Duplicate Check SQL
+
+```sql
+SELECT
+    c.short_name,
+    a.company_id,
+    a.currency,
+    REPLACE(UPPER(TRIM(a.iban)), ' ', '') AS normalized_iban,
+    COUNT(*) AS duplicate_count,
+    GROUP_CONCAT(a.id ORDER BY a.id) AS account_ids,
+    GROUP_CONCAT(a.account_label ORDER BY a.id SEPARATOR ' | ') AS labels
+FROM db_our_company_accounts a
+LEFT JOIN db_our_companies c ON c.id = a.company_id
+WHERE a.iban IS NOT NULL
+  AND TRIM(a.iban) <> ''
+GROUP BY a.company_id, a.currency, normalized_iban
+HAVING COUNT(*) > 1
+ORDER BY c.short_name, a.currency;
+```
+
+Do not delete duplicates blindly. First verify which row is used by existing invoices through `db_invoices.seller_account_id`.

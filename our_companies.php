@@ -179,8 +179,24 @@ if (is_post()) {
 $companies = our_companies(false);
 $accounts = our_company_accounts(null, false);
 $accountsByCompany = [];
+$duplicateAccountKeys = [];
+$accountKeyCounts = [];
 foreach ($accounts as $account) {
     $accountsByCompany[(int) $account['company_id']][] = $account;
+    $normalizedIban = preg_replace('/\s+/', '', strtoupper((string) ($account['iban'] ?? '')));
+    if ($normalizedIban !== '') {
+        $key = implode('|', [
+            (string) ($account['company_id'] ?? ''),
+            strtoupper((string) ($account['currency'] ?? 'UAH')),
+            $normalizedIban,
+        ]);
+        $accountKeyCounts[$key] = ($accountKeyCounts[$key] ?? 0) + 1;
+    }
+}
+foreach ($accountKeyCounts as $key => $count) {
+    if ($count > 1) {
+        $duplicateAccountKeys[$key] = true;
+    }
 }
 ?>
 <!doctype html>
@@ -286,7 +302,19 @@ foreach ($accounts as $account) {
                                         <input type="hidden" name="action" value="save_account">
                                         <input type="hidden" name="id" value="<?= e((string) $account['id']) ?>">
                                         <input type="hidden" name="company_id" value="<?= e((string) $company['id']) ?>">
-                                        <td><input name="account_label" value="<?= e((string) $account['account_label']) ?>" <?= !$canEdit ? 'readonly' : '' ?>></td>
+                                        <?php
+                                        $accountDuplicateKey = implode('|', [
+                                            (string) ($account['company_id'] ?? ''),
+                                            strtoupper((string) ($account['currency'] ?? 'UAH')),
+                                            preg_replace('/\s+/', '', strtoupper((string) ($account['iban'] ?? ''))),
+                                        ]);
+                                        ?>
+                                        <td>
+                                            <input name="account_label" value="<?= e((string) $account['account_label']) ?>" <?= !$canEdit ? 'readonly' : '' ?>>
+                                            <?php if (!empty($duplicateAccountKeys[$accountDuplicateKey])): ?>
+                                                <span class="status-badge status-badge--warning">дубль IBAN</span>
+                                            <?php endif; ?>
+                                        </td>
                                         <td><select name="account_type" <?= !$canEdit ? 'disabled' : '' ?>><?php foreach (['bank_account','card_requisites','privat','mono','other'] as $type): ?><option value="<?= e($type) ?>" <?= (string) $account['account_type'] === $type ? 'selected' : '' ?>><?= e($type) ?></option><?php endforeach; ?></select></td>
                                         <td><input name="currency" value="<?= e((string) $account['currency']) ?>" <?= !$canEdit ? 'readonly' : '' ?>></td>
                                         <td><input name="iban" value="<?= e((string) $account['iban']) ?>" <?= !$canEdit ? 'readonly' : '' ?>></td>

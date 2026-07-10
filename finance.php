@@ -718,18 +718,53 @@ function seed_our_company_account(int $companyId, array $account): void
         SELECT id
         FROM db_our_company_accounts
         WHERE company_id = :company_id
-          AND account_label = :account_label
           AND currency = :currency
           AND (iban <=> :iban)
+        ORDER BY is_default DESC,
+                 CASE WHEN account_label LIKE CONCAT(:currency_prefix, '%') THEN 1 ELSE 0 END,
+                 id ASC
         LIMIT 1
     ");
     $stmt->execute([
         'company_id' => $companyId,
-        'account_label' => $account['account_label'],
         'currency' => $account['currency'],
+        'currency_prefix' => $account['currency'],
         'iban' => $account['iban'] ?? null,
     ]);
-    if ($stmt->fetchColumn()) {
+    $existingId = (int) ($stmt->fetchColumn() ?: 0);
+    if ($existingId > 0) {
+        $stmt = db()->prepare("
+            UPDATE db_our_company_accounts
+            SET account_label = CASE WHEN account_label LIKE CONCAT(:currency_prefix, '%') THEN :account_label ELSE account_label END,
+                account_type = COALESCE(NULLIF(account_type, ''), :account_type),
+                bank_name = COALESCE(NULLIF(bank_name, ''), :bank_name),
+                bank_address = COALESCE(NULLIF(bank_address, ''), :bank_address),
+                swift = COALESCE(NULLIF(swift, ''), :swift),
+                recipient_name = COALESCE(NULLIF(recipient_name, ''), :recipient_name),
+                recipient_address = COALESCE(NULLIF(recipient_address, ''), :recipient_address),
+                tax_code = COALESCE(NULLIF(tax_code, ''), :tax_code),
+                language = COALESCE(NULLIF(language, ''), :language),
+                is_default = GREATEST(is_default, :is_default),
+                payment_template = COALESCE(NULLIF(payment_template, ''), :payment_template),
+                note = COALESCE(NULLIF(note, ''), :note)
+            WHERE id = :id
+        ");
+        $stmt->execute([
+            'currency_prefix' => $account['currency'],
+            'account_label' => $account['account_label'],
+            'account_type' => $account['account_type'] ?? 'bank_account',
+            'bank_name' => $account['bank_name'] ?? null,
+            'bank_address' => $account['bank_address'] ?? null,
+            'swift' => $account['swift'] ?? null,
+            'recipient_name' => $account['recipient_name'] ?? null,
+            'recipient_address' => $account['recipient_address'] ?? null,
+            'tax_code' => $account['tax_code'] ?? null,
+            'language' => $account['language'] ?? 'uk',
+            'is_default' => (int) ($account['is_default'] ?? 0),
+            'payment_template' => $account['payment_template'] ?? null,
+            'note' => $account['note'] ?? null,
+            'id' => $existingId,
+        ]);
         return;
     }
 
@@ -822,7 +857,24 @@ function our_company_accounts(?int $companyId = null, bool $activeOnly = true, b
 
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
-    return $stmt->fetchAll();
+    $accounts = $stmt->fetchAll();
+    if (!$requireIban) {
+        return $accounts;
+    }
+
+    $unique = [];
+    foreach ($accounts as $account) {
+        $key = implode('|', [
+            (string) ($account['company_id'] ?? ''),
+            strtoupper((string) ($account['currency'] ?? 'UAH')),
+            preg_replace('/\s+/', '', strtoupper((string) ($account['iban'] ?? ''))),
+        ]);
+        if (!isset($unique[$key]) || our_account_priority($account) > our_account_priority($unique[$key])) {
+            $unique[$key] = $account;
+        }
+    }
+
+    return array_values($unique);
 }
 
 function our_default_account_id(int $companyId, string $currency = 'UAH'): ?int
@@ -834,22 +886,42 @@ function our_default_account_id(int $companyId, string $currency = 'UAH'): ?int
           AND currency = :currency
           AND is_active = 1
           AND NULLIF(TRIM(iban), '') IS NOT NULL
-        ORDER BY is_default DESC, id ASC
+        ORDER BY is_default DESC,
+                 CASE WHEN account_label LIKE CONCAT(:currency_prefix, '%') THEN 1 ELSE 0 END,
+                 id ASC
         LIMIT 1
     ");
     $stmt->execute([
         'company_id' => $companyId,
         'currency' => strtoupper($currency),
+        'currency_prefix' => strtoupper($currency),
     ]);
     $id = $stmt->fetchColumn();
     return $id ? (int) $id : null;
 }
 
+function our_account_priority(array $account): int
+{
+    $currency = strtoupper((string) ($account['currency'] ?? ''));
+    $label = strtoupper(trim((string) ($account['account_label'] ?? '')));
+    $priority = ((int) ($account['is_default'] ?? 0)) * 1000;
+    if ($currency !== '' && substr($label, 0, strlen($currency)) === $currency) {
+        $priority -= 100;
+    }
+    $priority -= (int) ($account['id'] ?? 0);
+
+    return $priority;
+}
+
 function our_account_label(array $account): string
 {
+    $currency = strtoupper((string) ($account['currency'] ?? 'UAH'));
+    $label = trim((string) ($account['account_label'] ?? ''));
+    if ($label !== '' && substr(strtoupper($label), 0, strlen($currency . ' ')) === $currency . ' ') {
+        $label = trim(substr($label, strlen($currency)));
+    }
     $parts = [
-        (string) ($account['currency'] ?? 'UAH'),
-        (string) ($account['account_label'] ?? ''),
+        $label !== '' ? $label : $currency,
         (string) (($account['iban'] ?? '') ?: ($account['bank_name'] ?? '')),
     ];
     return trim(implode(' · ', array_filter($parts, static fn($value) => trim($value) !== '')));
