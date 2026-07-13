@@ -416,6 +416,24 @@ function invoice_document_prefix_label(string $type): string
     return $labels[$type] ?? 'PDF';
 }
 
+function invoice_seller_allows_act(array $invoiceOrSeller): bool
+{
+    return (string) ($invoiceOrSeller['allowed_item_type'] ?? 'products_only') !== 'products_only';
+}
+
+function invoice_document_types_for_seller(array $invoiceOrSeller): array
+{
+    $types = [
+        'invoice' => 'Рахунок',
+        'delivery_note' => 'Видаткова',
+    ];
+    if (invoice_seller_allows_act($invoiceOrSeller)) {
+        $types['act'] = 'Акт';
+    }
+
+    return $types;
+}
+
 function invoice_keycrm_fetch_buyer(int $buyerId): array
 {
     $apiKey = trim((string) app_config('keycrm.api_key', ''));
@@ -1192,7 +1210,10 @@ function invoice_download_path(string $relative): void
 }
 
 $companies = our_companies(true);
-$companyAccounts = our_company_accounts(null, true, true);
+$companyAccounts = array_values(array_filter(
+    our_company_accounts(null, true, true),
+    static fn(array $account): bool => strtoupper((string) ($account['currency'] ?? 'UAH')) === 'UAH'
+));
 $defaultCompany = $companies[0] ?? [];
 
 if (isset($_GET['download'])) {
@@ -1339,6 +1360,8 @@ if (is_post()) {
             $documentType = (string) ($_POST['document_type'] ?? 'invoice');
             if (!in_array($documentType, ['invoice', 'delivery_note', 'act'], true)) {
                 $error = 'Invalid document type.';
+            } elseif ($documentType === 'act' && !invoice_seller_allows_act($invoice)) {
+                $error = 'Акт недоступний для products-only продавця.';
             } else {
                 $items = invoice_items($invoiceId);
                 $documentDate = (string) (($invoice['document_due_date'] ?? '') ?: ($invoice['invoice_date'] ?? date('Y-m-d')));
@@ -1854,36 +1877,41 @@ if (is_post()) {
                             } elseif ($action === 'generate_act') {
                                 $documentType = 'act';
                             }
-                            $documentDate = trim((string) ($_POST['document_date'] ?? ''));
-                            if ($documentDate === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $documentDate)) {
-                                $documentDate = (string) $updatedInvoice['invoice_date'];
+                            if ($documentType === 'act' && !invoice_seller_allows_act($updatedInvoice)) {
+                                $error = 'Акт недоступний для products-only продавця.';
                             }
-                            if ($documentType !== 'invoice') {
-                                $updatedInvoice['invoice_date'] = $documentDate;
+                            if ($error === '') {
+                                $documentDate = trim((string) ($_POST['document_date'] ?? ''));
+                                if ($documentDate === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $documentDate)) {
+                                    $documentDate = (string) $updatedInvoice['invoice_date'];
+                                }
+                                if ($documentType !== 'invoice') {
+                                    $updatedInvoice['invoice_date'] = $documentDate;
+                                }
+                                $generated = invoice_generate_document($updatedInvoice, $updatedItems, $documentType);
+                                $documentId = invoice_store_document($invoiceId, $documentType, $documentDate, (string) $generated['path'], (string) $updatedInvoice['invoice_number']);
+                                $legacyDocumentType = $documentType === 'act' ? (string) $updatedInvoice['document_type'] : $documentType;
+                                $stmt = db()->prepare("
+                                    UPDATE db_invoices
+                                    SET document_type = :document_type,
+                                        pdf_file_path = :pdf_file_path,
+                                        payment_status = CASE WHEN payment_status = 'paid' THEN payment_status ELSE 'waiting_payment' END,
+                                        status = CASE WHEN status = 'paid' THEN status ELSE 'sent' END,
+                                        sent_at = COALESCE(sent_at, NOW()),
+                                        payment_due_date = COALESCE(payment_due_date, DATE_ADD(CURDATE(), INTERVAL 3 DAY)),
+                                        expected_payment_date = COALESCE(expected_payment_date, payment_due_date, DATE_ADD(CURDATE(), INTERVAL 3 DAY))
+                                    WHERE id = :id
+                                ");
+                                $stmt->execute([
+                                    'document_type' => $legacyDocumentType,
+                                    'pdf_file_path' => $generated['path'],
+                                    'id' => $invoiceId,
+                                ]);
+                                if ($generated['is_pdf']) {
+                                    redirect_to('/invoices.php?document=' . $documentId);
+                                }
+                                $error = 'PDF не створено: на сервері не підключився Dompdf/wkhtmltopdf або PDF-рендер вимкнений. Збережено тільки HTML-шаблон для діагностики.';
                             }
-                            $generated = invoice_generate_document($updatedInvoice, $updatedItems, $documentType);
-                            $documentId = invoice_store_document($invoiceId, $documentType, $documentDate, (string) $generated['path'], (string) $updatedInvoice['invoice_number']);
-                            $legacyDocumentType = $documentType === 'act' ? (string) $updatedInvoice['document_type'] : $documentType;
-                            $stmt = db()->prepare("
-                                UPDATE db_invoices
-                                SET document_type = :document_type,
-                                    pdf_file_path = :pdf_file_path,
-                                    payment_status = CASE WHEN payment_status = 'paid' THEN payment_status ELSE 'waiting_payment' END,
-                                    status = CASE WHEN status = 'paid' THEN status ELSE 'sent' END,
-                                    sent_at = COALESCE(sent_at, NOW()),
-                                    payment_due_date = COALESCE(payment_due_date, DATE_ADD(CURDATE(), INTERVAL 3 DAY)),
-                                    expected_payment_date = COALESCE(expected_payment_date, payment_due_date, DATE_ADD(CURDATE(), INTERVAL 3 DAY))
-                                WHERE id = :id
-                            ");
-                            $stmt->execute([
-                                'document_type' => $legacyDocumentType,
-                                'pdf_file_path' => $generated['path'],
-                                'id' => $invoiceId,
-                            ]);
-                            if ($generated['is_pdf']) {
-                                redirect_to('/invoices.php?document=' . $documentId);
-                            }
-                            $error = 'PDF не створено: на сервері не підключився Dompdf/wkhtmltopdf або PDF-рендер вимкнений. Збережено тільки HTML-шаблон для діагностики.';
                         }
                     } else {
                         $message = 'Invoice saved.';
@@ -1906,7 +1934,7 @@ if ($editId > 0) {
 }
 
 $invoices = db()->query("
-    SELECT i.*, c.short_name AS seller_short_name
+    SELECT i.*, c.short_name AS seller_short_name, c.allowed_item_type
     FROM db_invoices i
     LEFT JOIN db_our_companies c ON c.id = i.seller_company_id
     ORDER BY i.invoice_date DESC, i.id DESC
@@ -2183,7 +2211,7 @@ foreach ($invoices as $invoiceRow) {
                         <label>
                             <span>Тип документа</span>
                             <select name="document_type">
-                                <?php foreach (['invoice' => 'Рахунок', 'delivery_note' => 'Видаткова', 'act' => 'Акт'] as $value => $label): ?>
+                                <?php foreach (invoice_document_types_for_seller($editInvoice) as $value => $label): ?>
                                     <option value="<?= e($value) ?>" <?= (string) $editInvoice['document_type'] === $value ? 'selected' : '' ?>><?= e($label) ?></option>
                                 <?php endforeach; ?>
                             </select>
@@ -2371,7 +2399,7 @@ foreach ($invoices as $invoiceRow) {
                                 <td><?= e((string) ($invoiceRow['seller_short_name'] ?: '—')) ?></td>
                                 <td>
                                     <div class="invoice-doc-actions">
-                                        <?php foreach (['invoice', 'delivery_note', 'act'] as $documentType): ?>
+                                        <?php foreach (array_keys(invoice_document_types_for_seller($invoiceRow)) as $documentType): ?>
                                             <?php if ($documentButtons[$documentType] !== ''): ?>
                                                 <a class="file-chip file-chip--ready" href="<?= e($documentButtons[$documentType]) ?>"><?= e(invoice_document_prefix_label($documentType)) ?></a>
                                             <?php else: ?>

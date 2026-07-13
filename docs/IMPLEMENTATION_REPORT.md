@@ -308,3 +308,17 @@ Do not delete duplicates blindly. First verify which row is used by existing inv
 
 - No seller company rows were deleted.
 - No invoice seller references were rewritten.
+
+## 2026-07-13 — Seller Rule Completion
+
+### What Changed
+
+- Invoice account selectors now show only active UAH accounts with non-empty IBAN, because only UAH no-VAT PDF templates are implemented.
+- `Акт` is hidden from invoice edit and registry generation for sellers with `allowed_item_type = products_only`.
+- Server-side generation also rejects `act` for products-only sellers, so the UI rule cannot be bypassed with POST.
+
+### Still Future Scope
+
+- English EUR/USD invoice PDF templates.
+- VAT 20% invoice PDF templates.
+- Mixed product/service document routing for service-enabled sellers.
