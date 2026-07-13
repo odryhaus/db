@@ -36,6 +36,20 @@ KeyCRM is the source for operational CRM data:
 
 The dashboard must read from the local database only. The browser must not call KeyCRM directly. KeyCRM API calls must stay server-side, with the token stored only in `config/config.php`.
 
+## Near Real-Time Sync Tables
+
+The sync foundation uses additive local cache/control tables:
+
+- `db_sync_jobs` — queue and audit log for background sync jobs.
+- `db_sync_state` — last successful sync state per source.
+- `db_order_payments` — cached KeyCRM payment rows included with orders.
+- `db_order_expenses` — cached KeyCRM order expense rows included with orders.
+- `db_keycrm_statuses` — cached order/product statuses.
+
+`db_orders.source_hash` stores a raw JSON hash so delta/fallback sync can skip unchanged orders.
+
+Payments and order expenses are caches only. They do not write back to KeyCRM.
+
 ## 2. Existing Tables
 
 ### users

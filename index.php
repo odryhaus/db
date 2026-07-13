@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/sync_core.php';
 require_login();
 ensure_finance_tables();
 
@@ -49,8 +50,11 @@ $strategicDebtTotal = 0;
 $operationalDueThisWeek = 0;
 $overdueTotal = 0;
 $overdueCount = 0;
+$expectedNetCash = 0;
 $dashboardError = '';
 $totalDebtPages = 1;
+$syncSummary = ['active' => false, 'active_jobs' => [], 'last_global_job' => [], 'states' => []];
+$syncQueuedMessage = '';
 
 function money_uah($amount): string
 {
@@ -534,7 +538,26 @@ if (isset($_GET['client_statement'])) {
     exit;
 }
 
+if (is_post() && (string) ($_POST['action'] ?? '') === 'enqueue_global_sync') {
+    if (user_role() !== 'ceo') {
+        http_response_code(403);
+        include __DIR__ . '/partials_forbidden.php';
+        exit;
+    }
+    if (!csrf_is_valid()) {
+        http_response_code(400);
+        exit('Invalid CSRF token');
+    }
+    sync_enqueue_global_refresh((int) ($user['id'] ?? 0));
+    redirect_to('/index.php?month=' . urlencode($selectedMonth) . '&sync_queued=1');
+}
+
 try {
+    $syncSummary = sync_active_summary();
+    if (isset($_GET['sync_queued'])) {
+        $syncQueuedMessage = 'Оновлення поставлено в чергу. Дані підтягнуться фоновим воркером.';
+    }
+
     $companyTarget = active_company_target(db(), $selectedMonth);
     $monthlyTarget = (float) $companyTarget['amount_uah'];
 
@@ -555,6 +578,27 @@ try {
     $salesFact = (float) ($row['sales_fact'] ?? 0);
     $paid = (float) ($row['paid'] ?? 0);
     $monthlyUnpaid = (float) ($row['unpaid'] ?? 0);
+
+    if (invoice_table_exists('db_order_payments')) {
+        $paymentsStmt = db()->prepare("
+            SELECT COALESCE(SUM(amount), 0)
+            FROM db_order_payments
+            WHERE payment_date >= :month_start
+              AND payment_date <= :month_end
+              AND LOWER(COALESCE(status, '')) NOT LIKE '%cancel%'
+              AND LOWER(COALESCE(status, '')) NOT LIKE '%deleted%'
+              AND LOWER(COALESCE(status, '')) NOT LIKE '%скас%'
+        ");
+        $paymentsStmt->execute([
+            'month_start' => $monthStart->format('Y-m-d H:i:s'),
+            'month_end' => $monthEnd->format('Y-m-d H:i:s'),
+        ]);
+        $paidFromPayments = (float) ($paymentsStmt->fetchColumn() ?: 0);
+        if ($paidFromPayments > 0) {
+            $paid = $paidFromPayments;
+            $monthlyUnpaid = max($salesFact - $paid, 0);
+        }
+    }
     $remaining = max($monthlyTarget - $salesFact, 0);
     $progress = $monthlyTarget > 0 ? min(100, round(($salesFact / $monthlyTarget) * 100, 1)) : 0;
 
@@ -579,8 +623,12 @@ try {
     $paidShare = $salesFact > 0 ? min(100, round(($paid / $salesFact) * 100, 1)) : 0;
     $unpaidShare = $salesFact > 0 ? max(0, 100 - $paidShare) : 0;
 
-    $lastSyncStmt = db()->query("SELECT finished_at FROM db_sync_runs WHERE status = 'success' ORDER BY finished_at DESC LIMIT 1");
-    $lastSyncAt = $lastSyncStmt->fetchColumn() ?: null;
+    $lastGlobalJob = is_array($syncSummary['last_global_job'] ?? null) ? $syncSummary['last_global_job'] : [];
+    $lastSyncAt = (string) ($lastGlobalJob['finished_at'] ?? '');
+    if ($lastSyncAt === '' && invoice_table_exists('db_sync_runs')) {
+        $lastSyncStmt = db()->query("SELECT finished_at FROM db_sync_runs WHERE status = 'success' ORDER BY finished_at DESC LIMIT 1");
+        $lastSyncAt = $lastSyncStmt->fetchColumn() ?: null;
+    }
 
     $receivablesStmt = db()->query("
         SELECT
@@ -893,6 +941,7 @@ try {
     $overdueRow = $overdueStmt->fetch() ?: [];
     $overdueTotal = (float) ($overdueRow['overdue_total'] ?? 0);
     $overdueCount = (int) ($overdueRow['overdue_count'] ?? 0);
+    $expectedNetCash = $receivablesTotal - $operationalDueThisMonth;
 } catch (Throwable $e) {
     $dashboardError = 'Dashboard data is not available yet. Run CEO sync after production config is ready.';
 }
@@ -911,7 +960,10 @@ try {
             <div class="brand-block">
                 <p class="eyebrow">Money dashboard</p>
                 <h1>.BRAND DB</h1>
-                <p class="muted">Синхронізація: <?= e($lastSyncAt ?: 'ще не було') ?></p>
+                <p class="muted" id="sync-status-line">
+                    Синхронізація:
+                    <?= e(($syncSummary['active'] ?? false) ? 'оновлюється зараз' : ($lastSyncAt ?: 'ще не було')) ?>
+                </p>
             </div>
             <form class="month-picker" method="get" action="<?= e(base_path('/index.php')) ?>">
                 <label>
@@ -937,7 +989,12 @@ try {
                     <?php endif; ?>
                     <?php if (user_role() === 'ceo'): ?>
                         <a href="<?= e(base_path('/our_companies.php')) ?>">Наші компанії</a>
-                        <a href="<?= e(base_path('/sync_orders.php')) ?>">Синхронізація</a>
+                        <form class="inline-sync-form" method="post" action="<?= e(base_path('/index.php?month=' . urlencode($selectedMonth))) ?>">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="enqueue_global_sync">
+                            <button type="submit" class="small-button" <?= ($syncSummary['active'] ?? false) ? 'disabled' : '' ?>>Оновити все</button>
+                        </form>
+                        <a href="<?= e(base_path('/sync_orders.php')) ?>">Sync</a>
                         <a href="<?= e(base_path('/clients_sync.php')) ?>">Клієнти Sync</a>
                         <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
                     <?php endif; ?>
@@ -945,6 +1002,10 @@ try {
                 </nav>
             </div>
         </header>
+
+        <?php if ($syncQueuedMessage !== ''): ?>
+            <div class="alert"><?= e($syncQueuedMessage) ?></div>
+        <?php endif; ?>
 
         <?php if ($dashboardError !== ''): ?>
             <div class="alert"><?= e($dashboardError) ?></div>
@@ -977,6 +1038,11 @@ try {
                 <span class="label">Ми повинні цього місяця</span>
                 <strong><?= e(money_uah($operationalDueThisMonth)) ?></strong>
                 <small>операційні</small>
+            </div>
+            <div class="kpi-card">
+                <span class="label">Очікуваний net cash</span>
+                <strong><?= e(money_uah($expectedNetCash)) ?></strong>
+                <small>нам повинні − ми повинні</small>
             </div>
         </section>
 
@@ -1288,5 +1354,35 @@ try {
         </section>
         <?= app_version_badge() ?>
     </main>
+    <script>
+        (function () {
+            var line = document.getElementById('sync-status-line');
+            if (!line) {
+                return;
+            }
+            var statusUrl = <?= json_encode(base_path('/api/sync_status.php'), JSON_UNESCAPED_SLASHES) ?>;
+            var active = <?= json_encode((bool) ($syncSummary['active'] ?? false)) ?>;
+            function refreshSyncStatus() {
+                fetch(statusUrl, {headers: {'Accept': 'application/json'}})
+                    .then(function (response) { return response.json(); })
+                    .then(function (data) {
+                        if (!data || !data.ok) {
+                            return;
+                        }
+                        if (data.active) {
+                            line.textContent = 'Синхронізація: оновлюється зараз';
+                            return;
+                        }
+                        var finished = data.last_global_job && data.last_global_job.finished_at ? data.last_global_job.finished_at : 'ще не було';
+                        line.textContent = 'Синхронізація: ' + finished;
+                        if (timer) {
+                            clearInterval(timer);
+                        }
+                    })
+                    .catch(function () {});
+            }
+            var timer = active ? setInterval(refreshSyncStatus, 3000) : null;
+        }());
+    </script>
 </body>
 </html>

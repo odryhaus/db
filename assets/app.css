@@ -263,6 +263,11 @@ code {
     color: var(--text);
 }
 
+.inline-sync-form {
+    display: inline-flex;
+    margin: 0;
+}
+
 /* ==========================================================================
    Buttons & form controls
    ========================================================================== */
@@ -341,6 +346,11 @@ button:hover,
 .button-primary:hover {
     background: var(--accent-hover);
     border-color: var(--accent-hover);
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
 }
 
 .button-secondary,

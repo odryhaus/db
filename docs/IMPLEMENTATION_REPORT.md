@@ -1,5 +1,72 @@
 # Implementation Report
 
+## 2026-07-13 — Near Real-Time Sync Orchestration
+
+### Files Changed
+
+- `finance.php`
+- `sync_core.php`
+- `index.php`
+- `assets/app.css`
+- `config/config.example.php`
+- `api/sync_status.php`
+- `api/dashboard_kpis.php`
+- `cron/sync_worker.php`
+- `cron/enqueue_delta.php`
+- `docs/SYNC_AUDIT.md`
+- `docs/CRON_SETUP.md`
+- `README.md`
+- documentation files
+
+### What Changed
+
+- Added background sync job tables and local payment/expense cache tables.
+- Added CEO dashboard button `Оновити все` that queues sync work and returns immediately.
+- Added CLI worker for queued KeyCRM sync jobs.
+- Added polling APIs for sync status and dashboard KPI refresh.
+- Added local caches for KeyCRM order payments and order expenses.
+- Confirmed from uploaded `open-api.yml` that `filter[updated_between]` is the documented delta filter.
+- Confirmed no webhook endpoints are present in the uploaded OpenAPI file, so polling/cron is the safe path for now.
+
+### Database Tables / Columns Added
+
+- `db_sync_jobs`
+- `db_order_payments`
+- `db_order_expenses`
+- `db_keycrm_statuses`
+- `db_sync_state.last_source_updated_at`
+- `db_sync_state.last_cursor`
+- `db_sync_state.last_page`
+- `db_orders.source_hash`
+
+### How It Works
+
+CEO clicks `Оновити все` on `index.php`. The app creates one parent `global_refresh` job and child jobs for orders, payments, companies, buyers, order expenses, and statuses.
+
+Cron runs `cron/sync_worker.php`, claims one queued job, calls KeyCRM server-side, writes local cache tables, and records counts/errors in `db_sync_jobs`.
+
+### Cron Commands
+
+```sh
+/usr/bin/php /home/qkbbstge/domains/bph.com.ua/public_html/public/db/cron/enqueue_delta.php
+/usr/bin/php /home/qkbbstge/domains/bph.com.ua/public_html/public/db/cron/sync_worker.php
+```
+
+### What Was Not Implemented
+
+- No KeyCRM webhook endpoint, because webhook support was not found in `open-api.yml`.
+- No browser-side KeyCRM calls.
+- No automatic full historical backfill.
+- No KeyCRM write-back.
+- No charts.
+
+### Risks / Open Questions
+
+- Production must verify that KeyCRM honors `filter[updated_between]` for orders, buyers, and companies.
+- Payment status values must be reviewed before `db_order_payments` becomes the only paid-money source.
+- Payment/expense arrays must be checked for stable IDs; fallback hash IDs are used when KeyCRM omits IDs.
+- Hosting PHP path may differ from `/usr/bin/php`.
+
 ## 2026-07-03 — Invoice Workflow And Legal Entities
 
 ### Files Changed

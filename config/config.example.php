@@ -18,6 +18,7 @@ return [
     'keycrm' => [
         'base_url' => 'https://openapi.keycrm.app/v1',
         'api_key' => 'CHANGE_ME_IN_REAL_CONFIG',
+        'sync_delta_pages' => 10,
         'client_sync_delta_pages' => 20,
         'client_sync_initial_pages' => 200,
     ],

@@ -209,6 +209,22 @@ Decision:
 
 Reason: CEO needs to see who `.BRAND` must pay, when, whether it is linked to an order, and how it affects cash pressure without building full accounting software.
 
+## Near Real-Time Sync
+
+Decision:
+
+- Use background sync jobs instead of long browser requests.
+- CEO dashboard has one global button: `Оновити все`.
+- Jobs are stored in `db_sync_jobs` and processed by `cron/sync_worker.php`.
+- Use KeyCRM `filter[updated_between]` with a 120 second overlap for delta sync.
+- Keep bounded page limits as protection.
+- Cache KeyCRM payments in `db_order_payments`.
+- Cache KeyCRM order expenses in `db_order_expenses`.
+- Do not create a webhook endpoint until KeyCRM webhook support is confirmed outside the uploaded OpenAPI file.
+- Do not run all-history backfill automatically.
+
+Reason: CEO needs fresh money data without waiting in the browser or risking a large uncontrolled CRM import.
+
 ## Dashboard Hero Dedup, Pacing, Aging, Client Debt (2026-07-03)
 
 The CEO flagged that the KPI strip and the "План продажів" panel repeated the same План/Факт/Прогрес numbers twice, and asked for a graphical Факт → Оплачено/Не оплачено breakdown, debt aging, plan pacing, and a per-client negative-balance view she can turn into a statement to send.

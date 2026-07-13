@@ -186,6 +186,8 @@ Current source documents:
 - `docs/NEXT_STEPS.md`
 - `docs/KNOWN_ISSUES.md`
 - `docs/CRM_SYNC_PLAN.md`
+- `docs/SYNC_AUDIT.md`
+- `docs/CRON_SETUP.md`
 
 Historical implementation notes are archived under `docs/archive/`.
 
@@ -224,6 +226,19 @@ After deploy, test:
 ```text
 https://bph.com.ua/db/login.php
 ```
+
+## Near Real-Time Sync
+
+CEO can start a global refresh from the dashboard with `Оновити все`.
+
+Production cron should run:
+
+```sh
+/usr/bin/php /home/qkbbstge/domains/bph.com.ua/public_html/public/db/cron/enqueue_delta.php
+/usr/bin/php /home/qkbbstge/domains/bph.com.ua/public_html/public/db/cron/sync_worker.php
+```
+
+The KeyCRM token stays only in `config/config.php`.
 
 ## Security Notes
 

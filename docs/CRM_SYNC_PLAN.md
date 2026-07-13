@@ -2,6 +2,20 @@
 
 Status: CEO-only manual sync has been implemented against the manually created `db_orders` and `db_sync_runs` tables. This document remains the architecture reference for verifying and improving that sync.
 
+## 2026-07-13 Near Real-Time Sync Update
+
+Sync should move from long browser requests to background orchestration:
+
+- CEO starts one global refresh from the dashboard.
+- `db_sync_jobs` stores parent/child jobs.
+- `cron/sync_worker.php` processes jobs outside the browser.
+- `db_order_payments` caches order payment rows from KeyCRM order includes.
+- `db_order_expenses` caches KeyCRM order expenses separately from local payment obligations.
+- Delta sync uses documented `filter[updated_between]` with a 120 second overlap.
+- If runtime delta filtering fails, keep bounded recent-page polling and compare `source_hash`.
+
+Webhook support was not found in the uploaded `open-api.yml`; use cron polling until separate KeyCRM webhook documentation is confirmed.
+
 ## 1. What Old Brand Dashboard Does
 
 The old `/brand-dashboard` is a production workflow dashboard. It is not a money dashboard.

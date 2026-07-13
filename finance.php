@@ -45,6 +45,120 @@ function ensure_finance_tables(): void
             KEY idx_is_strategic (is_strategic)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    ensure_sync_tables();
+}
+
+function ensure_sync_tables(): void
+{
+    $pdo = db();
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_sync_state (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            sync_key VARCHAR(100) NOT NULL UNIQUE,
+            last_successful_sync_at DATETIME NULL,
+            last_attempt_at DATETIME NULL,
+            status ENUM('idle','queued','running','success','partial','failed') NOT NULL DEFAULT 'idle',
+            error_message TEXT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_sync_jobs (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            parent_job_id INT UNSIGNED NULL,
+            job_type VARCHAR(80) NOT NULL,
+            status ENUM('queued','running','success','partial','failed') NOT NULL DEFAULT 'queued',
+            started_at DATETIME NULL,
+            finished_at DATETIME NULL,
+            records_seen INT UNSIGNED NOT NULL DEFAULT 0,
+            records_inserted INT UNSIGNED NOT NULL DEFAULT 0,
+            records_updated INT UNSIGNED NOT NULL DEFAULT 0,
+            records_unchanged INT UNSIGNED NOT NULL DEFAULT 0,
+            error_message TEXT NULL,
+            created_by_user_id INT UNSIGNED NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_parent_job_id (parent_job_id),
+            KEY idx_job_type_status (job_type, status),
+            KEY idx_status_created (status, created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_order_payments (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            keycrm_payment_id VARCHAR(80) NOT NULL,
+            keycrm_order_id INT UNSIGNED NOT NULL,
+            payment_method_id INT UNSIGNED NULL,
+            payment_method_name VARCHAR(190) NULL,
+            amount DECIMAL(14,2) NOT NULL DEFAULT 0,
+            currency VARCHAR(10) NOT NULL DEFAULT 'UAH',
+            status VARCHAR(50) NULL,
+            payment_date DATETIME NULL,
+            source_updated_at DATETIME NULL,
+            source_hash CHAR(64) NULL,
+            raw_json LONGTEXT NULL,
+            synced_at DATETIME NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_keycrm_payment_id (keycrm_payment_id),
+            KEY idx_keycrm_order_id (keycrm_order_id),
+            KEY idx_payment_date (payment_date),
+            KEY idx_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_order_expenses (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            keycrm_expense_id VARCHAR(80) NOT NULL,
+            keycrm_order_id INT UNSIGNED NOT NULL,
+            expense_type_id INT UNSIGNED NULL,
+            expense_type_name VARCHAR(190) NULL,
+            amount DECIMAL(14,2) NOT NULL DEFAULT 0,
+            currency VARCHAR(10) NOT NULL DEFAULT 'UAH',
+            status VARCHAR(50) NULL,
+            payment_date DATETIME NULL,
+            source_updated_at DATETIME NULL,
+            source_hash CHAR(64) NULL,
+            raw_json LONGTEXT NULL,
+            synced_at DATETIME NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_keycrm_expense_id (keycrm_expense_id),
+            KEY idx_keycrm_order_id (keycrm_order_id),
+            KEY idx_payment_date (payment_date),
+            KEY idx_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_keycrm_statuses (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            status_type ENUM('order','product') NOT NULL,
+            keycrm_status_id INT UNSIGNED NOT NULL,
+            name VARCHAR(190) NULL,
+            source_hash CHAR(64) NULL,
+            raw_json LONGTEXT NULL,
+            synced_at DATETIME NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_status_type_keycrm (status_type, keycrm_status_id),
+            KEY idx_status_type (status_type)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    invoice_add_column_if_missing('db_sync_state', 'last_source_updated_at', 'DATETIME NULL');
+    invoice_add_column_if_missing('db_sync_state', 'last_cursor', 'VARCHAR(190) NULL');
+    invoice_add_column_if_missing('db_sync_state', 'last_page', 'INT UNSIGNED NULL');
+    invoice_modify_column_if_exists('db_sync_state', 'status', "ENUM('idle','queued','running','success','partial','failed') NOT NULL DEFAULT 'idle'");
+    if (invoice_table_exists('db_orders')) {
+        invoice_add_column_if_missing('db_orders', 'source_hash', 'CHAR(64) NULL');
+        invoice_add_index_if_missing('db_orders', 'idx_source_updated_at', 'source_updated_at');
+        invoice_add_index_if_missing('db_orders', 'idx_source_hash', 'source_hash');
+    }
 }
 
 function ensure_invoice_tables(): void
@@ -430,6 +544,19 @@ function invoice_add_column_if_missing(string $table, string $column, string $de
     if ((int) $stmt->fetchColumn() === 0) {
         db()->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
     }
+}
+
+function invoice_table_exists(string $table): bool
+{
+    $stmt = db()->prepare("
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = :table_name
+    ");
+    $stmt->execute(['table_name' => $table]);
+
+    return (int) $stmt->fetchColumn() > 0;
 }
 
 function invoice_modify_column_if_exists(string $table, string $column, string $definition): void

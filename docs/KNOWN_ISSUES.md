@@ -41,8 +41,10 @@ Known limitations:
 - Old `db_monthly_targets` / `db_manager_targets` data is not migrated automatically; new target logic uses `db_sales_targets`.
 - Expenses are a foundation only; no recurring schedule expansion or payment audit trail exists yet.
 - Additive finance tables are created with `CREATE TABLE IF NOT EXISTS` from application code.
-- Sync is manual CEO-only; no cron/automatic sync exists yet.
-- Sync scans bounded recent pages only; it does not scan all history.
+- New background sync orchestration exists, but production cron must still be configured.
+- Sync scans bounded delta/recent pages only; it does not scan all history.
+- KeyCRM `filter[updated_between]` is confirmed from OpenAPI, but production runtime behavior still needs verification.
+- Webhook support was not found in the uploaded OpenAPI file.
 
 ## Invoices v0.1 Limitations
 
