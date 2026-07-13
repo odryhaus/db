@@ -289,3 +289,22 @@ Do not delete duplicates blindly. First verify which row is used by existing inv
 - `Компанія` = client company/group short name.
 - `Повна назва юрособи-платника` = legal payer name for invoice/PDF.
 - `Контактна особа` = buyer/contact person; many contacts can belong to one company.
+
+## 2026-07-13 — Seller Company Duplicate Guard
+
+### Problem Found
+
+- The old auth/invoice seed could create a legacy seller row `FOP Darchenko A.B.` while the newer seller structure also has `ФОП Дарченко А.Б.` with the same tax code.
+- This made invoice seller dropdowns show the same seller twice in Ukrainian/English variants.
+
+### What Changed
+
+- Legacy seed no longer inserts `FOP Darchenko A.B.` if any seller with tax code `3032919108` already exists.
+- Active seller lists used by invoices and payment requisites deduplicate companies by `tax_code`/`edrpou`.
+- If duplicate active sellers exist, the Ukrainian/default/current row is preferred for working dropdowns.
+- `our_companies.php` still shows all raw seller rows and marks same-tax-code rows with `дубль компанії` for manual review.
+
+### Safety
+
+- No seller company rows were deleted.
+- No invoice seller references were rewritten.

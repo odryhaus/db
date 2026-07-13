@@ -400,7 +400,12 @@ function ensure_invoice_tables(): void
             'products_only',
             1
         WHERE NOT EXISTS (
-            SELECT 1 FROM db_our_companies WHERE short_name = 'FOP Darchenko A.B.' LIMIT 1
+            SELECT 1
+            FROM db_our_companies
+            WHERE short_name = 'FOP Darchenko A.B.'
+               OR edrpou = '3032919108'
+               OR tax_code = '3032919108'
+            LIMIT 1
         )
     ");
     $stmt->execute();
@@ -833,7 +838,46 @@ function our_companies(bool $activeOnly = true): array
     }
     $sql .= ' ORDER BY is_default DESC, is_active DESC, short_name ASC, id ASC';
 
-    return db()->query($sql)->fetchAll();
+    $companies = db()->query($sql)->fetchAll();
+    if (!$activeOnly) {
+        return $companies;
+    }
+
+    $unique = [];
+    foreach ($companies as $company) {
+        $key = our_company_identity_key($company);
+        if (!isset($unique[$key]) || our_company_priority($company) > our_company_priority($unique[$key])) {
+            $unique[$key] = $company;
+        }
+    }
+
+    return array_values($unique);
+}
+
+function our_company_identity_key(array $company): string
+{
+    $taxCode = trim((string) (($company['tax_code'] ?? '') ?: ($company['edrpou'] ?? '')));
+    if ($taxCode !== '') {
+        return 'tax:' . preg_replace('/\D+/', '', $taxCode);
+    }
+
+    return 'id:' . (string) ($company['id'] ?? '');
+}
+
+function our_company_priority(array $company): int
+{
+    $shortName = (string) ($company['short_name'] ?? '');
+    $priority = ((int) ($company['is_default'] ?? 0)) * 1000;
+    $priority += ((int) ($company['is_active'] ?? 0)) * 100;
+    if (trim((string) (($company['tax_code'] ?? '') ?: ($company['edrpou'] ?? ''))) !== '') {
+        $priority += 50;
+    }
+    if (preg_match('/[А-Яа-яІіЇїЄєҐґ]/u', $shortName)) {
+        $priority += 25;
+    }
+    $priority -= (int) ($company['id'] ?? 0);
+
+    return $priority;
 }
 
 function our_company_accounts(?int $companyId = null, bool $activeOnly = true, bool $requireIban = false): array

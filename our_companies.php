@@ -177,6 +177,19 @@ if (is_post()) {
 }
 
 $companies = our_companies(false);
+$duplicateCompanyKeys = [];
+$companyKeyCounts = [];
+foreach ($companies as $company) {
+    $key = our_company_identity_key($company);
+    if (strpos($key, 'tax:') === 0 && $key !== 'tax:') {
+        $companyKeyCounts[$key] = ($companyKeyCounts[$key] ?? 0) + 1;
+    }
+}
+foreach ($companyKeyCounts as $key => $count) {
+    if ($count > 1) {
+        $duplicateCompanyKeys[$key] = true;
+    }
+}
 $accounts = our_company_accounts(null, false);
 $accountsByCompany = [];
 $duplicateAccountKeys = [];
@@ -261,7 +274,12 @@ foreach ($accountKeyCounts as $key => $count) {
                         <span class="label"><?= (int) $company['is_active'] === 1 ? 'Активна' : 'Вимкнена' ?></span>
                         <h2><?= e((string) $company['short_name']) ?></h2>
                     </div>
-                    <span class="status-badge <?= (int) $company['is_default'] === 1 ? 'status-badge--success' : 'status-badge--muted' ?>"><?= (int) $company['is_default'] === 1 ? 'default' : 'seller' ?></span>
+                    <div class="row-actions">
+                        <?php if (!empty($duplicateCompanyKeys[our_company_identity_key($company)])): ?>
+                            <span class="status-badge status-badge--warning">дубль компанії</span>
+                        <?php endif; ?>
+                        <span class="status-badge <?= (int) $company['is_default'] === 1 ? 'status-badge--success' : 'status-badge--muted' ?>"><?= (int) $company['is_default'] === 1 ? 'default' : 'seller' ?></span>
+                    </div>
                 </div>
 
                 <form method="post" class="invoice-form">
