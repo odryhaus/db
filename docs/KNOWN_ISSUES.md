@@ -42,6 +42,7 @@ Known limitations:
 - Expenses are a foundation only; no recurring schedule expansion or payment audit trail exists yet.
 - Additive finance tables are created with `CREATE TABLE IF NOT EXISTS` from application code.
 - New background sync orchestration exists, but production cron must still be configured.
+- Dashboard has a CEO-only web tick fallback for queued jobs, but cron is still the preferred reliable sync runner.
 - Sync scans bounded delta/recent pages only; it does not scan all history.
 - KeyCRM `filter[updated_between]` is confirmed from OpenAPI, but production runtime behavior still needs verification.
 - Webhook support was not found in the uploaded OpenAPI file.

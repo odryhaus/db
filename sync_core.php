@@ -2,7 +2,7 @@
 
 function sync_job_types(): array
 {
-    return ['orders', 'payments', 'companies', 'buyers', 'order_expenses', 'statuses'];
+    return ['orders', 'unpaid_orders', 'payments', 'companies', 'buyers', 'order_expenses', 'statuses'];
 }
 
 function sync_key_for_job(string $jobType): string
@@ -146,6 +146,23 @@ function sync_endpoint(string $jobType, int $page, int $limit): string
     throw new InvalidArgumentException('Unknown sync job type: ' . $jobType);
 }
 
+function sync_order_detail_endpoint(int $orderId): string
+{
+    return 'order/' . $orderId . '?' . http_build_query([
+        'include' => 'buyer,products.offer,status,manager,payments,expenses',
+    ]);
+}
+
+function sync_order_filter_endpoint(int $orderId): string
+{
+    return 'order?' . http_build_query([
+        'limit' => 1,
+        'page' => 1,
+        'filter[order_id]' => $orderId,
+        'include' => 'buyer,products.offer,status,manager,payments,expenses',
+    ]);
+}
+
 function sync_enqueue_global_refresh(int $userId): int
 {
     ensure_sync_tables();
@@ -159,6 +176,7 @@ function sync_enqueue_global_refresh(int $userId): int
         LIMIT 1
     ")->fetchColumn();
     if ($active) {
+        sync_ensure_parent_jobs((int) $active, $userId);
         return (int) $active;
     }
 
@@ -183,6 +201,34 @@ function sync_enqueue_global_refresh(int $userId): int
     $pdo->commit();
 
     return $parentId;
+}
+
+function sync_ensure_parent_jobs(int $parentId, ?int $userId = null): void
+{
+    if ($parentId <= 0) {
+        return;
+    }
+
+    $stmt = db()->prepare("
+        INSERT INTO db_sync_jobs (parent_job_id, job_type, status, created_by_user_id)
+        SELECT :parent_job_id, :job_type, 'queued', :created_by_user_id
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM db_sync_jobs
+            WHERE parent_job_id = :parent_job_id_check
+              AND job_type = :job_type_check
+            LIMIT 1
+        )
+    ");
+    foreach (sync_job_types() as $jobType) {
+        $stmt->execute([
+            'parent_job_id' => $parentId,
+            'job_type' => $jobType,
+            'created_by_user_id' => $userId,
+            'parent_job_id_check' => $parentId,
+            'job_type_check' => $jobType,
+        ]);
+    }
 }
 
 function sync_enqueue_delta_jobs(?int $userId = null): int
@@ -441,7 +487,72 @@ function sync_upsert_payment(array $payment, int $orderId): string
         'raw_json' => json_encode($payment, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
     ]);
 
+    sync_recalculate_order_payment_totals($orderId);
+
     return $oldHash === '' ? 'inserted' : 'updated';
+}
+
+function sync_payment_counts_as_paid(?string $status): bool
+{
+    $rawStatus = trim((string) $status);
+    $status = function_exists('mb_strtolower') ? mb_strtolower($rawStatus, 'UTF-8') : strtolower($rawStatus);
+    if ($status === '') {
+        return true;
+    }
+
+    foreach (['cancel', 'deleted', 'скас', 'refund', 'returned', 'failed', 'error'] as $blocked) {
+        if (str_contains($status, $blocked)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function sync_recalculate_order_payment_totals(int $orderId): void
+{
+    if ($orderId <= 0 || !invoice_table_exists('db_orders') || !invoice_table_exists('db_order_payments')) {
+        return;
+    }
+
+    $payments = db()->prepare("
+        SELECT amount, status
+        FROM db_order_payments
+        WHERE keycrm_order_id = :order_id
+    ");
+    $payments->execute(['order_id' => $orderId]);
+    $paid = 0.0;
+    foreach ($payments->fetchAll() as $payment) {
+        if (sync_payment_counts_as_paid($payment['status'] ?? null)) {
+            $paid += (float) ($payment['amount'] ?? 0);
+        }
+    }
+
+    $order = db()->prepare('SELECT total_amount_uah FROM db_orders WHERE keycrm_id = :order_id LIMIT 1');
+    $order->execute(['order_id' => $orderId]);
+    $total = $order->fetchColumn();
+    if ($total === false) {
+        return;
+    }
+
+    $totalAmount = (float) $total;
+    $paid = min(max($paid, 0), max($totalAmount, 0));
+    $unpaid = max($totalAmount - $paid, 0);
+    $paymentStatus = $unpaid <= 0 ? 'paid' : ($paid > 0 ? 'part_paid' : 'not_paid');
+
+    db()->prepare("
+        UPDATE db_orders
+        SET paid_amount_uah = :paid,
+            unpaid_amount_uah = :unpaid,
+            payment_status = :payment_status,
+            synced_at = NOW()
+        WHERE keycrm_id = :order_id
+    ")->execute([
+        'paid' => $paid,
+        'unpaid' => $unpaid,
+        'payment_status' => $paymentStatus,
+        'order_id' => $orderId,
+    ]);
 }
 
 function sync_upsert_expense(array $expense, int $orderId): string
@@ -496,6 +607,10 @@ function sync_run_job_type(string $jobType): array
     $maxPages = in_array($jobType, ['statuses'], true) ? 10 : (int) app_config('keycrm.sync_delta_pages', 10);
     $counts = ['seen' => 0, 'inserted' => 0, 'updated' => 0, 'unchanged' => 0, '_source_updated_at' => null];
 
+    if ($jobType === 'unpaid_orders') {
+        return sync_run_unpaid_orders_refresh($apiKey);
+    }
+
     for ($page = 1; $page <= $maxPages; $page++) {
         $response = sync_http_get(sync_endpoint($jobType, $page, $limit), $apiKey);
         $rows = sync_rows($response);
@@ -547,6 +662,72 @@ function sync_run_job_type(string $jobType): array
 
     if ($jobType === 'statuses') {
         sync_run_product_statuses($apiKey, $counts);
+    }
+
+    return $counts;
+}
+
+function sync_run_unpaid_orders_refresh(string $apiKey): array
+{
+    $counts = ['seen' => 0, 'inserted' => 0, 'updated' => 0, 'unchanged' => 0, '_source_updated_at' => null];
+    if (!invoice_table_exists('db_orders')) {
+        return $counts;
+    }
+
+    $limit = (int) app_config('keycrm.unpaid_refresh_limit', 500);
+    $stmt = db()->prepare("
+        SELECT keycrm_id
+        FROM db_orders
+        WHERE unpaid_amount_uah > 0
+          AND keycrm_id IS NOT NULL
+          AND keycrm_id > 0
+          AND LOWER(COALESCE(status_name, '')) NOT LIKE '%cancel%'
+          AND LOWER(COALESCE(status_name, '')) NOT LIKE '%deleted%'
+          AND LOWER(COALESCE(status_name, '')) NOT LIKE '%скас%'
+        ORDER BY unpaid_amount_uah DESC, ordered_at ASC
+        LIMIT :limit
+    ");
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    $ids = array_map('intval', array_column($stmt->fetchAll(), 'keycrm_id'));
+
+    foreach ($ids as $orderId) {
+        $order = null;
+        try {
+            $response = sync_http_get(sync_order_detail_endpoint($orderId), $apiKey);
+            $json = $response['json'] ?? [];
+            if (is_array($json)) {
+                $order = is_array($json['data'] ?? null) ? $json['data'] : $json;
+            }
+        } catch (Throwable $e) {
+            $response = sync_http_get(sync_order_filter_endpoint($orderId), $apiKey);
+            $rows = sync_rows($response);
+            $order = is_array($rows[0] ?? null) ? $rows[0] : null;
+        }
+
+        if (!$order || !is_array($order)) {
+            continue;
+        }
+
+        $counts['seen']++;
+        $rowUpdatedAt = sync_datetime($order['updated_at'] ?? null);
+        if ($rowUpdatedAt !== null && ((string) ($counts['_source_updated_at'] ?? '') === '' || $rowUpdatedAt > (string) $counts['_source_updated_at'])) {
+            $counts['_source_updated_at'] = $rowUpdatedAt;
+        }
+        $counts[sync_upsert_order_from_keycrm($order)]++;
+
+        foreach ((array) ($order['payments'] ?? []) as $payment) {
+            if (is_array($payment)) {
+                $counts[sync_upsert_payment($payment, $orderId)]++;
+            }
+        }
+        sync_recalculate_order_payment_totals($orderId);
+
+        foreach ((array) ($order['expenses'] ?? []) as $expense) {
+            if (is_array($expense)) {
+                $counts[sync_upsert_expense($expense, $orderId)]++;
+            }
+        }
     }
 
     return $counts;
@@ -758,6 +939,17 @@ function sync_worker_run_once(): ?array
 function sync_active_summary(): array
 {
     ensure_sync_tables();
+    $activeGlobal = db()->query("
+        SELECT id
+        FROM db_sync_jobs
+        WHERE job_type = 'global_refresh'
+          AND status IN ('queued','running')
+        ORDER BY id DESC
+        LIMIT 1
+    ")->fetchColumn();
+    if ($activeGlobal) {
+        sync_ensure_parent_jobs((int) $activeGlobal, null);
+    }
     $active = db()->query("
         SELECT *
         FROM db_sync_jobs

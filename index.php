@@ -1361,6 +1361,7 @@ try {
                 return;
             }
             var statusUrl = <?= json_encode(base_path('/api/sync_status.php'), JSON_UNESCAPED_SLASHES) ?>;
+            var tickUrl = <?= json_encode(base_path('/api/sync_tick.php'), JSON_UNESCAPED_SLASHES) ?>;
             var active = <?= json_encode((bool) ($syncSummary['active'] ?? false)) ?>;
             function refreshSyncStatus() {
                 fetch(statusUrl, {headers: {'Accept': 'application/json'}})
@@ -1381,7 +1382,15 @@ try {
                     })
                     .catch(function () {});
             }
-            var timer = active ? setInterval(refreshSyncStatus, 3000) : null;
+            function runSyncTick() {
+                fetch(tickUrl, {headers: {'Accept': 'application/json'}})
+                    .then(function () { refreshSyncStatus(); })
+                    .catch(function () { refreshSyncStatus(); });
+            }
+            var timer = active ? setInterval(runSyncTick, 3000) : null;
+            if (active) {
+                runSyncTick();
+            }
         }());
     </script>
 </body>

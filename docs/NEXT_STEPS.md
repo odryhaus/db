@@ -72,6 +72,7 @@ Before that, verify Near Real-Time Sync v0.1 in production:
 - Add cron commands from `docs/CRON_SETUP.md`.
 - Click `Оновити все` as CEO.
 - Confirm `db_sync_jobs` child jobs finish successfully.
+- Confirm the `unpaid_orders` job clears orders that were paid after they first appeared in receivables.
 - Confirm `db_order_payments` receives payment rows.
 - Confirm `db_order_expenses` receives order expense rows.
 - Confirm `filter[updated_between]` is accepted by production KeyCRM.

@@ -60,6 +60,7 @@ Decision:
 Use one CEO button `Оновити все` to enqueue background jobs:
 
 - orders
+- unpaid orders recheck
 - payments
 - companies
 - buyers
@@ -67,6 +68,8 @@ Use one CEO button `Оновити все` to enqueue background jobs:
 - statuses
 
 `cron/sync_worker.php` processes one queued job at a time. The browser only polls status.
+
+If cron is not configured yet, `api/sync_tick.php` can process one queued job while the CEO dashboard is open. This is a fallback so the button does not appear broken; cron remains the preferred production runner.
 
 ## Open Checks
 

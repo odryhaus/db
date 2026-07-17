@@ -1,5 +1,32 @@
 # Implementation Report
 
+## 2026-07-17 — Sync Debt Refresh Fix
+
+### Files Changed
+
+- `sync_core.php`
+- `index.php`
+- `api/sync_tick.php`
+- `config/config.example.php`
+- documentation files
+
+### Problem Found
+
+The CEO button `Оновити все` queued sync jobs, but if production cron was not configured or not running yet, queued jobs could stay unprocessed.
+
+Also, payment rows could be cached in `db_order_payments` without recalculating `db_orders.paid_amount_uah` and `db_orders.unpaid_amount_uah`, so an order could still appear as debt after payment data arrived.
+
+### What Changed
+
+- Added `unpaid_orders` refresh job to recheck currently unpaid local orders directly in KeyCRM.
+- Recalculate `db_orders.paid_amount_uah`, `unpaid_amount_uah`, and `payment_status` after payment rows are saved.
+- Added CEO-only `api/sync_tick.php` as a web fallback that processes one queued job while the dashboard is open.
+- Dashboard polling now nudges one sync job when active jobs exist, so `Оновити все` can work even before cron is configured.
+
+### Open Check
+
+Production should still configure cron from `docs/CRON_SETUP.md`; the web tick is a fallback, not the preferred permanent worker.
+
 ## 2026-07-13 — Near Real-Time Sync Orchestration
 
 ### Files Changed
