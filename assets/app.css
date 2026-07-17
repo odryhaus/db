@@ -556,6 +556,34 @@ button:disabled {
     min-width: 160px;
 }
 
+.expense-filter-panel {
+    padding: var(--space-4);
+}
+
+.expense-filter-toolbar {
+    display: grid;
+    grid-template-columns: repeat(3, 184px) auto;
+    gap: var(--space-3);
+    align-items: end;
+    justify-content: start;
+}
+
+.expense-filter-toolbar label {
+    min-width: 0;
+    width: 184px;
+    margin: 0;
+}
+
+.expense-filter-toolbar input,
+.expense-filter-toolbar select,
+.expense-filter-toolbar button {
+    height: 42px;
+}
+
+.expense-filter-toolbar button {
+    min-width: 128px;
+}
+
 /* ==========================================================================
    Panels
    ========================================================================== */
@@ -665,9 +693,17 @@ button:disabled {
     border-radius: 50%;
     background: var(--accent);
     color: #fff;
-    font-size: 28px;
+    font-size: 0;
+    line-height: 0;
+}
+
+.add-circle::before {
+    content: "+";
+    display: block;
+    font-size: 30px;
     font-weight: 500;
     line-height: 1;
+    transform: translateY(-2px);
 }
 
 .collapsible-expense-form[open] summary {
@@ -1497,6 +1533,15 @@ tr:last-child td {
     .toolbar {
         display: grid;
         align-items: stretch;
+    }
+
+    .expense-filter-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .expense-filter-toolbar label,
+    .expense-filter-toolbar button {
+        width: 100%;
     }
 
     .plan-list {

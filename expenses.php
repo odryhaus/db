@@ -347,8 +347,8 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
             </div>
         </section>
 
-        <section class="panel dashboard-section">
-            <form class="toolbar" method="get" action="<?= e(base_path('/expenses.php')) ?>">
+        <section class="panel dashboard-section expense-filter-panel">
+            <form class="toolbar expense-filter-toolbar" method="get" action="<?= e(base_path('/expenses.php')) ?>">
                 <label>
                     <span>Місяць</span>
                     <input type="month" name="month" value="<?= e($selectedMonth) ?>">
@@ -458,58 +458,37 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
             </form>
         </details>
 
-        <section class="dashboard-grid lower-grid">
-            <div class="panel table-panel">
-                <div class="section-heading padded">
-                    <div>
-                        <span class="label">Найближчі дати</span>
-                        <h2>Майбутні платежі</h2>
-                    </div>
-                </div>
-                <div class="table-wrap">
-                    <table class="compact-table">
-                        <thead>
-                            <tr>
-                                <th>Дата</th>
-                                <th>Назва</th>
-                                <th>Тип</th>
-                                <th class="num">Сума</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (!$upcoming): ?>
-                                <tr><td colspan="4">Немає майбутніх планових платежів.</td></tr>
-                            <?php endif; ?>
-                            <?php foreach ($upcoming as $expense): ?>
-                                <tr>
-                                    <td><?= e((string) $expense['due_date']) ?></td>
-                                    <td><?= e((string) $expense['title']) ?></td>
-                                    <td><span class="status-badge status-badge--muted"><?= e(expense_type_label((string) $expense['expense_type'])) ?></span></td>
-                                    <td class="num"><?= e(expense_money($expense['amount_uah'] ?? 0)) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+        <section class="panel table-panel dashboard-section">
+            <div class="section-heading padded">
+                <div>
+                    <span class="label">Найближчі дати</span>
+                    <h2>Майбутні платежі</h2>
                 </div>
             </div>
-
-            <div class="panel">
-                <div class="section-heading">
-                    <div>
-                        <span class="label">Поточний фільтр</span>
-                        <h2><?= e($statusFilter === 'all' ? 'Усі статуси' : $statusFilter) ?></h2>
-                    </div>
-                </div>
-                <dl class="plan-list">
-                    <div>
-                        <dt>Місяць</dt>
-                        <dd><?= e($selectedMonth) ?></dd>
-                    </div>
-                    <div>
-                        <dt>Тип</dt>
-                        <dd><?= e($scopeFilter) ?></dd>
-                    </div>
-                </dl>
+            <div class="table-wrap">
+                <table class="compact-table">
+                    <thead>
+                        <tr>
+                            <th>Дата</th>
+                            <th>Назва</th>
+                            <th>Тип</th>
+                            <th class="num">Сума</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (!$upcoming): ?>
+                            <tr><td colspan="4">Немає майбутніх планових платежів.</td></tr>
+                        <?php endif; ?>
+                        <?php foreach ($upcoming as $expense): ?>
+                            <tr>
+                                <td><?= e((string) $expense['due_date']) ?></td>
+                                <td><?= e((string) $expense['title']) ?></td>
+                                <td><span class="status-badge status-badge--muted"><?= e(expense_type_label((string) $expense['expense_type'])) ?></span></td>
+                                <td class="num"><?= e(expense_money($expense['amount_uah'] ?? 0)) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
         </section>
 
@@ -551,7 +530,7 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
                                 <td><?= (int) $expense['is_strategic'] === 1 ? '<span class="status-badge status-badge--danger">Так</span>' : '<span class="status-badge status-badge--muted">Ні</span>' ?></td>
                                 <td>
                                     <div class="row-actions">
-                                        <a class="button-secondary small-button" href="<?= e(base_path('/expenses.php?' . http_build_query(['month' => $selectedMonth, 'status' => $statusFilter, 'scope' => $scopeFilter, 'edit' => (int) $expense['id']]))) ?>">Edit</a>
+                                        <a class="button-secondary small-button" href="<?= e(base_path('/expenses.php?' . http_build_query(['month' => $selectedMonth, 'status' => $statusFilter, 'scope' => $scopeFilter, 'edit' => (int) $expense['id']]))) ?>">Редагувати</a>
                                         <?php if ((string) $expense['status'] !== 'paid'): ?>
                                             <form method="post" action="<?= e(base_path('/expenses.php')) ?>">
                                                 <?= csrf_field() ?>

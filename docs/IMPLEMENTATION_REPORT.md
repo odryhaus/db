@@ -1,5 +1,21 @@
 # Implementation Report
 
+## 2026-07-17 — Expense Page Polish
+
+### Files Changed
+
+- `expenses.php`
+- `assets/app.css`
+- `docs/IMPLEMENTATION_REPORT.md`
+
+### What Changed
+
+- Centered the `+` control geometrically inside the circle.
+- Made month/status/type filter controls the same width and height.
+- Removed the redundant `Поточний фільтр` panel.
+- Made the upcoming payments panel full-width and cleaner.
+- Replaced the English `Edit` action with `Редагувати`.
+
 ## 2026-07-17 — Collapsible Expense Form
 
 ### Files Changed
