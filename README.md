@@ -1,6 +1,6 @@
 # .BRAND DB
 
-Simple internal PHP system for `.BRAND` money control. The current MVP contains authentication, CEO user management, a money dashboard, CEO-only manual order sync, sales targets, expenses planning, and invoice draft generation.
+Simple internal PHP system for `.BRAND` money control. The current MVP contains authentication, CEO user management, a money dashboard, background KeyCRM sync foundation, sales targets, expenses planning, invoice draft generation, and a CEO Money Cockpit v2 preview.
 
 ## Purpose
 
@@ -16,10 +16,10 @@ Current milestone:
 - CEO-only sales target management.
 - CEO/accountant expenses foundation.
 - CEO/accountant editable invoice and delivery note drafts from local `db_orders`.
+- CEO Money Cockpit v2 preview at `/dashboard_v2.php`.
 
 Not included yet:
 
-- Automatic CRM sync.
 - Charts.
 - Full payments ledger.
 - Full debt workflow.
@@ -106,6 +106,9 @@ Planning tables are additive and created only if missing:
 ```text
 db_sales_targets
 db_expenses
+db_payment_obligations
+db_monthly_costs
+db_order_payments
 db_our_companies
 db_invoices
 db_invoice_items
@@ -149,6 +152,28 @@ https://bph.com.ua/db/sync_orders.php
 ```
 
 Sync scope is current month and previous month only.
+
+CEO Money Cockpit v2 preview:
+
+```text
+https://bph.com.ua/db/dashboard_v2.php
+```
+
+The current production `index.php` is not replaced until CEO approval.
+
+Cockpit v2 separates:
+
+- sales by `db_orders.order_month`
+- cash receipts by `db_order_payments.payment_date`
+- receivables across all months by `db_orders.unpaid_amount_uah > 0`
+- outgoing obligations by `db_payment_obligations`
+- strategic debt separately from operational pressure
+
+CEO-only payment reconciliation page:
+
+```text
+https://bph.com.ua/db/payment_sync_check.php
+```
 
 ## Invoices
 

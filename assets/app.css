@@ -1466,6 +1466,167 @@ tr:last-child td {
     font-size: 16px;
 }
 
+/* ==========================================================================
+   CEO Money Cockpit v2
+   ========================================================================== */
+
+.cockpit-shell {
+    max-width: 1480px;
+}
+
+.cockpit-topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-5);
+    align-items: end;
+    margin-bottom: var(--space-4);
+}
+
+.cockpit-topbar h1 {
+    margin: 0;
+    font-size: 34px;
+    line-height: 1.05;
+}
+
+.cockpit-month-form {
+    display: grid;
+    grid-template-columns: 180px auto;
+    gap: var(--space-2);
+    align-items: end;
+}
+
+.cockpit-month-form label {
+    display: grid;
+    gap: 6px;
+}
+
+.cockpit-nav {
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--line);
+}
+
+.cockpit-sync-strip {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-4);
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--muted);
+}
+
+.cockpit-sync-strip form {
+    margin: 0;
+}
+
+.cockpit-sync-strip button {
+    min-height: 38px;
+}
+
+.cockpit-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.75fr) minmax(320px, .75fr);
+    gap: var(--space-4);
+    margin-bottom: var(--space-5);
+}
+
+.cockpit-hero-main,
+.cockpit-attention,
+.cockpit-section {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+
+.cockpit-hero-main {
+    padding: var(--space-5);
+}
+
+.cockpit-hero-main h2 {
+    margin: 0;
+    font-size: clamp(38px, 5vw, 72px);
+    line-height: .95;
+    letter-spacing: 0;
+}
+
+.cockpit-hero-main p {
+    margin: var(--space-2) 0 0;
+    color: var(--muted);
+}
+
+.progress-track {
+    height: 12px;
+    margin-top: var(--space-5);
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e5e7eb;
+}
+
+.progress-track span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: #111827;
+}
+
+.cockpit-hero-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+}
+
+.cockpit-attention {
+    display: grid;
+    gap: var(--space-2);
+    align-content: start;
+    padding: var(--space-4);
+}
+
+.attention-row {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: #f9fafb;
+}
+
+.attention-row.warning {
+    border-color: #fed7aa;
+    background: #fff7ed;
+}
+
+.attention-row.danger {
+    border-color: #fecaca;
+    background: #fef2f2;
+}
+
+.cockpit-section {
+    margin-bottom: var(--space-5);
+    padding: var(--space-4);
+}
+
+.cockpit-card-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-3);
+}
+
+.cockpit-card-grid .kpi-card {
+    min-height: 132px;
+}
+
+.cockpit-card-grid .kpi-card strong {
+    font-size: 28px;
+}
+
 @media print {
     .no-print {
         display: none !important;
@@ -1488,6 +1649,12 @@ tr:last-child td {
 @media (max-width: 960px) {
     .split-grid,
     .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .cockpit-topbar,
+    .cockpit-hero,
+    .cockpit-card-grid {
         grid-template-columns: 1fr;
     }
 
@@ -1519,6 +1686,13 @@ tr:last-child td {
     .header-actions {
         justify-items: start;
         flex-wrap: wrap;
+    }
+
+    .cockpit-month-form,
+    .cockpit-sync-strip {
+        display: grid;
+        grid-template-columns: 1fr;
+        align-items: stretch;
     }
 
     .month-picker,
