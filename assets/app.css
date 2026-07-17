@@ -432,6 +432,17 @@ button:disabled {
     border-color: var(--success-border);
 }
 
+.file-chip--package {
+    border-color: #111827;
+    background: #111827;
+    color: #fff;
+}
+
+.file-chip--package:hover {
+    border-color: #000;
+    background: #000;
+}
+
 .inline-cell-form {
     display: inline-flex;
     align-items: center;
@@ -732,6 +743,18 @@ button:disabled {
 
 .invoice-note {
     margin: var(--space-3) 0 0;
+}
+
+.invoice-create-panel summary {
+    min-height: 76px;
+}
+
+.invoice-create-toolbar {
+    display: grid;
+    grid-template-columns: 170px minmax(240px, 1fr) minmax(240px, 1fr) auto;
+    gap: var(--space-3);
+    align-items: end;
+    margin-top: var(--space-4);
 }
 
 .invoice-form {
@@ -1574,6 +1597,87 @@ tr:last-child td {
     background: #111827;
 }
 
+.dual-progress {
+    display: grid;
+    gap: 6px;
+    min-width: 150px;
+}
+
+.dual-progress__track {
+    position: relative;
+    height: 12px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e5e7eb;
+}
+
+.dual-progress__track span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: inherit;
+}
+
+.dual-progress__plan {
+    background: #111827;
+}
+
+.dual-progress__paid {
+    background: #ffbc0d;
+}
+
+.metric-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.metric-link:hover {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+}
+
+.filter-switchboard {
+    display: grid;
+    gap: var(--space-3);
+}
+
+.filter-switchboard .label {
+    margin-bottom: 8px;
+}
+
+.segmented-scroll {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+}
+
+.segmented-scroll a {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--muted);
+    padding: 7px 12px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.segmented-scroll a.active {
+    border-color: #111827;
+    background: #111827;
+    color: #fff;
+}
+
+.segmented-scroll a small {
+    color: inherit;
+    opacity: .75;
+}
+
 .cockpit-hero-meta {
     display: flex;
     justify-content: space-between;
@@ -1716,6 +1820,10 @@ tr:last-child td {
     .expense-filter-toolbar label,
     .expense-filter-toolbar button {
         width: 100%;
+    }
+
+    .invoice-create-toolbar {
+        grid-template-columns: 1fr;
     }
 
     .plan-list {

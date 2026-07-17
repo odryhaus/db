@@ -131,3 +131,5 @@ Known gaps:
 - New financial pages are read-only. Full editing and manual transaction creation are intentionally not implemented yet.
 - Account allocation depends on `db_keycrm_payment_method_accounts`; unmapped methods will correctly show `needs_review`.
 - Runtime validation of `db_order_items` soft-delete behavior requires a real KeyCRM order payload after deploy.
+- `Payment Sync Check` is a technical diagnostic page, not part of the daily CEO workflow.
+- Invoice package download requires PHP `ZipArchive`; if the server extension is missing, package export will show a server capability error while individual PDFs still work.

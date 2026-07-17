@@ -84,7 +84,6 @@ $syncQueued = isset($_GET['sync_queued']);
         <a href="<?= e(base_path('/index.php?month=' . urlencode($selectedMonth))) ?>">Поточний дашборд</a>
         <a href="<?= e(base_path('/targets.php?month=' . urlencode($selectedMonth))) ?>">Плани</a>
         <?php if (user_role() === 'ceo'): ?>
-            <a href="<?= e(base_path('/payment_sync_check.php')) ?>">Payment check</a>
             <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
         <?php endif; ?>
         <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>
@@ -113,10 +112,10 @@ $syncQueued = isset($_GET['sync_queued']);
             <p class="eyebrow">Performance</p>
             <h2><?= e(money_uah_compact($summary['sales_fact'])) ?></h2>
             <p>Факт продажів за <?= e($selectedMonth) ?> з плану <?= e(money_uah_compact($summary['target'])) ?></p>
-            <div class="progress-track"><span style="width: <?= e((string) min(100, (float) $summary['progress_percent'])) ?>%"></span></div>
+            <?= cockpit_dual_progress((float) $summary['progress_percent'], $summary['target'] > 0 ? min(100, round(((float) $summary['sales_paid_by_order'] / (float) $summary['target']) * 100, 1)) : 0, 'чорне - факт до плану, жовте - оплачено з цих замовлень') ?>
             <div class="cockpit-hero-meta">
                 <strong><?= e((string) $summary['progress_percent']) ?>%</strong>
-                <span>залишилось <?= e(money_uah_compact($summary['remaining_to_target'])) ?></span>
+                <span>оплачено <?= e(money_uah_compact($summary['sales_paid_by_order'])) ?> · залишилось <?= e(money_uah_compact($summary['remaining_to_target'])) ?></span>
             </div>
         </div>
         <div class="cockpit-attention">
@@ -151,8 +150,13 @@ $syncQueued = isset($_GET['sync_queued']);
             </div>
             <div class="kpi-card">
                 <span class="label">Факт</span>
-                <strong><?= e(money_uah_compact($summary['sales_fact'])) ?></strong>
+                <a class="metric-link" href="<?= e(base_path('/sales.php?month=' . urlencode($selectedMonth))) ?>"><strong><?= e(money_uah_compact($summary['sales_fact'])) ?></strong></a>
                 <small><?= e((string) $summary['order_count']) ?> замовлень</small>
+            </div>
+            <div class="kpi-card">
+                <span class="label">Оплачено з факту</span>
+                <strong><?= e(money_uah_compact($summary['sales_paid_by_order'])) ?></strong>
+                <small><?= $summary['sales_fact'] > 0 ? e((string) round(((float) $summary['sales_paid_by_order'] / (float) $summary['sales_fact']) * 100, 1)) . '% від факту' : '0% від факту' ?></small>
             </div>
             <div class="kpi-card">
                 <span class="label">Gross margin</span>
@@ -267,10 +271,16 @@ $syncQueued = isset($_GET['sync_queued']);
                     <tr>
                         <td><strong><?= e((string) $manager['manager_name']) ?></strong></td>
                         <td class="num"><?= $manager['target_amount_uah'] > 0 ? e(money_uah_compact($manager['target_amount_uah'])) : '—' ?></td>
-                        <td class="num"><?= e(money_uah_compact($manager['sales_fact'] ?? 0)) ?></td>
+                        <td class="num"><a class="metric-link" href="<?= e(base_path('/sales.php?' . http_build_query(['month' => $selectedMonth, 'manager' => (string) $manager['manager_name']]))) ?>"><?= e(money_uah_compact($manager['sales_fact'] ?? 0)) ?></a></td>
                         <td class="num"><?= e(money_uah_compact($manager['paid_by_order'] ?? 0)) ?></td>
-                        <td class="num"><?= e(money_uah_compact($manager['unpaid_by_order'] ?? 0)) ?></td>
-                        <td><?= $manager['progress_percent'] !== null ? e((string) $manager['progress_percent']) . '%' : '—' ?></td>
+                        <td class="num"><a class="metric-link" href="<?= e(base_path('/receivables.php?' . http_build_query(['month' => $selectedMonth, 'manager' => (string) $manager['manager_name']]))) ?>"><?= e(money_uah_compact($manager['unpaid_by_order'] ?? 0)) ?></a></td>
+                        <td>
+                            <?php
+                            $managerPlanPercent = $manager['progress_percent'] !== null ? (float) $manager['progress_percent'] : 0.0;
+                            $managerPaidPercent = (float) ($manager['sales_fact'] ?? 0) > 0 ? round(((float) ($manager['paid_by_order'] ?? 0) / (float) ($manager['sales_fact'] ?? 1)) * $managerPlanPercent, 1) : 0.0;
+                            ?>
+                            <?= cockpit_dual_progress($managerPlanPercent, $managerPaidPercent, ($manager['progress_percent'] !== null ? e((string) $manager['progress_percent']) . '% план' : 'план не задано') . ' · оплачено ' . (($manager['sales_fact'] ?? 0) > 0 ? e((string) round(((float) ($manager['paid_by_order'] ?? 0) / (float) ($manager['sales_fact'] ?? 1)) * 100, 1)) : '0') . '%') ?>
+                        </td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>

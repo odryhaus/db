@@ -608,3 +608,24 @@ Do not delete duplicates blindly. First verify which row is used by existing inv
 - Unmapped payment methods appear as `allocation_status='needs_review'`.
 - Canceled payments become canceled financial operations and do not affect balances.
 - `index.php` still works and remains the production dashboard.
+
+## 2026-07-17 — Cockpit UX And Invoice Registry Polish
+
+### What Changed
+
+- `receivables.php` now has compact segmented filters for payment status and manager.
+- Cockpit v2 manager progress now shows a black/yellow bar:
+  - black = sales fact progress toward plan
+  - yellow = paid share inside that fact
+- Dashboard performance hero now also shows how much of selected-month sales is paid.
+- Manager fact/count/unpaid values link to filtered sales/receivables pages.
+- `Payment Sync Check` was removed from main navigation and remains only as a technical CEO URL.
+- `invoices.php` creation form is collapsed behind a compact “+ Додати рахунок” panel.
+- Invoice registry now shows `Пакет` when PDF documents exist for an invoice; it downloads a ZIP package of available PDFs.
+- Payment sync now backfills `db_financial_transactions` even when an existing KeyCRM payment row is unchanged.
+
+### How To Refresh Empty Operations
+
+Open Cockpit v2 and click `Оновити все`, or let cron run `cron/sync_worker.php`.
+
+Reason: old payments already saved in `db_order_payments` need one more sync pass to backfill `db_financial_transactions`.

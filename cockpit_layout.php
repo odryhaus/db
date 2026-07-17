@@ -19,7 +19,6 @@ function cockpit_nav(string $active, string $month): void
             <a class="<?= $active === $key ? 'active' : '' ?>" href="<?= e(base_path($href)) ?>"><?= e($label) ?></a>
         <?php endforeach; ?>
         <?php if (user_role() === 'ceo'): ?>
-            <a href="<?= e(base_path('/payment_sync_check.php')) ?>">Payment check</a>
             <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
         <?php endif; ?>
         <a href="<?= e(base_path('/index.php' . $monthQuery)) ?>">Старий Dashboard</a>

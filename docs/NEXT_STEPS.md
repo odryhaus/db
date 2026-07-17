@@ -296,3 +296,5 @@ After deploy:
 - Configure missing rows in `db_keycrm_payment_method_accounts` for payment methods that appear as `needs_review`.
 - Validate `db_order_items` for a real order with changed/deleted products.
 - Decide later whether to add safe editing forms for manual financial transactions.
+- After this deploy, run `Оновити все` once to backfill financial operations from already cached payments.
+- Review invoice package ZIP on a row that already has invoice/delivery-note/act PDFs.

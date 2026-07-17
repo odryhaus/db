@@ -314,3 +314,18 @@ function money_uah_compact($value): string
 {
     return number_format((float) $value, 0, '.', ' ') . ' UAH';
 }
+
+function cockpit_dual_progress(float $planPercent, float $paidPercent, string $label = ''): string
+{
+    $planPercent = max(0, min(100, $planPercent));
+    $paidPercent = max(0, min(100, $paidPercent));
+    $labelHtml = $label !== '' ? '<small>' . e($label) . '</small>' : '';
+
+    return '<div class="dual-progress">'
+        . '<div class="dual-progress__track">'
+        . '<span class="dual-progress__plan" style="width:' . e((string) $planPercent) . '%"></span>'
+        . '<span class="dual-progress__paid" style="width:' . e((string) $paidPercent) . '%"></span>'
+        . '</div>'
+        . $labelHtml
+        . '</div>';
+}

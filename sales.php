@@ -8,6 +8,7 @@ require_once __DIR__ . '/cockpit_layout.php';
 require_login();
 
 $month = cockpit_valid_month((string) ($_GET['month'] ?? date('Y-m')));
+$managerFilter = trim((string) ($_GET['manager'] ?? ''));
 $notCanceled = cockpit_not_canceled_sql('o');
 $orders = [];
 $summary = cockpit_monthly_summary($month);
@@ -20,6 +21,12 @@ try {
         $itemSelect = invoice_table_exists('db_order_items')
             ? "COALESCE(i.item_count, 0) AS item_count, COALESCE(i.items_total, 0) AS items_total,"
             : "0 AS item_count, 0 AS items_total,";
+        $where = ["o.order_month = :month", $notCanceled];
+        $params = ['month' => $month];
+        if ($managerFilter !== '') {
+            $where[] = "COALESCE(NULLIF(o.manager_name, ''), 'Без менеджера') = :manager";
+            $params['manager'] = $managerFilter;
+        }
         $stmt = db()->prepare("
             SELECT o.order_number, o.ordered_at, o.company_name, o.buyer_name, o.manager_name,
                    o.status_name, o.total_amount_uah, o.paid_amount_uah, o.unpaid_amount_uah,
@@ -27,12 +34,11 @@ try {
                    o.keycrm_id
             FROM db_orders o
             {$itemJoin}
-            WHERE o.order_month = :month
-              AND {$notCanceled}
+            WHERE " . implode(' AND ', $where) . "
             ORDER BY o.ordered_at DESC, o.id DESC
             LIMIT 300
         ");
-        $stmt->execute(['month' => $month]);
+        $stmt->execute($params);
         $orders = $stmt->fetchAll();
     }
 } catch (Throwable $e) {
@@ -49,7 +55,7 @@ try {
 </head>
 <body>
 <main class="app-shell cockpit-shell">
-    <?php cockpit_page_header('CEO Money Cockpit', 'Продажі', 'Замовлення за місяцем продажу: db_orders.order_month.', 'sales', $month); ?>
+    <?php cockpit_page_header('CEO Money Cockpit', 'Продажі', 'Замовлення за місяцем продажу: db_orders.order_month.' . ($managerFilter !== '' ? ' Менеджер: ' . $managerFilter : ''), 'sales', $month); ?>
 
     <section class="kpi-grid">
         <div class="kpi-card"><span class="label">Факт</span><strong><?= e(finance_money($summary['sales_fact'])) ?></strong></div>

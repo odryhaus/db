@@ -38,12 +38,18 @@ $summary = cockpit_monthly_summary($month);
                     <tr>
                         <td><strong><?= e((string) $row['manager_name']) ?></strong></td>
                         <td class="num"><?= $row['target_amount_uah'] > 0 ? e(finance_money($row['target_amount_uah'])) : '—' ?></td>
-                        <td class="num"><?= e(finance_money($row['sales_fact'])) ?></td>
+                        <td class="num"><a class="metric-link" href="<?= e(base_path('/sales.php?' . http_build_query(['month' => $month, 'manager' => (string) $row['manager_name']]))) ?>"><?= e(finance_money($row['sales_fact'])) ?></a></td>
                         <td class="num"><?= e(finance_money($row['paid_by_order'])) ?></td>
-                        <td class="num"><?= e(finance_money($row['unpaid_by_order'])) ?></td>
-                        <td><?= e((string) $row['order_count']) ?></td>
+                        <td class="num"><a class="metric-link" href="<?= e(base_path('/receivables.php?' . http_build_query(['month' => $month, 'manager' => (string) $row['manager_name']]))) ?>"><?= e(finance_money($row['unpaid_by_order'])) ?></a></td>
+                        <td><a class="metric-link" href="<?= e(base_path('/sales.php?' . http_build_query(['month' => $month, 'manager' => (string) $row['manager_name']]))) ?>"><?= e((string) $row['order_count']) ?></a></td>
                         <td class="num"><?= $row['remaining_to_target'] !== null ? e(finance_money($row['remaining_to_target'])) : '—' ?></td>
-                        <td><?= $row['progress_percent'] !== null ? e((string) $row['progress_percent']) . '%' : '—' ?></td>
+                        <td>
+                            <?php
+                            $planPercent = $row['progress_percent'] !== null ? (float) $row['progress_percent'] : 0.0;
+                            $paidPercent = (float) ($row['sales_fact'] ?? 0) > 0 ? round(((float) ($row['paid_by_order'] ?? 0) / (float) ($row['sales_fact'] ?? 1)) * $planPercent, 1) : 0.0;
+                            ?>
+                            <?= cockpit_dual_progress($planPercent, $paidPercent, ($row['progress_percent'] !== null ? e((string) $row['progress_percent']) . '% план' : 'план не задано') . ' · оплачено ' . (($row['sales_fact'] ?? 0) > 0 ? e((string) round(((float) ($row['paid_by_order'] ?? 0) / (float) ($row['sales_fact'] ?? 1)) * 100, 1)) : '0') . '%') ?>
+                        </td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>

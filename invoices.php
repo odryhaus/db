@@ -1209,6 +1209,85 @@ function invoice_download_path(string $relative): void
     exit;
 }
 
+function invoice_download_package(int $invoiceId): void
+{
+    if (!class_exists('ZipArchive')) {
+        http_response_code(500);
+        echo 'ZIP export is not available on this server.';
+        exit;
+    }
+
+    $invoice = invoice_load($invoiceId);
+    if (!$invoice) {
+        http_response_code(404);
+        echo 'Invoice not found.';
+        exit;
+    }
+
+    $stmt = db()->prepare("
+        SELECT *
+        FROM db_invoice_documents
+        WHERE invoice_id = :invoice_id
+        ORDER BY document_type ASC, id DESC
+    ");
+    $stmt->execute(['invoice_id' => $invoiceId]);
+    $documents = $stmt->fetchAll();
+
+    $storageRoot = realpath(__DIR__ . '/storage/invoices');
+    if (!$storageRoot) {
+        http_response_code(404);
+        echo 'Document storage not found.';
+        exit;
+    }
+
+    $files = [];
+    foreach ($documents as $document) {
+        $relative = (string) ($document['file_path'] ?? '');
+        if ($relative === '' || strtolower(pathinfo($relative, PATHINFO_EXTENSION)) !== 'pdf') {
+            continue;
+        }
+        $filePath = realpath(__DIR__ . '/' . ltrim($relative, '/'));
+        if ($filePath && strpos($filePath, $storageRoot) === 0 && is_file($filePath)) {
+            $files[(string) $document['document_type']] = $filePath;
+        }
+    }
+
+    if (!$files && invoice_pdf_available($invoice)) {
+        $filePath = realpath(__DIR__ . '/' . ltrim((string) $invoice['pdf_file_path'], '/'));
+        if ($filePath && strpos($filePath, $storageRoot) === 0 && is_file($filePath)) {
+            $files['invoice'] = $filePath;
+        }
+    }
+
+    if (!$files) {
+        http_response_code(404);
+        echo 'No PDF documents found for this invoice.';
+        exit;
+    }
+
+    $safeNumber = invoice_safe_file_number((string) $invoice['invoice_number']);
+    $zipPath = tempnam(sys_get_temp_dir(), 'brand_invoice_docs_');
+    $zip = new ZipArchive();
+    if ($zip->open($zipPath, ZipArchive::OVERWRITE) !== true) {
+        http_response_code(500);
+        echo 'Cannot create ZIP package.';
+        exit;
+    }
+
+    foreach ($files as $type => $filePath) {
+        $prefix = $type === 'delivery_note' ? 'DN' : ($type === 'act' ? 'ACT' : 'INV');
+        $zip->addFile($filePath, $prefix . '_' . $safeNumber . '.pdf');
+    }
+    $zip->close();
+
+    header('Content-Type: application/zip');
+    header('Content-Disposition: attachment; filename="DOCS_' . $safeNumber . '.zip"');
+    header('Content-Length: ' . filesize($zipPath));
+    readfile($zipPath);
+    @unlink($zipPath);
+    exit;
+}
+
 $companies = our_companies(true);
 $companyAccounts = array_values(array_filter(
     our_company_accounts(null, true, true),
@@ -1233,6 +1312,10 @@ if (isset($_GET['document'])) {
         ]);
         invoice_download_path((string) $document['file_path']);
     }
+}
+
+if (isset($_GET['package'])) {
+    invoice_download_package((int) $_GET['package']);
 }
 
 if (is_post()) {
@@ -2045,8 +2128,16 @@ foreach ($invoices as $invoiceRow) {
             </div>
         </section>
 
-        <section class="panel dashboard-section">
-            <form class="toolbar" method="post" action="<?= e(base_path('/invoices.php')) ?>">
+        <details class="panel dashboard-section collapsible-expense-form invoice-create-panel" <?= ($error !== '' && !$editInvoice) ? 'open' : '' ?>>
+            <summary>
+                <span class="add-circle" aria-hidden="true"></span>
+                <span>
+                    <span class="label">Новий рахунок</span>
+                    <strong>Додати рахунок з KeyCRM</strong>
+                </span>
+                <small>розгорнути форму</small>
+            </summary>
+            <form class="toolbar invoice-create-toolbar" method="post" action="<?= e(base_path('/invoices.php')) ?>">
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="create_from_order">
                 <label>
@@ -2077,7 +2168,7 @@ foreach ($invoices as $invoiceRow) {
                 <button type="submit">Створити з замовлення</button>
             </form>
             <p class="muted invoice-note">Рахунок створюється як редагована копія даних з `db_orders.raw_json`; KeyCRM не змінюється.</p>
-        </section>
+        </details>
 
         <?php if ($editInvoice): ?>
             <section class="panel form-section dashboard-section">
@@ -2410,6 +2501,9 @@ foreach ($invoices as $invoiceRow) {
                                                 </form>
                                             <?php endif; ?>
                                         <?php endforeach; ?>
+                                        <?php if (array_filter($documentButtons)): ?>
+                                            <a class="file-chip file-chip--package" href="<?= e(base_path('/invoices.php?package=' . (int) $invoiceRow['id'])) ?>">Пакет</a>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                                 <td>

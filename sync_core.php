@@ -611,6 +611,7 @@ function sync_upsert_payment(array $payment, int $orderId, ?string $orderNumber 
     $stmt->execute(['id' => $id]);
     $oldHash = (string) ($stmt->fetchColumn() ?: '');
     if ($oldHash === $hash) {
+        sync_payment_to_financial_transaction($id);
         return 'unchanged';
     }
     $isDeleted = !empty($payment['is_deleted']) || !empty($payment['deleted_at']);
