@@ -238,6 +238,17 @@ Decision:
 - Use all months for current receivables.
 - Do not add schema changes or KeyCRM browser calls for this report.
 
+## Historical Orders Backfill
+
+Decision:
+
+- Keep daily/global sync as fast delta refresh.
+- Add explicit CEO-only historical order backfill by month.
+- Use `orders_backfill_YYYY_MM` queue jobs instead of a long browser request.
+- Use KeyCRM `filter[created_between]` for the selected month; KeyCRM documents that for orders this filter is applied to `ordered_at`.
+- Do not automatically scan all history.
+- Do not reset delta sync state when running historical backfill.
+
 ## Dashboard Hero Dedup, Pacing, Aging, Client Debt (2026-07-03)
 
 The CEO flagged that the KPI strip and the "План продажів" panel repeated the same План/Факт/Прогрес numbers twice, and asked for a graphical Факт → Оплачено/Не оплачено breakdown, debt aging, plan pacing, and a per-client negative-balance view she can turn into a statement to send.

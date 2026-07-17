@@ -306,4 +306,5 @@ After deploy:
 - Complete filters on `cash.php`: company, account, payment method, current/old order, allocation status.
 - Complete filters on `receivables.php`: client search, aging, debt amount.
 - Validate `client_balances.php` against real companies and buyers, then decide whether it should get drill-down links to filtered sales/cash/receivables rows.
+- Run `history_sync.php` from `2026-01` to the current month once, then validate January through current month dashboards.
 - Decide how legacy `db_expenses` should be migrated or mirrored into `db_financial_transactions` so expenses appear in `Операції`.

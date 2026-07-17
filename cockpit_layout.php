@@ -27,6 +27,7 @@ function cockpit_nav(string $active, string $month): void
             <a class="<?= $active === 'our_companies' ? 'active' : '' ?>" href="<?= e(base_path('/our_companies.php')) ?>">Наші компанії</a>
         <?php endif; ?>
         <?php if (user_role() === 'ceo'): ?>
+            <a class="<?= $active === 'history_sync' ? 'active' : '' ?>" href="<?= e(base_path('/history_sync.php' . $monthQuery)) ?>">Імпорт історії</a>
             <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
         <?php endif; ?>
         <a href="<?= e(base_path('/index.php' . $monthQuery)) ?>">Старий Dashboard</a>

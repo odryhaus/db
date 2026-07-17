@@ -5,6 +5,20 @@ function sync_job_types(): array
     return ['orders', 'unpaid_orders', 'payments', 'companies', 'buyers', 'order_expenses', 'statuses'];
 }
 
+function sync_is_orders_backfill_job(string $jobType): bool
+{
+    return preg_match('/^orders_backfill_\d{4}_\d{2}$/', $jobType) === 1;
+}
+
+function sync_backfill_month_from_job(string $jobType): ?string
+{
+    if (!sync_is_orders_backfill_job($jobType)) {
+        return null;
+    }
+
+    return str_replace('_', '-', substr($jobType, -7));
+}
+
 function sync_table_columns(string $table): array
 {
     static $cache = [];
@@ -82,6 +96,10 @@ function sync_insert_update_by_columns(string $table, array $data, array $keys):
 
 function sync_key_for_job(string $jobType): string
 {
+    if (sync_is_orders_backfill_job($jobType)) {
+        return 'keycrm_orders_backfill';
+    }
+
     return 'keycrm_' . $jobType;
 }
 
@@ -229,6 +247,24 @@ function sync_endpoint(string $jobType, int $page, int $limit): string
     throw new InvalidArgumentException('Unknown sync job type: ' . $jobType);
 }
 
+function sync_orders_backfill_endpoint(string $month, int $page, int $limit): string
+{
+    if (preg_match('/^\d{4}-\d{2}$/', $month) !== 1) {
+        throw new InvalidArgumentException('Invalid backfill month.');
+    }
+    $date = DateTimeImmutable::createFromFormat('!Y-m', $month) ?: new DateTimeImmutable('first day of this month');
+    $start = $date->modify('first day of this month')->setTime(0, 0, 0)->format('Y-m-d H:i:s');
+    $end = $date->modify('last day of this month')->setTime(23, 59, 59)->format('Y-m-d H:i:s');
+
+    return 'order?' . http_build_query([
+        'limit' => $limit,
+        'page' => $page,
+        'sort' => 'id',
+        'filter[created_between]' => $start . ',' . $end,
+        'include' => 'buyer,products.offer,status,manager,payments,expenses',
+    ]);
+}
+
 function sync_order_detail_endpoint(int $orderId): string
 {
     return 'order/' . $orderId . '?' . http_build_query([
@@ -337,6 +373,66 @@ function sync_enqueue_delta_jobs(?int $userId = null): int
     }
 
     return $count;
+}
+
+function sync_month_sequence(string $fromMonth, string $toMonth, int $maxMonths = 24): array
+{
+    if (preg_match('/^\d{4}-\d{2}$/', $fromMonth) !== 1 || preg_match('/^\d{4}-\d{2}$/', $toMonth) !== 1) {
+        throw new InvalidArgumentException('Invalid month range.');
+    }
+
+    $from = DateTimeImmutable::createFromFormat('!Y-m', $fromMonth);
+    $to = DateTimeImmutable::createFromFormat('!Y-m', $toMonth);
+    if (!$from || !$to || $from > $to) {
+        throw new InvalidArgumentException('Invalid month range.');
+    }
+
+    $months = [];
+    $cursor = $from;
+    while ($cursor <= $to && count($months) < $maxMonths) {
+        $months[] = $cursor->format('Y-m');
+        $cursor = $cursor->modify('+1 month');
+    }
+
+    if ($cursor <= $to) {
+        throw new InvalidArgumentException('Month range is too large.');
+    }
+
+    return $months;
+}
+
+function sync_enqueue_orders_backfill(string $fromMonth, string $toMonth, ?int $userId = null): array
+{
+    $months = sync_month_sequence($fromMonth, $toMonth, 24);
+    $stmt = db()->prepare("
+        INSERT INTO db_sync_jobs (parent_job_id, job_type, status, created_by_user_id)
+        SELECT NULL, :job_type, 'queued', :created_by_user_id
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM db_sync_jobs
+            WHERE job_type = :job_type_check
+              AND status IN ('queued','running')
+            LIMIT 1
+        )
+    ");
+    $queued = [];
+    foreach ($months as $month) {
+        $jobType = 'orders_backfill_' . str_replace('-', '_', $month);
+        $stmt->execute([
+            'job_type' => $jobType,
+            'job_type_check' => $jobType,
+            'created_by_user_id' => $userId,
+        ]);
+        if ($stmt->rowCount() > 0) {
+            $queued[] = $month;
+        }
+    }
+
+    return [
+        'months' => $months,
+        'queued_months' => $queued,
+        'queued_count' => count($queued),
+    ];
 }
 
 function sync_claim_job(): ?array
@@ -1027,6 +1123,10 @@ function sync_run_job_type(string $jobType): array
     $maxPages = in_array($jobType, ['statuses'], true) ? 10 : (int) app_config('keycrm.sync_delta_pages', 10);
     $counts = ['seen' => 0, 'inserted' => 0, 'updated' => 0, 'unchanged' => 0, '_source_updated_at' => null];
 
+    if (sync_is_orders_backfill_job($jobType)) {
+        return sync_run_orders_backfill_month($jobType, $apiKey);
+    }
+
     if ($jobType === 'unpaid_orders') {
         return sync_run_unpaid_orders_refresh($apiKey);
     }
@@ -1102,6 +1202,85 @@ function sync_run_job_type(string $jobType): array
 
     if ($jobType === 'statuses') {
         sync_run_product_statuses($apiKey, $counts);
+    }
+
+    return $counts;
+}
+
+function sync_process_order_payload(array $row, string $jobType, array &$counts): void
+{
+    $orderId = (int) ($row['id'] ?? 0);
+    $orderNumber = (string) (($row['number'] ?? '') ?: (($row['source_uuid'] ?? '') ?: $orderId));
+
+    if (in_array($jobType, ['orders', 'orders_backfill'], true)) {
+        $result = sync_upsert_order_from_keycrm($row);
+        $counts[$result]++;
+    }
+    if (in_array($jobType, ['orders', 'payments', 'orders_backfill'], true)) {
+        $seenPaymentIds = [];
+        foreach ((array) ($row['payments'] ?? []) as $payment) {
+            if (is_array($payment) && $orderId > 0) {
+                $seenPaymentIds[] = (string) (($payment['id'] ?? '') ?: (($payment['uuid'] ?? '') ?: hash('sha1', $orderId . json_encode($payment))));
+                $counts[sync_upsert_payment($payment, $orderId, $orderNumber)]++;
+            }
+        }
+        if ($orderId > 0) {
+            sync_mark_missing_order_payments_deleted($orderId, $seenPaymentIds);
+            sync_recalculate_order_payment_totals($orderId);
+        }
+    }
+    if (in_array($jobType, ['orders', 'orders_backfill'], true)) {
+        $seenItemIds = [];
+        foreach ((array) ($row['products'] ?? []) as $product) {
+            if (is_array($product) && $orderId > 0) {
+                $seenItemIds[] = sync_product_id($product, $orderId);
+                $counts[sync_upsert_order_item($product, $orderId, $orderNumber)]++;
+            }
+        }
+        if ($orderId > 0) {
+            sync_mark_missing_order_items_deleted($orderId, $seenItemIds);
+        }
+    }
+    if (in_array($jobType, ['orders', 'order_expenses', 'orders_backfill'], true)) {
+        foreach ((array) ($row['expenses'] ?? []) as $expense) {
+            if (is_array($expense) && $orderId > 0) {
+                $counts[sync_upsert_expense($expense, $orderId)]++;
+            }
+        }
+    }
+}
+
+function sync_run_orders_backfill_month(string $jobType, string $apiKey): array
+{
+    $month = sync_backfill_month_from_job($jobType);
+    if ($month === null) {
+        throw new InvalidArgumentException('Invalid orders backfill job type.');
+    }
+
+    $limit = 50;
+    $maxPages = (int) app_config('keycrm.sync_backfill_pages', 80);
+    $counts = ['seen' => 0, 'inserted' => 0, 'updated' => 0, 'unchanged' => 0, '_source_updated_at' => null];
+
+    for ($page = 1; $page <= $maxPages; $page++) {
+        $response = sync_http_get(sync_orders_backfill_endpoint($month, $page, $limit), $apiKey);
+        $rows = sync_rows($response);
+        if (!$rows) {
+            break;
+        }
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $counts['seen']++;
+            $rowUpdatedAt = sync_datetime($row['updated_at'] ?? null);
+            if ($rowUpdatedAt !== null && ((string) ($counts['_source_updated_at'] ?? '') === '' || $rowUpdatedAt > (string) $counts['_source_updated_at'])) {
+                $counts['_source_updated_at'] = $rowUpdatedAt;
+            }
+            sync_process_order_payload($row, 'orders_backfill', $counts);
+        }
+        if (count($rows) < $limit) {
+            break;
+        }
     }
 
     return $counts;

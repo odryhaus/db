@@ -692,3 +692,31 @@ Reason: old payments already saved in `db_order_payments` need one more sync pas
 - Confirm company grouping with real rows where KeyCRM has company id.
 - Confirm buyer grouping with real rows where KeyCRM has buyer id.
 - Confirm cash received matches the `Гроші` page for the same selected month.
+
+## 2026-07-17 — Historical Orders Backfill
+
+### What Changed
+
+- Added CEO-only `history_sync.php`.
+- Added shared navigation item `Імпорт історії` for CEO.
+- Added queued historical order jobs named `orders_backfill_YYYY_MM`.
+- Historical jobs import orders month-by-month using KeyCRM `filter[created_between]`, which KeyCRM documents as filtering orders by `ordered_at`.
+- Backfill jobs cache:
+  - orders
+  - payments
+  - order products/items
+  - order expenses
+
+### How To Load Missing 2026 Data
+
+1. Open `history_sync.php`.
+2. Set `З місяця = 2026-01`.
+3. Set `По місяць = current month`.
+4. Click `Дозавантажити`.
+5. Let cron run `cron/sync_worker.php`, or keep Cockpit open so web ticks process queued jobs.
+
+### Why This Was Needed
+
+- Daily `Оновити все` is a delta refresh, optimized for recent changes.
+- It does not automatically scan old months if old orders were not recently updated.
+- Historical backfill is intentionally explicit and month-bounded so the dashboard stays fast.

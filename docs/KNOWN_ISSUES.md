@@ -137,3 +137,5 @@ Known gaps:
 - Full table pagination and all advanced filters are still pending for Cockpit v2 detail pages.
 - `client_balances.php` is currently a read-only aggregate report. It does not yet have row-level drill-down links, pagination beyond the first 200 grouped rows, or manual client cleanup tools.
 - Client balance grouping quality depends on cached `company_id` and `buyer_id`; rows without stable ids fall back to names.
+- Historical backfill uses KeyCRM `created_between` as the documented order-date filter. Validate the first imported month in production before importing very large ranges.
+- Historical backfill jobs may take time if a month has many orders; cron should process `cron/sync_worker.php` regularly.
