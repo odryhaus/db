@@ -135,3 +135,5 @@ Known gaps:
 - Invoice package download requires PHP `ZipArchive`; if the server extension is missing, package export will show a server capability error while individual PDFs still work.
 - `Операції` can show only income until expense/outgoing-payment records exist in `db_financial_transactions`; legacy expenses are still visible in `Витрати`.
 - Full table pagination and all advanced filters are still pending for Cockpit v2 detail pages.
+- `client_balances.php` is currently a read-only aggregate report. It does not yet have row-level drill-down links, pagination beyond the first 200 grouped rows, or manual client cleanup tools.
+- Client balance grouping quality depends on cached `company_id` and `buyer_id`; rows without stable ids fall back to names.

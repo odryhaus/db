@@ -667,3 +667,28 @@ Reason: old payments already saved in `db_order_payments` need one more sync pas
 - `receivables.php` has status and manager filters, but not all aging/sum/search filters yet.
 - `payments.php` is a read-only journal; manual expense transaction editing is not implemented.
 - Expenses remain on `expenses.php`; they are not yet fully migrated into `db_financial_transactions`.
+
+## 2026-07-17 — Client Balance Report
+
+### What Changed
+
+- Added `client_balances.php` as a read-only CEO Money Cockpit detail page.
+- Added shared navigation item `Клієнти`.
+- The page can group balances by client company or buyer/contact.
+- The page supports selected month, search, and a six-month mini history per row.
+- The report shows selected-month sales fact, paid amount from order totals, cash received by payment date, and current receivable across all months.
+
+### Data Rules
+
+- Sales use `db_orders.order_month`.
+- Cash received uses `db_order_payments.payment_date`.
+- Receivables use all `db_orders.unpaid_amount_uah > 0` across all months.
+- Data is read only from local cached tables.
+- No KeyCRM browser calls were added.
+- No database schema changes were added.
+
+### Open Validation
+
+- Confirm company grouping with real rows where KeyCRM has company id.
+- Confirm buyer grouping with real rows where KeyCRM has buyer id.
+- Confirm cash received matches the `Гроші` page for the same selected month.

@@ -305,4 +305,5 @@ After deploy:
 - Complete filters on `sales.php`: manager, client, payment status, order status.
 - Complete filters on `cash.php`: company, account, payment method, current/old order, allocation status.
 - Complete filters on `receivables.php`: client search, aging, debt amount.
+- Validate `client_balances.php` against real companies and buyers, then decide whether it should get drill-down links to filtered sales/cash/receivables rows.
 - Decide how legacy `db_expenses` should be migrated or mirrored into `db_financial_transactions` so expenses appear in `Операції`.

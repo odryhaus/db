@@ -1679,6 +1679,104 @@ tr:last-child td {
     opacity: .75;
 }
 
+.client-balance-toolbar {
+    display: grid;
+    grid-template-columns: minmax(160px, 220px) minmax(260px, 1fr) auto;
+    align-items: end;
+    gap: 12px;
+}
+
+.client-balance-toolbar label {
+    display: grid;
+    gap: 6px;
+}
+
+.client-balance-toolbar label span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.client-balance-toolbar input,
+.client-balance-toolbar button {
+    height: 42px;
+    border-radius: var(--radius-sm);
+}
+
+.client-balance-toolbar input {
+    width: 100%;
+    border: 1px solid var(--line);
+    background: #fff;
+    padding: 0 12px;
+    font: inherit;
+}
+
+.client-balance-toolbar button {
+    border: 0;
+    background: #111827;
+    color: #fff;
+    padding: 0 18px;
+    font-weight: 800;
+}
+
+.client-balance-group-switch {
+    margin-top: 12px;
+}
+
+.client-balance-table {
+    min-width: 1380px;
+}
+
+.client-balance-table td small {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.client-month-strip {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(92px, 1fr));
+    gap: 6px;
+    min-width: 600px;
+}
+
+.client-month-cell {
+    display: grid;
+    gap: 2px;
+    min-height: 54px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted);
+    padding: 6px 8px;
+}
+
+.client-month-cell.has-sales {
+    border-color: #d8dce4;
+    background: #fff;
+}
+
+.client-month-cell small {
+    margin: 0;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 800;
+}
+
+.client-month-cell strong {
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.client-month-cell em {
+    color: var(--danger);
+    font-size: 10px;
+    font-style: normal;
+    font-weight: 800;
+}
+
 .data-table td .dual-progress {
     min-width: 220px;
 }
@@ -1855,6 +1953,14 @@ tr:last-child td {
 
     .expense-filter-toolbar label,
     .expense-filter-toolbar button {
+        width: 100%;
+    }
+
+    .client-balance-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .client-balance-toolbar button {
         width: 100%;
     }
 

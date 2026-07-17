@@ -8,6 +8,7 @@ function cockpit_nav(string $active, string $month): void
         'sales' => ['Продажі', '/sales.php' . $monthQuery],
         'cash' => ['Гроші', '/cash.php' . $monthQuery],
         'receivables' => ['Дебіторка', '/receivables.php' . $monthQuery],
+        'client_balances' => ['Клієнти', '/client_balances.php' . $monthQuery],
         'managers' => ['Менеджери', '/managers.php' . $monthQuery],
         'targets' => ['Плани', '/targets.php' . $monthQuery],
         'payments' => ['Операції', '/payments.php' . $monthQuery],

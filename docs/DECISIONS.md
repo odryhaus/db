@@ -226,6 +226,18 @@ Decision:
 
 Reason: CEO needs fresh money data without waiting in the browser or risking a large uncontrolled CRM import.
 
+## Client Balance Report
+
+Decision:
+
+- Add `client_balances.php` as a compact read-only cockpit page for company/buyer balances.
+- Treat this as an operational client balance, not a formal бухгалтерський баланс.
+- Allow switching between company grouping and buyer/contact grouping.
+- Use selected month for sales fact and order paid amount.
+- Use payment date for cash received in the selected month.
+- Use all months for current receivables.
+- Do not add schema changes or KeyCRM browser calls for this report.
+
 ## Dashboard Hero Dedup, Pacing, Aging, Client Debt (2026-07-03)
 
 The CEO flagged that the KPI strip and the "План продажів" panel repeated the same План/Факт/Прогрес numbers twice, and asked for a graphical Факт → Оплачено/Не оплачено breakdown, debt aging, plan pacing, and a per-client negative-balance view she can turn into a statement to send.
