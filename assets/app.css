@@ -623,11 +623,71 @@ button:disabled {
     margin-bottom: var(--space-3);
 }
 
+.collapsible-expense-form {
+    padding: 0;
+    overflow: hidden;
+}
+
+.collapsible-expense-form summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    cursor: pointer;
+    list-style: none;
+}
+
+.collapsible-expense-form summary::-webkit-details-marker {
+    display: none;
+}
+
+.collapsible-expense-form summary strong {
+    display: block;
+    color: var(--text);
+    font-size: 18px;
+    line-height: 1.2;
+}
+
+.collapsible-expense-form summary small {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.add-circle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 28px;
+    font-weight: 500;
+    line-height: 1;
+}
+
+.collapsible-expense-form[open] summary {
+    border-bottom: 1px solid var(--line);
+}
+
+.collapsible-expense-form[open] .add-circle {
+    transform: rotate(45deg);
+}
+
+.form-inline-action {
+    padding: var(--space-3) var(--space-4) 0;
+}
+
 .expense-form {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--space-3) var(--space-4);
     align-items: start;
+    padding: var(--space-4);
 }
 
 .expense-form button {

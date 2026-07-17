@@ -373,16 +373,22 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
             </form>
         </section>
 
-        <section class="panel form-section dashboard-section">
-            <div class="section-heading">
-                <div>
+        <details class="panel form-section dashboard-section collapsible-expense-form" <?= ($editExpense || $error !== '') ? 'open' : '' ?>>
+            <summary>
+                <span class="add-circle" aria-hidden="true">+</span>
+                <span>
                     <span class="label"><?= $editExpense ? 'Редагування' : 'Новий платіж' ?></span>
-                    <h2><?= $editExpense ? e((string) $editExpense['title']) : 'Додати витрату' ?></h2>
-                </div>
-                <?php if ($editExpense): ?>
-                    <a class="button-secondary small-button" href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">Новий запис</a>
+                    <strong><?= $editExpense ? e((string) $editExpense['title']) : 'Додати витрату' ?></strong>
+                </span>
+                <?php if (!$editExpense): ?>
+                    <small>розгорнути форму</small>
                 <?php endif; ?>
-            </div>
+            </summary>
+            <?php if ($editExpense): ?>
+                <div class="form-inline-action">
+                    <a class="button-secondary small-button" href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">Новий запис</a>
+                </div>
+            <?php endif; ?>
             <form method="post" action="<?= e(base_path('/expenses.php?' . http_build_query(['month' => $selectedMonth, 'status' => 'all', 'scope' => 'all']))) ?>" class="expense-form">
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="save">
@@ -450,7 +456,7 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
                 </label>
                 <button type="submit">Зберегти</button>
             </form>
-        </section>
+        </details>
 
         <section class="dashboard-grid lower-grid">
             <div class="panel table-panel">

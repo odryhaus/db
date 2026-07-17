@@ -1,5 +1,20 @@
 # Implementation Report
 
+## 2026-07-17 — Collapsible Expense Form
+
+### Files Changed
+
+- `expenses.php`
+- `assets/app.css`
+- `docs/IMPLEMENTATION_REPORT.md`
+
+### What Changed
+
+- Expense add/edit form is collapsed by default.
+- Added a large modern `+` control to open the form.
+- The form opens automatically when editing an existing expense or when a save error is shown.
+- Expenses page now prioritizes KPIs, filters, and the journal instead of a large always-open form.
+
 ## 2026-07-17 — Paid Expenses Visibility And Balance
 
 ### Files Changed
