@@ -286,3 +286,13 @@ Planned next build:
 - Cash drill-down page.
 - Receivables drill-down page.
 - Manager drill-down page using validated local manager ownership.
+
+## Financial Journal Follow-up
+
+After deploy:
+
+- Open `payments.php` and check imported KeyCRM client payments.
+- Open `accounts.php` and verify balances by account/company/currency.
+- Configure missing rows in `db_keycrm_payment_method_accounts` for payment methods that appear as `needs_review`.
+- Validate `db_order_items` for a real order with changed/deleted products.
+- Decide later whether to add safe editing forms for manual financial transactions.

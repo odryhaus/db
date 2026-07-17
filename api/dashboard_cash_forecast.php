@@ -2,6 +2,7 @@
 
 require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/cockpit.php';
+require_once dirname(__DIR__) . '/financial.php';
 
 require_login();
 header('Content-Type: application/json; charset=utf-8');
@@ -13,10 +14,12 @@ try {
         'data' => [
             'month' => $summary['month'],
             'cash_received' => $summary['cash_received'],
+            'current_balance' => $summary['current_balance'],
             'receivables_total' => $summary['receivables_total'],
             'operational_due_this_month' => $summary['operational_due_this_month'],
             'operational_due_this_week' => $summary['operational_due_this_week'],
             'overdue_obligations_total' => $summary['overdue_obligations_total'],
+            'unallocated_transactions_count' => $summary['unallocated_transactions_count'],
             'cash_forecast' => $summary['cash_forecast'],
         ],
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

@@ -565,3 +565,46 @@ Do not delete duplicates blindly. First verify which row is used by existing inv
 - Review `docs/CEO_COCKPIT_AUDIT.md`.
 - Review `docs/PAYMENT_DATA_AUDIT.md`.
 - Review `docs/CEO_COCKPIT_VALIDATION.md`.
+
+## 2026-07-17 — CEO Money Cockpit v2 Financial Pages
+
+### What Changed
+
+- Added read-only drill-down pages:
+  - `sales.php`
+  - `cash.php`
+  - `receivables.php`
+  - `managers.php`
+  - `payments.php`
+  - `accounts.php`
+- Added shared helpers:
+  - `financial.php`
+  - `cockpit_layout.php`
+- Extended `sync_core.php` to cache order products into `db_order_items` from KeyCRM order payloads.
+- Extended payment sync to mirror active paid KeyCRM payments into `db_financial_transactions`.
+- Added account allocation lookup through `db_keycrm_payment_method_accounts` -> `db_financial_accounts`.
+- Updated Cockpit v2 formulas to use strict active payments: `status='paid' AND is_deleted=0`.
+- Removed `ensure_finance_tables()` / `ensure_sync_tables()` calls from Cockpit v2 pages and API paths so this stage does not execute schema creation or alteration from the new UI.
+
+### What Now Syncs
+
+- Orders: existing `db_orders` logic remains.
+- Products: `db_order_items`, with soft delete when a product disappears from the fresh order payload.
+- Payments: `db_order_payments`, with strict active paid logic.
+- Financial income operations: `db_financial_transactions` with `source_type='keycrm_payment'`.
+
+### Current Formulas
+
+- Sales: `db_orders.order_month = selected month`.
+- Cash received: `db_order_payments.payment_date` in selected month, `status='paid'`, `is_deleted=0`.
+- Receivables: all `db_orders.unpaid_amount_uah > 0` across all months.
+- Operating profit: `gross_margin - completed operating expense transactions`; if categorization is not available, Cockpit shows diagnostic status instead of pretending the number is final.
+- Cash forecast: `current financial account balance + receivables - operational obligations this month`.
+
+### Needs Manual Production Validation
+
+- Order products are saved without duplicates and removed products become `is_deleted=1`.
+- One KeyCRM payment creates exactly one `db_financial_transactions` row by `source_type + source_id`.
+- Unmapped payment methods appear as `allocation_status='needs_review'`.
+- Canceled payments become canceled financial operations and do not affect balances.
+- `index.php` still works and remains the production dashboard.

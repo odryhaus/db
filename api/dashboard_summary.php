@@ -2,6 +2,7 @@
 
 require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/cockpit.php';
+require_once dirname(__DIR__) . '/financial.php';
 
 require_login();
 header('Content-Type: application/json; charset=utf-8');

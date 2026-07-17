@@ -175,6 +175,17 @@ CEO-only payment reconciliation page:
 https://bph.com.ua/db/payment_sync_check.php
 ```
 
+Cockpit v2 detail pages:
+
+```text
+https://bph.com.ua/db/sales.php
+https://bph.com.ua/db/cash.php
+https://bph.com.ua/db/receivables.php
+https://bph.com.ua/db/managers.php
+https://bph.com.ua/db/payments.php
+https://bph.com.ua/db/accounts.php
+```
+
 ## Invoices
 
 Invoice drafts are managed at:

@@ -350,3 +350,15 @@ Decision:
 - Strategic debt is shown separately and does not automatically reduce operating profit or current operational pressure.
 
 Reason: `.BRAND` needs to control who must be paid, when, priority, and order links; this is broader than simple expenses.
+
+## Cockpit v2 Pages Are Read-Only First
+
+Decision:
+
+- Financial drill-down pages show local DB data only.
+- `payments.php` is a read-only financial journal for now.
+- `accounts.php` calculates balances from completed transactions.
+- Payment method allocation uses `db_keycrm_payment_method_accounts`; no hardcoded account IDs.
+- Unmapped payments are not lost; they are marked `needs_review`.
+
+Reason: the first goal is reliable visibility and reconciliation before adding editing workflows.

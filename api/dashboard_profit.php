@@ -2,6 +2,7 @@
 
 require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/cockpit.php';
+require_once dirname(__DIR__) . '/financial.php';
 
 require_login();
 header('Content-Type: application/json; charset=utf-8');
@@ -18,6 +19,7 @@ try {
             'gross_margin_percent' => $summary['gross_margin_percent'],
             'operating_costs' => $summary['operating_costs'],
             'operating_profit' => $summary['operating_profit'],
+            'operating_profit_status' => $summary['operating_profit_status'],
         ],
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {

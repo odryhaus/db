@@ -5,6 +5,81 @@ function sync_job_types(): array
     return ['orders', 'unpaid_orders', 'payments', 'companies', 'buyers', 'order_expenses', 'statuses'];
 }
 
+function sync_table_columns(string $table): array
+{
+    static $cache = [];
+    if (isset($cache[$table])) {
+        return $cache[$table];
+    }
+    if (!invoice_table_exists($table)) {
+        $cache[$table] = [];
+        return [];
+    }
+
+    $stmt = db()->prepare("
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = :table_name
+    ");
+    $stmt->execute(['table_name' => $table]);
+    $cache[$table] = array_map('strval', array_column($stmt->fetchAll(), 'COLUMN_NAME'));
+    return $cache[$table];
+}
+
+function sync_has_column(string $table, string $column): bool
+{
+    return in_array($column, sync_table_columns($table), true);
+}
+
+function sync_insert_update_by_columns(string $table, array $data, array $keys): void
+{
+    $columns = sync_table_columns($table);
+    if (!$columns) {
+        return;
+    }
+    $data = array_intersect_key($data, array_flip($columns));
+    foreach ($keys as $key) {
+        if (!array_key_exists($key, $data)) {
+            return;
+        }
+    }
+    if (!$data) {
+        return;
+    }
+
+    $where = [];
+    $params = [];
+    foreach ($keys as $key) {
+        $where[] = "{$key} = :where_{$key}";
+        $params["where_{$key}"] = $data[$key];
+    }
+
+    $stmt = db()->prepare("SELECT id FROM {$table} WHERE " . implode(' AND ', $where) . ' LIMIT 1');
+    $stmt->execute($params);
+    $id = $stmt->fetchColumn();
+
+    if ($id) {
+        $updates = [];
+        $updateData = ['id' => (int) $id];
+        foreach ($data as $column => $value) {
+            if ($column === 'id' || in_array($column, $keys, true)) {
+                continue;
+            }
+            $updates[] = "{$column} = :{$column}";
+            $updateData[$column] = $value;
+        }
+        if ($updates) {
+            db()->prepare("UPDATE {$table} SET " . implode(', ', $updates) . " WHERE id = :id")->execute($updateData);
+        }
+        return;
+    }
+
+    $insertColumns = array_keys($data);
+    $placeholders = array_map(static fn($column) => ':' . $column, $insertColumns);
+    db()->prepare("INSERT INTO {$table} (" . implode(', ', $insertColumns) . ') VALUES (' . implode(', ', $placeholders) . ')')->execute($data);
+}
+
 function sync_key_for_job(string $jobType): string
 {
     return 'keycrm_' . $jobType;
@@ -95,6 +170,14 @@ function sync_source_hash(array $row): string
     return hash('sha256', (string) json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }
 
+function sync_json($value): ?string
+{
+    if ($value === null || $value === '') {
+        return null;
+    }
+    return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
 function sync_state_row(string $syncKey): array
 {
     $stmt = db()->prepare('SELECT * FROM db_sync_state WHERE sync_key = :sync_key LIMIT 1');
@@ -165,7 +248,6 @@ function sync_order_filter_endpoint(int $orderId): string
 
 function sync_enqueue_global_refresh(int $userId): int
 {
-    ensure_sync_tables();
     sync_recover_stale_jobs();
     $pdo = db();
     $active = $pdo->query("
@@ -234,7 +316,6 @@ function sync_ensure_parent_jobs(int $parentId, ?int $userId = null): void
 
 function sync_enqueue_delta_jobs(?int $userId = null): int
 {
-    ensure_sync_tables();
     $count = 0;
     $stmt = db()->prepare("
         INSERT INTO db_sync_jobs (parent_job_id, job_type, status, created_by_user_id)
@@ -582,25 +663,14 @@ function sync_upsert_payment(array $payment, int $orderId, ?string $orderNumber 
     ]);
 
     sync_recalculate_order_payment_totals($orderId);
+    sync_payment_to_financial_transaction($id);
 
     return $oldHash === '' ? 'inserted' : 'updated';
 }
 
 function sync_payment_counts_as_paid(?string $status): bool
 {
-    $rawStatus = trim((string) $status);
-    $status = function_exists('mb_strtolower') ? mb_strtolower($rawStatus, 'UTF-8') : strtolower($rawStatus);
-    if ($status === '') {
-        return true;
-    }
-
-    foreach (['cancel', 'deleted', 'скас', 'refund', 'returned', 'failed', 'error'] as $blocked) {
-        if (str_contains($status, $blocked)) {
-            return false;
-        }
-    }
-
-    return true;
+    return trim((string) $status) === 'paid';
 }
 
 function sync_recalculate_order_payment_totals(int $orderId): void
@@ -648,6 +718,260 @@ function sync_recalculate_order_payment_totals(int $orderId): void
         'payment_status' => $paymentStatus,
         'order_id' => $orderId,
     ]);
+}
+
+function sync_product_id(array $product, int $orderId): string
+{
+    foreach (['id', 'order_product_id', 'order_product_uuid', 'uuid'] as $key) {
+        $value = trim((string) ($product[$key] ?? ''));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    return hash('sha1', $orderId . '|' . json_encode($product, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+}
+
+function sync_product_properties_text($properties): ?string
+{
+    if (!is_array($properties) || !$properties) {
+        return null;
+    }
+
+    $lines = [];
+    foreach ($properties as $property) {
+        if (!is_array($property)) {
+            continue;
+        }
+        $name = trim((string) ($property['name'] ?? ''));
+        $value = trim((string) ($property['value'] ?? ''));
+        if ($name !== '' || $value !== '') {
+            $lines[] = trim($name . ': ' . $value, ': ');
+        }
+    }
+
+    return $lines ? implode('; ', $lines) : null;
+}
+
+function sync_upsert_order_item(array $product, int $orderId, ?string $orderNumber = null): string
+{
+    if (!invoice_table_exists('db_order_items')) {
+        return 'unchanged';
+    }
+
+    $id = sync_product_id($product, $orderId);
+    $hash = sync_source_hash($product);
+    $oldHash = '';
+    if (sync_has_column('db_order_items', 'source_hash')) {
+        $stmt = db()->prepare('SELECT source_hash FROM db_order_items WHERE keycrm_order_product_id = :id LIMIT 1');
+        $stmt->execute(['id' => $id]);
+        $oldHash = (string) ($stmt->fetchColumn() ?: '');
+    }
+    $insert = $oldHash === '';
+    if ($oldHash === $hash) {
+        db()->prepare("
+            UPDATE db_order_items
+            SET synced_at = NOW(),
+                is_deleted = 0,
+                deleted_at = NULL
+            WHERE keycrm_order_product_id = :id
+        ")->execute(['id' => $id]);
+        return 'unchanged';
+    }
+
+    $quantity = round((float) ($product['quantity'] ?? 0), 3);
+    $salePrice = round((float) (($product['price_sold'] ?? null) ?? (($product['sale_price'] ?? null) ?? ($product['price'] ?? 0))), 2);
+    $total = round((float) (($product['total_amount'] ?? null) ?? ($salePrice * $quantity)), 2);
+    $data = [
+        'keycrm_order_product_id' => $id,
+        'keycrm_order_id' => $orderId,
+        'order_number' => $orderNumber,
+        'name' => $product['name'] ?? null,
+        'properties_json' => sync_json($product['properties'] ?? null),
+        'properties_text' => sync_product_properties_text($product['properties'] ?? null),
+        'comment' => $product['comment'] ?? null,
+        'quantity' => $quantity,
+        'unit' => ($product['unit_type'] ?? null) ?: ($product['unit'] ?? null),
+        'purchase_price' => round((float) (($product['purchased_price'] ?? null) ?? ($product['purchase_price'] ?? 0)), 2),
+        'product_price' => round((float) ($product['price'] ?? 0), 2),
+        'discount_amount' => round((float) (($product['discount_amount'] ?? null) ?? ($product['total_discount'] ?? 0)), 2),
+        'discount_percent' => round((float) ($product['discount_percent'] ?? 0), 2),
+        'sale_price' => $salePrice,
+        'total_amount' => $total,
+        'product_status_id' => $product['product_status_id'] ?? null,
+        'source_created_at' => sync_datetime($product['created_at'] ?? null),
+        'source_updated_at' => sync_datetime($product['updated_at'] ?? null),
+        'source_hash' => $hash,
+        'raw_json' => sync_json($product),
+        'synced_at' => date('Y-m-d H:i:s'),
+        'is_deleted' => 0,
+        'deleted_at' => null,
+    ];
+
+    sync_insert_update_by_columns('db_order_items', $data, ['keycrm_order_product_id']);
+    return $insert ? 'inserted' : 'updated';
+}
+
+function sync_mark_missing_order_items_deleted(int $orderId, array $seenIds): void
+{
+    if (!invoice_table_exists('db_order_items') || !sync_has_column('db_order_items', 'is_deleted')) {
+        return;
+    }
+
+    if (!$seenIds) {
+        db()->prepare("
+            UPDATE db_order_items
+            SET is_deleted = 1,
+                deleted_at = COALESCE(deleted_at, NOW())
+            WHERE keycrm_order_id = :order_id
+              AND is_deleted = 0
+        ")->execute(['order_id' => $orderId]);
+        return;
+    }
+
+    $placeholders = [];
+    $params = ['order_id' => $orderId];
+    foreach (array_values($seenIds) as $index => $id) {
+        $key = 'id_' . $index;
+        $placeholders[] = ':' . $key;
+        $params[$key] = $id;
+    }
+    db()->prepare("
+        UPDATE db_order_items
+        SET is_deleted = 1,
+            deleted_at = COALESCE(deleted_at, NOW())
+        WHERE keycrm_order_id = :order_id
+          AND is_deleted = 0
+          AND keycrm_order_product_id NOT IN (" . implode(',', $placeholders) . ")
+    ")->execute($params);
+}
+
+function sync_payment_account_match(?int $paymentMethodId): array
+{
+    if (!$paymentMethodId || !invoice_table_exists('db_keycrm_payment_method_accounts') || !invoice_table_exists('db_financial_accounts')) {
+        return ['financial_account_id' => null, 'allocation_status' => 'needs_review'];
+    }
+
+    $stmt = db()->prepare("
+        SELECT m.financial_account_id
+        FROM db_keycrm_payment_method_accounts m
+        INNER JOIN db_financial_accounts a ON a.id = m.financial_account_id
+        WHERE m.keycrm_payment_method_id = :method_id
+          AND m.is_active = 1
+          AND a.is_active = 1
+        LIMIT 1
+    ");
+    $stmt->execute(['method_id' => $paymentMethodId]);
+    $accountId = (int) ($stmt->fetchColumn() ?: 0);
+
+    return [
+        'financial_account_id' => $accountId > 0 ? $accountId : null,
+        'allocation_status' => $accountId > 0 ? 'allocated' : 'needs_review',
+    ];
+}
+
+function sync_payment_to_financial_transaction(string $keycrmPaymentId): void
+{
+    if (!invoice_table_exists('db_financial_transactions') || !invoice_table_exists('db_order_payments')) {
+        return;
+    }
+
+    $sellerSelect = sync_has_column('db_orders', 'seller_company_id') ? 'o.seller_company_id' : 'NULL AS seller_company_id';
+    $stmt = db()->prepare("
+        SELECT p.*, {$sellerSelect}
+        FROM db_order_payments p
+        LEFT JOIN db_orders o ON o.keycrm_id = p.keycrm_order_id
+        WHERE p.keycrm_payment_id = :payment_id
+        LIMIT 1
+    ");
+    $stmt->execute(['payment_id' => $keycrmPaymentId]);
+    $payment = $stmt->fetch();
+    if (!$payment) {
+        return;
+    }
+
+    $isActivePaid = (int) ($payment['is_deleted'] ?? 0) === 0 && sync_payment_counts_as_paid($payment['status'] ?? null);
+    $match = sync_payment_account_match((int) ($payment['payment_method_id'] ?? 0));
+    $data = [
+        'direction' => 'income',
+        'transaction_type' => 'client_payment',
+        'transaction_date' => $payment['payment_date'] ?: null,
+        'amount' => round((float) ($payment['amount'] ?? 0), 2),
+        'currency' => ($payment['currency'] ?? '') ?: 'UAH',
+        'seller_company_id' => $payment['seller_company_id'] ?? null,
+        'financial_account_id' => $match['financial_account_id'],
+        'keycrm_order_id' => $payment['keycrm_order_id'] ?? null,
+        'order_number' => $payment['order_number'] ?? null,
+        'order_payment_id' => $payment['id'] ?? null,
+        'source_type' => 'keycrm_payment',
+        'source_id' => $keycrmPaymentId,
+        'balance_operation_type' => 'normal',
+        'status' => $isActivePaid ? 'completed' : 'canceled',
+        'allocation_status' => $match['allocation_status'],
+        'counterparty_name' => null,
+        'payment_purpose' => $payment['payment_method_name'] ?? null,
+        'raw_json' => $payment['raw_json'] ?? null,
+        'synced_at' => date('Y-m-d H:i:s'),
+    ];
+
+    sync_insert_update_by_columns('db_financial_transactions', $data, ['source_type', 'source_id']);
+}
+
+function sync_mark_missing_order_payments_deleted(int $orderId, array $seenIds): void
+{
+    if (!invoice_table_exists('db_order_payments') || !sync_has_column('db_order_payments', 'is_deleted')) {
+        return;
+    }
+
+    $rows = [];
+    if (!$seenIds) {
+        $stmt = db()->prepare("
+            SELECT keycrm_payment_id
+            FROM db_order_payments
+            WHERE keycrm_order_id = :order_id
+              AND is_deleted = 0
+        ");
+        $stmt->execute(['order_id' => $orderId]);
+        $rows = $stmt->fetchAll();
+        db()->prepare("
+            UPDATE db_order_payments
+            SET is_deleted = 1,
+                deleted_at = COALESCE(deleted_at, NOW()),
+                synced_at = NOW()
+            WHERE keycrm_order_id = :order_id
+              AND is_deleted = 0
+        ")->execute(['order_id' => $orderId]);
+    } else {
+        $placeholders = [];
+        $params = ['order_id' => $orderId];
+        foreach (array_values($seenIds) as $index => $id) {
+            $key = 'id_' . $index;
+            $placeholders[] = ':' . $key;
+            $params[$key] = $id;
+        }
+        $stmt = db()->prepare("
+            SELECT keycrm_payment_id
+            FROM db_order_payments
+            WHERE keycrm_order_id = :order_id
+              AND is_deleted = 0
+              AND keycrm_payment_id NOT IN (" . implode(',', $placeholders) . ")
+        ");
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        db()->prepare("
+            UPDATE db_order_payments
+            SET is_deleted = 1,
+                deleted_at = COALESCE(deleted_at, NOW()),
+                synced_at = NOW()
+            WHERE keycrm_order_id = :order_id
+              AND is_deleted = 0
+              AND keycrm_payment_id NOT IN (" . implode(',', $placeholders) . ")
+        ")->execute($params);
+    }
+
+    foreach ($rows as $row) {
+        sync_payment_to_financial_transaction((string) ($row['keycrm_payment_id'] ?? ''));
+    }
 }
 
 function sync_upsert_expense(array $expense, int $orderId): string
@@ -729,10 +1053,29 @@ function sync_run_job_type(string $jobType): array
                 }
                 if (in_array($jobType, ['orders','payments'], true)) {
                     $orderNumber = (string) (($row['number'] ?? '') ?: (($row['source_uuid'] ?? '') ?: $orderId));
+                    $seenPaymentIds = [];
                     foreach ((array) ($row['payments'] ?? []) as $payment) {
                         if (is_array($payment) && $orderId > 0) {
+                            $seenPaymentIds[] = (string) (($payment['id'] ?? '') ?: (($payment['uuid'] ?? '') ?: hash('sha1', $orderId . json_encode($payment))));
                             $counts[sync_upsert_payment($payment, $orderId, $orderNumber)]++;
                         }
+                    }
+                    if ($orderId > 0) {
+                        sync_mark_missing_order_payments_deleted($orderId, $seenPaymentIds);
+                        sync_recalculate_order_payment_totals($orderId);
+                    }
+                }
+                if ($jobType === 'orders') {
+                    $orderNumber = (string) (($row['number'] ?? '') ?: (($row['source_uuid'] ?? '') ?: $orderId));
+                    $seenItemIds = [];
+                    foreach ((array) ($row['products'] ?? []) as $product) {
+                        if (is_array($product) && $orderId > 0) {
+                            $seenItemIds[] = sync_product_id($product, $orderId);
+                            $counts[sync_upsert_order_item($product, $orderId, $orderNumber)]++;
+                        }
+                    }
+                    if ($orderId > 0) {
+                        sync_mark_missing_order_items_deleted($orderId, $seenItemIds);
                     }
                 }
                 if (in_array($jobType, ['orders','order_expenses'], true)) {
@@ -815,10 +1158,22 @@ function sync_run_unpaid_orders_refresh(string $apiKey): array
         foreach ((array) ($order['payments'] ?? []) as $payment) {
             if (is_array($payment)) {
                 $orderNumber = (string) (($order['number'] ?? '') ?: (($order['source_uuid'] ?? '') ?: $orderId));
+                $seenPaymentIds[] = (string) (($payment['id'] ?? '') ?: (($payment['uuid'] ?? '') ?: hash('sha1', $orderId . json_encode($payment))));
                 $counts[sync_upsert_payment($payment, $orderId, $orderNumber)]++;
             }
         }
+        sync_mark_missing_order_payments_deleted($orderId, $seenPaymentIds ?? []);
         sync_recalculate_order_payment_totals($orderId);
+
+        $seenItemIds = [];
+        foreach ((array) ($order['products'] ?? []) as $product) {
+            if (is_array($product)) {
+                $orderNumber = (string) (($order['number'] ?? '') ?: (($order['source_uuid'] ?? '') ?: $orderId));
+                $seenItemIds[] = sync_product_id($product, $orderId);
+                $counts[sync_upsert_order_item($product, $orderId, $orderNumber)]++;
+            }
+        }
+        sync_mark_missing_order_items_deleted($orderId, $seenItemIds);
 
         foreach ((array) ($order['expenses'] ?? []) as $expense) {
             if (is_array($expense)) {
@@ -1018,7 +1373,9 @@ function sync_run_product_statuses(string $apiKey, array &$counts): void
 
 function sync_worker_run_once(): ?array
 {
-    ensure_sync_tables();
+    if (!invoice_table_exists('db_sync_jobs')) {
+        return null;
+    }
     $job = sync_claim_job();
     if (!$job) {
         return null;
@@ -1035,7 +1392,9 @@ function sync_worker_run_once(): ?array
 
 function sync_active_summary(): array
 {
-    ensure_sync_tables();
+    if (!invoice_table_exists('db_sync_jobs')) {
+        return ['active' => false, 'jobs' => [], 'last_global_job' => null];
+    }
     sync_recover_stale_jobs();
     $activeGlobal = db()->query("
         SELECT id

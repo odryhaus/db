@@ -2,6 +2,7 @@
 
 require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/cockpit.php';
+require_once dirname(__DIR__) . '/financial.php';
 
 require_login();
 
@@ -20,6 +21,7 @@ try {
         'cash_source' => 'db_order_payments.payment_date',
         'unpaid_month' => $summary['sales_unpaid_by_order'],
         'receivables_total' => $summary['receivables_total'],
+        'current_balance' => $summary['current_balance'],
         'planned_obligations_unpaid' => $summary['operational_due_this_month'],
         'expected_net_cash' => $summary['cash_forecast'],
         'checked_at' => date('Y-m-d H:i:s'),

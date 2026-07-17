@@ -2,9 +2,9 @@
 
 require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/cockpit.php';
+require_once dirname(__DIR__) . '/financial.php';
 
 require_login();
-ensure_finance_tables();
 header('Content-Type: application/json; charset=utf-8');
 
 $month = cockpit_valid_month((string) ($_GET['month'] ?? date('Y-m')));

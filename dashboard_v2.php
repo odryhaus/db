@@ -2,10 +2,10 @@
 
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/cockpit.php';
+require_once __DIR__ . '/financial.php';
 require_once __DIR__ . '/sync_core.php';
 
 require_login();
-ensure_finance_tables();
 
 $user = current_user();
 $selectedMonth = cockpit_valid_month((string) ($_GET['month'] ?? date('Y-m')));
@@ -74,7 +74,13 @@ $syncQueued = isset($_GET['sync_queued']);
 
     <nav class="nav cockpit-nav">
         <span><?= e(format_user_name($user ?? [])) ?> · <?= e(user_role()) ?></span>
-        <a class="active" href="<?= e(base_path('/dashboard_v2.php?month=' . urlencode($selectedMonth))) ?>">Cockpit v2</a>
+        <a class="active" href="<?= e(base_path('/dashboard_v2.php?month=' . urlencode($selectedMonth))) ?>">Dashboard v2</a>
+        <a href="<?= e(base_path('/sales.php?month=' . urlencode($selectedMonth))) ?>">Продажі</a>
+        <a href="<?= e(base_path('/cash.php?month=' . urlencode($selectedMonth))) ?>">Гроші</a>
+        <a href="<?= e(base_path('/receivables.php?month=' . urlencode($selectedMonth))) ?>">Дебіторка</a>
+        <a href="<?= e(base_path('/managers.php?month=' . urlencode($selectedMonth))) ?>">Менеджери</a>
+        <a href="<?= e(base_path('/payments.php?month=' . urlencode($selectedMonth))) ?>">Операції</a>
+        <a href="<?= e(base_path('/accounts.php')) ?>">Рахунки</a>
         <a href="<?= e(base_path('/index.php?month=' . urlencode($selectedMonth))) ?>">Поточний дашборд</a>
         <a href="<?= e(base_path('/targets.php?month=' . urlencode($selectedMonth))) ?>">Плани</a>
         <?php if (user_role() === 'ceo'): ?>
@@ -155,8 +161,8 @@ $syncQueued = isset($_GET['sync_queued']);
             </div>
             <div class="kpi-card">
                 <span class="label">Operating profit</span>
-                <strong><?= e(money_uah_compact($summary['operating_profit'])) ?></strong>
-                <small>після operating costs</small>
+                <strong><?= $summary['operating_profit_status'] === 'calculated' ? e(money_uah_compact($summary['operating_profit'])) : 'Потрібна категоризація' ?></strong>
+                <small>gross margin - completed operating expenses</small>
             </div>
         </div>
     </section>
@@ -190,9 +196,14 @@ $syncQueued = isset($_GET['sync_queued']);
                 <small>overdue <?= e(money_uah_compact($summary['overdue_obligations_total'])) ?></small>
             </div>
             <div class="kpi-card">
+                <span class="label">Поточний баланс</span>
+                <strong><?= e(money_uah_compact($summary['current_balance'])) ?></strong>
+                <small><?= e((string) $summary['unallocated_transactions_count']) ?> needs review</small>
+            </div>
+            <div class="kpi-card">
                 <span class="label">Cash forecast</span>
                 <strong><?= e(money_uah_compact($summary['cash_forecast'])) ?></strong>
-                <small>cash + receivables - operational due</small>
+                <small>balance + receivables - operational due</small>
             </div>
         </div>
     </section>
@@ -219,6 +230,11 @@ $syncQueued = isset($_GET['sync_queued']);
                 <span class="label">Direct costs</span>
                 <strong><?= e(money_uah_compact($summary['direct_costs'])) ?></strong>
                 <small>потрібна валідація джерела</small>
+            </div>
+            <div class="kpi-card">
+                <span class="label">Нерозподілені операції</span>
+                <strong><?= e((string) $summary['unallocated_transactions_count']) ?></strong>
+                <small>allocation_status = needs_review</small>
             </div>
         </div>
     </section>

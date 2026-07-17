@@ -128,3 +128,6 @@ Known gaps:
 - Final chart design should wait until payment reconciliation is confirmed.
 - `db_monthly_costs` is a foundation table; operating cost entry UI is not built yet.
 - `db_payment_obligations` is the future outgoing payment model; timeline UI is not built yet.
+- New financial pages are read-only. Full editing and manual transaction creation are intentionally not implemented yet.
+- Account allocation depends on `db_keycrm_payment_method_accounts`; unmapped methods will correctly show `needs_review`.
+- Runtime validation of `db_order_items` soft-delete behavior requires a real KeyCRM order payload after deploy.

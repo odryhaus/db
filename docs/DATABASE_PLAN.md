@@ -1628,3 +1628,16 @@ Local API endpoints:
 - `api/dashboard_aging.php`
 - `api/dashboard_managers.php`
 - `api/dashboard_attention.php`
+
+### Detail Pages
+
+Read-only Cockpit v2 drill-down pages:
+
+- `sales.php` reads `db_orders` and `db_order_items`.
+- `cash.php` reads `db_order_payments` and allocation data.
+- `receivables.php` reads all unpaid `db_orders` across all months.
+- `managers.php` reads `db_orders` plus `db_sales_targets`.
+- `payments.php` reads `db_financial_transactions`.
+- `accounts.php` reads `db_financial_accounts` and transaction balances.
+
+No new schema creation is done by these pages.

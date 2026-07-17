@@ -5,7 +5,6 @@ require_once __DIR__ . '/cockpit.php';
 require_once __DIR__ . '/sync_core.php';
 
 require_role('ceo');
-ensure_finance_tables();
 
 $user = current_user();
 $query = trim((string) ($_GET['order'] ?? ''));

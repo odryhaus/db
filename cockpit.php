@@ -31,15 +31,7 @@ function cockpit_not_canceled_sql(string $alias = ''): string
 function cockpit_active_payment_sql(string $alias = ''): string
 {
     $prefix = $alias !== '' ? rtrim($alias, '.') . '.' : '';
-    return "
-        COALESCE({$prefix}is_deleted, 0) = 0
-        AND LOWER(COALESCE({$prefix}status, '')) NOT LIKE '%cancel%'
-        AND LOWER(COALESCE({$prefix}status, '')) NOT LIKE '%deleted%'
-        AND LOWER(COALESCE({$prefix}status, '')) NOT LIKE '%скас%'
-        AND LOWER(COALESCE({$prefix}status, '')) NOT LIKE '%refund%'
-        AND LOWER(COALESCE({$prefix}status, '')) NOT LIKE '%returned%'
-        AND LOWER(COALESCE({$prefix}status, '')) NOT LIKE '%failed%'
-    ";
+    return "COALESCE({$prefix}is_deleted, 0) = 0 AND {$prefix}status = 'paid'";
 }
 
 function cockpit_zero_summary(string $month): array
@@ -63,11 +55,14 @@ function cockpit_zero_summary(string $month): array
         'gross_margin_percent' => 0.0,
         'operating_costs' => 0.0,
         'operating_profit' => 0.0,
+        'operating_profit_status' => 'needs_categorization',
         'operational_due_this_month' => 0.0,
         'operational_due_this_week' => 0.0,
         'overdue_obligations_total' => 0.0,
         'overdue_obligations_count' => 0,
         'strategic_debt_total' => 0.0,
+        'current_balance' => 0.0,
+        'unallocated_transactions_count' => 0,
         'cash_forecast' => 0.0,
         'sync_status' => [],
     ];
@@ -75,8 +70,6 @@ function cockpit_zero_summary(string $month): array
 
 function cockpit_monthly_summary(string $month): array
 {
-    ensure_finance_tables();
-
     $month = cockpit_valid_month($month);
     $bounds = cockpit_month_bounds($month);
     $summary = cockpit_zero_summary($month);
@@ -156,28 +149,21 @@ function cockpit_monthly_summary(string $month): array
         $summary['cash_from_previous_orders'] = (float) ($row['previous_cash'] ?? 0);
     }
 
-    if (invoice_table_exists('db_monthly_costs')) {
-        $costs = db()->prepare("
-            SELECT
-                COALESCE(SUM(CASE WHEN cost_type = 'operating' THEN amount_uah ELSE 0 END), 0) AS operating_costs,
-                COALESCE(SUM(CASE WHEN cost_type = 'direct' THEN amount_uah ELSE 0 END), 0) AS direct_costs_manual
-            FROM db_monthly_costs
-            WHERE month = :month
-        ");
-        $costs->execute(['month' => $month]);
-        $row = $costs->fetch() ?: [];
-        $summary['operating_costs'] = (float) ($row['operating_costs'] ?? 0);
-        $manualDirect = (float) ($row['direct_costs_manual'] ?? 0);
-        if ($manualDirect > 0) {
-            $summary['direct_costs'] = $manualDirect;
-            $summary['gross_margin'] = max($summary['sales_fact'] - $manualDirect, 0);
-            $summary['gross_margin_percent'] = $summary['sales_fact'] > 0 ? round(($summary['gross_margin'] / $summary['sales_fact']) * 100, 1) : 0.0;
-        }
+    if (function_exists('finance_monthly_completed_expenses')) {
+        $summary['operating_costs'] = finance_monthly_completed_expenses($month);
     }
 
     cockpit_add_obligation_summary($summary, $bounds);
-    $summary['operating_profit'] = $summary['gross_margin'] - $summary['operating_costs'];
-    $summary['cash_forecast'] = $summary['cash_received'] + $summary['receivables_total'] - $summary['operational_due_this_month'];
+    if (function_exists('finance_total_balance')) {
+        $balance = finance_total_balance();
+        $summary['current_balance'] = (float) ($balance['total'] ?? 0);
+        $summary['unallocated_transactions_count'] = (int) ($balance['unallocated_count'] ?? 0);
+    }
+    if ($summary['operating_costs'] > 0 || invoice_table_exists('db_financial_transactions')) {
+        $summary['operating_profit'] = $summary['gross_margin'] - $summary['operating_costs'];
+        $summary['operating_profit_status'] = $summary['operating_costs'] > 0 ? 'calculated' : 'needs_categorization';
+    }
+    $summary['cash_forecast'] = $summary['current_balance'] + $summary['receivables_total'] - $summary['operational_due_this_month'];
     $summary['progress_percent'] = $summary['target'] > 0 ? min(100, round(($summary['sales_fact'] / $summary['target']) * 100, 1)) : 0.0;
     $summary['remaining_to_target'] = max($summary['target'] - $summary['sales_fact'], 0);
 
@@ -260,7 +246,6 @@ function cockpit_add_obligation_summary(array &$summary, array $bounds): void
 
 function cockpit_manager_summary(string $month): array
 {
-    ensure_finance_tables();
     if (!invoice_table_exists('db_orders')) {
         return [];
     }
@@ -298,7 +283,6 @@ function cockpit_manager_summary(string $month): array
 
 function cockpit_attention_items(string $month): array
 {
-    ensure_finance_tables();
     $items = [];
     $summary = cockpit_monthly_summary($month);
     if ($summary['overdue_obligations_count'] > 0) {
