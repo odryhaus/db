@@ -327,3 +327,26 @@ Decision:
 - `payment_requisites.php` remains a copy tool and does not create invoices, payments, or KeyCRM records.
 
 Reason: production has intentional inactive/empty accounts, and they must not accidentally appear in invoice/payment text selection.
+
+## CEO Money Cockpit v2 Is Preview First
+
+Decision:
+
+- `dashboard_v2.php` is the preview executive dashboard.
+- `index.php` remains the current production dashboard until explicit CEO approval.
+- The main page separates Performance, Cash, and Financial Health.
+- Sales are measured by `db_orders.order_month`.
+- Cash receipts are measured by `db_order_payments.payment_date`.
+- Receivables are measured across all months by `db_orders.unpaid_amount_uah > 0`.
+
+Reason: the CEO needs a fast decision screen, and old/new formulas must be validated before replacing production.
+
+## Outgoing Payments Are Obligations
+
+Decision:
+
+- New outgoing payment work should use `db_payment_obligations`.
+- `db_expenses` remains legacy for now and should not be expanded into a large ERP model.
+- Strategic debt is shown separately and does not automatically reduce operating profit or current operational pressure.
+
+Reason: `.BRAND` needs to control who must be paid, when, priority, and order links; this is broader than simple expenses.

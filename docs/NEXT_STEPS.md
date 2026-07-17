@@ -264,3 +264,25 @@ After deploy:
 - Confirm `payment_requisites.php` filters accounts by selected company and currency.
 - Later add VAT 20% PDF templates for VAT sellers.
 - Later add English EUR/USD invoice templates.
+
+## CEO Money Cockpit v2 Follow-up
+
+Next milestone:
+
+Payment validation and preview review.
+
+Checklist:
+
+- Open `dashboard_v2.php`.
+- Confirm `index.php` still works.
+- Run `payment_sync_check.php` for fully paid, partially paid, unpaid, and old-order-paid-this-month examples.
+- Copy back any mismatches before finalizing charts.
+- Confirm cron runs `cron/sync_worker.php` frequently enough for near-online updates.
+- After CEO approval, decide whether `dashboard_v2.php` should replace `index.php`.
+
+Planned next build:
+
+- Payment Obligations v0.1 timeline UI from `db_payment_obligations`.
+- Cash drill-down page.
+- Receivables drill-down page.
+- Manager drill-down page using validated local manager ownership.

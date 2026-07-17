@@ -119,3 +119,12 @@ Known gaps:
 - Duplicate account rows may exist from earlier/manual account labels. Selectors dedupe by `company_id + currency + IBAN`, and `our_companies.php` marks duplicates for review.
 - Duplicate seller company rows may exist from the old English seed. Working selectors dedupe by tax code, and `our_companies.php` marks duplicates for review.
 - `payment_requisites.php` creates copyable payment text only; it does not create invoices, payments, or KeyCRM records.
+
+## CEO Money Cockpit v2 Requires Payment Validation
+
+- `dashboard_v2.php` is a preview and should not replace `index.php` until approved.
+- Individual payment sync reads payments from order payloads with `include=payments`; no standalone payment-list endpoint was confirmed in the OpenAPI file.
+- Runtime validation needs production DB/API data through `payment_sync_check.php`.
+- Final chart design should wait until payment reconciliation is confirmed.
+- `db_monthly_costs` is a foundation table; operating cost entry UI is not built yet.
+- `db_payment_obligations` is the future outgoing payment model; timeline UI is not built yet.

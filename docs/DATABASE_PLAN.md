@@ -1544,3 +1544,87 @@ Rules:
 - VAT seller companies are stored now, but VAT 20% PDF templates are future work.
 - EUR/USD account data is stored now, but English currency invoice templates are future work.
 - `db_invoices.seller_account_id` stores the account selected for a generated invoice.
+
+## 18. CEO Money Cockpit v2 Data Model
+
+Main concepts:
+
+- Sales: `db_orders.order_month`, derived from order date.
+- Cash receipts: `db_order_payments.payment_date`.
+- Receivables: `db_orders.unpaid_amount_uah > 0` across all months.
+- Direct costs: verified order-linked costs from KeyCRM/order cache or manual monthly costs.
+- Operating costs: monthly business costs from `db_monthly_costs`.
+- Outgoing payments: `db_payment_obligations`.
+- Strategic debt: visible separately and not mixed into operating pressure.
+
+### db_order_payments
+
+This table caches individual KeyCRM payments from order payloads with `include=payments`.
+
+Important fields:
+
+- `keycrm_payment_id`
+- `keycrm_order_id`
+- `order_number`
+- `amount`
+- `currency`
+- `status`
+- `payment_date`
+- `payment_method_id`
+- `payment_method_name`
+- `seller_company_id`
+- `seller_account_id`
+- `source_created_at`
+- `source_updated_at`
+- `source_hash`
+- `raw_json`
+- `synced_at`
+- `is_deleted`
+- `deleted_at`
+
+### db_payment_obligations
+
+Main future table for what `.BRAND` must pay:
+
+- contractors
+- suppliers
+- rent
+- salary
+- tax
+- subscription
+- loan payment
+- operational debt
+- strategic debt
+- other obligations
+
+It replaces new development on `db_expenses`; legacy `db_expenses` may remain for historical records until migrated.
+
+### db_monthly_costs
+
+Foundation for profitability:
+
+- direct monthly costs
+- operating costs
+- financial/tax/other costs
+- manual or imported sources
+
+Operating profit formula:
+
+`operating_profit = gross_margin - operating_costs`
+
+### Preview / APIs
+
+Preview page:
+
+- `dashboard_v2.php`
+
+Local API endpoints:
+
+- `api/dashboard_summary.php`
+- `api/dashboard_sales_cash.php`
+- `api/dashboard_payment_cohort.php`
+- `api/dashboard_profit.php`
+- `api/dashboard_cash_forecast.php`
+- `api/dashboard_aging.php`
+- `api/dashboard_managers.php`
+- `api/dashboard_attention.php`

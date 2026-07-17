@@ -533,3 +533,35 @@ Do not delete duplicates blindly. First verify which row is used by existing inv
 - English EUR/USD invoice PDF templates.
 - VAT 20% invoice PDF templates.
 - Mixed product/service document routing for service-enabled sellers.
+
+## 2026-07-17 — CEO Money Cockpit v2 Preview
+
+### What Changed
+
+- Added `dashboard_v2.php` as a preview page. The current production `index.php` was not replaced.
+- Added shared Cockpit formulas in `cockpit.php`.
+- Added local dashboard JSON endpoints under `api/`.
+- Expanded `db_order_payments` safely with individual payment snapshot fields.
+- Added CEO-only `payment_sync_check.php` for order/payment reconciliation.
+- Added `db_payment_obligations` as the future outgoing payment model.
+- Added `db_monthly_costs` as the profitability foundation.
+- Created audit/plan/validation docs for Cockpit v2.
+
+### Problems Found
+
+- Current `index.php` mixes selected-month sales paid amount with cash received by payment date when `db_order_payments` has rows.
+- `db_expenses` works as a legacy expense page, but it is too narrow for full outgoing payment obligations.
+- True KeyCRM webhook support was not found in the uploaded OpenAPI file.
+
+### Recommendations
+
+- Validate individual payment rows on production before final chart design.
+- Keep `dashboard_v2.php` as preview until CEO explicitly approves replacing `index.php`.
+- Use `db_payment_obligations` for new outgoing payment work; keep `db_expenses` only as legacy data.
+
+### Manual Review
+
+- Open `/payment_sync_check.php?order=9124` and compare active payment totals.
+- Review `docs/CEO_COCKPIT_AUDIT.md`.
+- Review `docs/PAYMENT_DATA_AUDIT.md`.
+- Review `docs/CEO_COCKPIT_VALIDATION.md`.
