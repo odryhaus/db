@@ -1,6 +1,8 @@
 <?php
 
 require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/cockpit.php';
+require_once __DIR__ . '/cockpit_layout.php';
 require_login();
 
 if (!can_manage_expenses()) {
@@ -303,18 +305,7 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
                 <h1>Витрати</h1>
                 <p class="muted">Планові платежі, операційні витрати і стратегічні борги</p>
             </div>
-            <nav class="nav">
-                <a href="<?= e(base_path('/index.php?month=' . urlencode($selectedMonth))) ?>">Дашборд</a>
-                <?php if (user_role() === 'ceo'): ?>
-                    <a href="<?= e(base_path('/targets.php?month=' . urlencode($selectedMonth))) ?>">Плани</a>
-                <?php endif; ?>
-                <a href="<?= e(base_path('/invoices.php')) ?>">Рахунки</a>
-                <a class="active" href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">Витрати</a>
-                <?php if (user_role() === 'ceo'): ?>
-                    <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
-                <?php endif; ?>
-                <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>
-            </nav>
+            <?php cockpit_nav('expenses', $selectedMonth); ?>
         </header>
 
         <?php if ($message !== ''): ?>

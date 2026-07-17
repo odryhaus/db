@@ -56,12 +56,12 @@ try {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Рахунки — .BRAND DB</title>
+    <title>Баланси — .BRAND DB</title>
     <link rel="stylesheet" href="<?= e(asset_path('/assets/app.css')) ?>">
 </head>
 <body>
 <main class="app-shell cockpit-shell">
-    <?php cockpit_page_header('CEO Money Cockpit', 'Рахунки і баланси', 'Баланс з completed фінансових операцій.', 'accounts', $month, false); ?>
+    <?php cockpit_page_header('CEO Money Cockpit', 'Баланси', 'Фінансові рахунки і баланс з completed операцій.', 'accounts', $month, false); ?>
     <section class="kpi-grid">
         <div class="kpi-card"><span class="label">Загальний баланс</span><strong><?= e(finance_money($top['total'])) ?></strong></div>
         <div class="kpi-card"><span class="label">Рахунків</span><strong><?= e((string) count($rows)) ?></strong></div>

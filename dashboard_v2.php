@@ -3,6 +3,7 @@
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/cockpit.php';
 require_once __DIR__ . '/financial.php';
+require_once __DIR__ . '/cockpit_layout.php';
 require_once __DIR__ . '/sync_core.php';
 
 require_login();
@@ -72,22 +73,7 @@ $syncQueued = isset($_GET['sync_queued']);
         </form>
     </header>
 
-    <nav class="nav cockpit-nav">
-        <span><?= e(format_user_name($user ?? [])) ?> · <?= e(user_role()) ?></span>
-        <a class="active" href="<?= e(base_path('/dashboard_v2.php?month=' . urlencode($selectedMonth))) ?>">Dashboard v2</a>
-        <a href="<?= e(base_path('/sales.php?month=' . urlencode($selectedMonth))) ?>">Продажі</a>
-        <a href="<?= e(base_path('/cash.php?month=' . urlencode($selectedMonth))) ?>">Гроші</a>
-        <a href="<?= e(base_path('/receivables.php?month=' . urlencode($selectedMonth))) ?>">Дебіторка</a>
-        <a href="<?= e(base_path('/managers.php?month=' . urlencode($selectedMonth))) ?>">Менеджери</a>
-        <a href="<?= e(base_path('/payments.php?month=' . urlencode($selectedMonth))) ?>">Операції</a>
-        <a href="<?= e(base_path('/accounts.php')) ?>">Рахунки</a>
-        <a href="<?= e(base_path('/index.php?month=' . urlencode($selectedMonth))) ?>">Поточний дашборд</a>
-        <a href="<?= e(base_path('/targets.php?month=' . urlencode($selectedMonth))) ?>">Плани</a>
-        <?php if (user_role() === 'ceo'): ?>
-            <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
-        <?php endif; ?>
-        <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>
-    </nav>
+    <?php cockpit_nav('dashboard', $selectedMonth); ?>
 
     <section class="cockpit-sync-strip">
         <span><?= e(cockpit_status_label($summary)) ?></span>
@@ -258,7 +244,7 @@ $syncQueued = isset($_GET['sync_queued']);
                     <th>Менеджер</th>
                     <th>План</th>
                     <th>Факт</th>
-                    <th>Оплачено в замовленнях</th>
+                    <th>Оплачено</th>
                     <th>Не оплачено</th>
                     <th>Прогрес</th>
                 </tr>

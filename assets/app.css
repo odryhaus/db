@@ -1601,11 +1601,12 @@ tr:last-child td {
     display: grid;
     gap: 6px;
     min-width: 150px;
+    padding: 4px 0;
 }
 
 .dual-progress__track {
     position: relative;
-    height: 12px;
+    height: 14px;
     overflow: hidden;
     border-radius: 999px;
     background: #e5e7eb;
@@ -1676,6 +1677,41 @@ tr:last-child td {
 .segmented-scroll a small {
     color: inherit;
     opacity: .75;
+}
+
+.data-table td .dual-progress {
+    min-width: 220px;
+}
+
+.data-table td:last-child .dual-progress {
+    margin-right: 10px;
+}
+
+.order-items-row td {
+    background: #fbfbfc;
+    padding-top: 0;
+}
+
+.order-items-list {
+    display: grid;
+    gap: 6px;
+    padding: 8px 0 10px;
+}
+
+.order-item-card {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) 80px 120px auto auto 120px;
+    gap: 10px;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: #fff;
+    padding: 8px 10px;
+}
+
+.order-item-card small {
+    display: block;
+    margin-top: 2px;
 }
 
 .cockpit-hero-meta {
@@ -1823,6 +1859,10 @@ tr:last-child td {
     }
 
     .invoice-create-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .order-item-card {
         grid-template-columns: 1fr;
     }
 

@@ -298,3 +298,11 @@ After deploy:
 - Decide later whether to add safe editing forms for manual financial transactions.
 - After this deploy, run `Оновити все` once to backfill financial operations from already cached payments.
 - Review invoice package ZIP on a row that already has invoice/delivery-note/act PDFs.
+
+## Cockpit v2 Remaining Detail Work
+
+- Add pagination to `sales.php`, `cash.php`, `receivables.php`, `payments.php`.
+- Complete filters on `sales.php`: manager, client, payment status, order status.
+- Complete filters on `cash.php`: company, account, payment method, current/old order, allocation status.
+- Complete filters on `receivables.php`: client search, aging, debt amount.
+- Decide how legacy `db_expenses` should be migrated or mirrored into `db_financial_transactions` so expenses appear in `Операції`.

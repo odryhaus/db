@@ -1,6 +1,8 @@
 <?php
 
 require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/cockpit.php';
+require_once __DIR__ . '/cockpit_layout.php';
 require_login();
 
 $autoloadPath = __DIR__ . '/vendor/autoload.php';
@@ -2083,22 +2085,7 @@ foreach ($invoices as $invoiceRow) {
                 <h1>Рахунки</h1>
                 <p class="muted">Редаговані рахунки і видаткові з локальних замовлень KeyCRM</p>
             </div>
-            <nav class="nav">
-                <a href="<?= e(base_path('/index.php')) ?>">Дашборд</a>
-                <a class="active" href="<?= e(base_path('/invoices.php')) ?>">Рахунки</a>
-                <a href="<?= e(base_path('/payment_requisites.php')) ?>">Реквізити оплати</a>
-                <?php if (in_array(user_role(), ['ceo', 'accountant'], true)): ?>
-                    <a href="<?= e(base_path('/our_companies.php')) ?>">Наші компанії</a>
-                <?php endif; ?>
-                <?php if (user_role() === 'ceo'): ?>
-                    <a href="<?= e(base_path('/targets.php')) ?>">Плани</a>
-                <?php endif; ?>
-                <a href="<?= e(base_path('/expenses.php')) ?>">Витрати</a>
-                <?php if (user_role() === 'ceo'): ?>
-                    <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
-                <?php endif; ?>
-                <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>
-            </nav>
+            <?php cockpit_nav('invoices', date('Y-m')); ?>
         </header>
 
         <?php if ($message !== ''): ?>

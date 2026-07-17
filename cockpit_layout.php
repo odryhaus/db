@@ -9,8 +9,12 @@ function cockpit_nav(string $active, string $month): void
         'cash' => ['Гроші', '/cash.php' . $monthQuery],
         'receivables' => ['Дебіторка', '/receivables.php' . $monthQuery],
         'managers' => ['Менеджери', '/managers.php' . $monthQuery],
+        'targets' => ['Плани', '/targets.php' . $monthQuery],
         'payments' => ['Операції', '/payments.php' . $monthQuery],
-        'accounts' => ['Рахунки', '/accounts.php'],
+        'accounts' => ['Баланси', '/accounts.php'],
+        'expenses' => ['Витрати', '/expenses.php' . $monthQuery],
+        'invoices' => ['Рахунки', '/invoices.php'],
+        'requisites' => ['Реквізити', '/payment_requisites.php'],
     ];
     ?>
     <nav class="nav cockpit-nav">
@@ -18,6 +22,9 @@ function cockpit_nav(string $active, string $month): void
         <?php foreach ($items as $key => [$label, $href]): ?>
             <a class="<?= $active === $key ? 'active' : '' ?>" href="<?= e(base_path($href)) ?>"><?= e($label) ?></a>
         <?php endforeach; ?>
+        <?php if (in_array(user_role(), ['ceo', 'accountant'], true)): ?>
+            <a class="<?= $active === 'our_companies' ? 'active' : '' ?>" href="<?= e(base_path('/our_companies.php')) ?>">Наші компанії</a>
+        <?php endif; ?>
         <?php if (user_role() === 'ceo'): ?>
             <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
         <?php endif; ?>

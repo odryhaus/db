@@ -31,7 +31,7 @@ $summary = cockpit_monthly_summary($month);
     <section class="panel dashboard-section">
         <div class="table-scroll">
             <table class="data-table">
-                <thead><tr><th>Менеджер</th><th>План</th><th>Факт</th><th>Оплачено в замовленнях</th><th>Не оплачено</th><th>К-сть</th><th>Залишилось</th><th>Прогрес</th></tr></thead>
+                <thead><tr><th>Менеджер</th><th>План</th><th>Факт</th><th>Оплачено</th><th>Не оплачено</th><th>К-сть</th><th>Залишилось</th><th>Прогрес</th></tr></thead>
                 <tbody>
                 <?php if (!$rows): ?><tr><td colspan="8">Немає даних.</td></tr><?php endif; ?>
                 <?php foreach ($rows as $row): ?>

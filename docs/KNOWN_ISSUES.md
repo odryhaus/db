@@ -133,3 +133,5 @@ Known gaps:
 - Runtime validation of `db_order_items` soft-delete behavior requires a real KeyCRM order payload after deploy.
 - `Payment Sync Check` is a technical diagnostic page, not part of the daily CEO workflow.
 - Invoice package download requires PHP `ZipArchive`; if the server extension is missing, package export will show a server capability error while individual PDFs still work.
+- `Операції` can show only income until expense/outgoing-payment records exist in `db_financial_transactions`; legacy expenses are still visible in `Витрати`.
+- Full table pagination and all advanced filters are still pending for Cockpit v2 detail pages.

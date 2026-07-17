@@ -629,3 +629,41 @@ Do not delete duplicates blindly. First verify which row is used by existing inv
 Open Cockpit v2 and click `Оновити все`, or let cron run `cron/sync_worker.php`.
 
 Reason: old payments already saved in `db_order_payments` need one more sync pass to backfill `db_financial_transactions`.
+
+## 2026-07-17 — Navigation And Sales Item Detail Polish
+
+### What Changed
+
+- Unified Cockpit v2 navigation across:
+  - `dashboard_v2.php`
+  - `sales.php`
+  - `cash.php`
+  - `receivables.php`
+  - `managers.php`
+  - `payments.php`
+  - `accounts.php`
+  - `invoices.php`
+  - `expenses.php`
+- Renamed financial accounts page label from `Рахунки` to `Баланси` to avoid confusion with invoice documents.
+- Kept invoice documents page as `Рахунки`.
+- Added `Витрати` to the shared navigation, pointing to the existing `expenses.php`.
+- Shortened manager table label from `Оплачено в замовленнях` to `Оплачено`.
+- Added more visual spacing around black/yellow progress bars.
+- Added order item details under sales rows from `db_order_items`:
+  - name
+  - properties
+  - comment
+  - quantity/unit
+  - sale price
+  - discount
+  - total
+  - purchase price only for CEO/accountant
+
+### Still Not Fully Done From The Large Task
+
+- Full pagination for all large detail pages is still not implemented.
+- `sales.php` has partial filters; full manager/client/payment-status/order-status filter set is not complete.
+- `cash.php` does not yet have all requested filters.
+- `receivables.php` has status and manager filters, but not all aging/sum/search filters yet.
+- `payments.php` is a read-only journal; manual expense transaction editing is not implemented.
+- Expenses remain on `expenses.php`; they are not yet fully migrated into `db_financial_transactions`.

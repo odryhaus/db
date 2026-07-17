@@ -11,7 +11,9 @@ $month = cockpit_valid_month((string) ($_GET['month'] ?? date('Y-m')));
 $managerFilter = trim((string) ($_GET['manager'] ?? ''));
 $notCanceled = cockpit_not_canceled_sql('o');
 $orders = [];
+$orderItems = [];
 $summary = cockpit_monthly_summary($month);
+$canSeeCosts = in_array(user_role(), ['ceo', 'accountant'], true);
 
 try {
     if (invoice_table_exists('db_orders')) {
@@ -40,6 +42,25 @@ try {
         ");
         $stmt->execute($params);
         $orders = $stmt->fetchAll();
+
+        if ($orders && invoice_table_exists('db_order_items')) {
+            $orderIds = array_values(array_filter(array_map(static fn($order) => (int) ($order['keycrm_id'] ?? 0), $orders)));
+            if ($orderIds) {
+                $placeholders = implode(',', array_fill(0, count($orderIds), '?'));
+                $itemStmt = db()->prepare("
+                    SELECT keycrm_order_id, name, properties_text, comment, quantity, unit, purchase_price,
+                           product_price, discount_amount, discount_percent, sale_price, total_amount
+                    FROM db_order_items
+                    WHERE COALESCE(is_deleted, 0) = 0
+                      AND keycrm_order_id IN ({$placeholders})
+                    ORDER BY id ASC
+                ");
+                $itemStmt->execute($orderIds);
+                foreach ($itemStmt->fetchAll() as $item) {
+                    $orderItems[(int) $item['keycrm_order_id']][] = $item;
+                }
+            }
+        }
     }
 } catch (Throwable $e) {
     $orders = [];
@@ -86,6 +107,33 @@ try {
                         <td class="num"><strong><?= e(finance_money($order['unpaid_amount_uah'])) ?></strong></td>
                         <td class="num"><?= e(finance_money($order['margin_sum_uah'])) ?></td>
                     </tr>
+                    <?php $items = $orderItems[(int) ($order['keycrm_id'] ?? 0)] ?? []; ?>
+                    <?php if ($items): ?>
+                        <tr class="order-items-row">
+                            <td colspan="10">
+                                <div class="order-items-list">
+                                    <?php foreach ($items as $item): ?>
+                                        <div class="order-item-card">
+                                            <div>
+                                                <strong><?= e((string) ($item['name'] ?: 'Позиція')) ?></strong>
+                                                <?php if (!empty($item['properties_text'])): ?><small><?= e((string) $item['properties_text']) ?></small><?php endif; ?>
+                                                <?php if (!empty($item['comment'])): ?><small><?= e((string) $item['comment']) ?></small><?php endif; ?>
+                                            </div>
+                                            <span><?= e((string) ($item['quantity'] ?? '0')) ?> <?= e((string) (($item['unit'] ?? '') ?: 'шт')) ?></span>
+                                            <span><?= e(finance_money($item['sale_price'] ?? $item['product_price'] ?? 0)) ?></span>
+                                            <?php if ((float) ($item['discount_amount'] ?? 0) > 0 || (float) ($item['discount_percent'] ?? 0) > 0): ?>
+                                                <span class="muted">знижка <?= e(finance_money($item['discount_amount'] ?? 0)) ?> / <?= e((string) (float) ($item['discount_percent'] ?? 0)) ?>%</span>
+                                            <?php endif; ?>
+                                            <?php if ($canSeeCosts): ?>
+                                                <span class="muted">с/в <?= e(finance_money($item['purchase_price'] ?? 0)) ?></span>
+                                            <?php endif; ?>
+                                            <strong><?= e(finance_money($item['total_amount'] ?? 0)) ?></strong>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endif; ?>
                 <?php endforeach; ?>
                 </tbody>
             </table>
