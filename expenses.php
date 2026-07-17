@@ -33,6 +33,12 @@ $message = '';
 $error = '';
 $editExpense = null;
 
+if (isset($_GET['saved'])) {
+    $message = 'Витрату збережено.';
+} elseif (isset($_GET['paid'])) {
+    $message = 'Витрату позначено як оплачену.';
+}
+
 function expense_money($value): string
 {
     return number_format((float) $value, 0, '.', ' ') . ' UAH';
@@ -65,6 +71,7 @@ function expense_status_badge(string $status): string
 
 if (is_post()) {
     $action = (string) ($_POST['action'] ?? 'save');
+    $redirectMonth = preg_match('/^\d{4}-\d{2}$/', (string) ($_POST['month'] ?? '')) ? (string) $_POST['month'] : $selectedMonth;
 
     if (!csrf_is_valid()) {
         $error = 'Invalid expense request.';
@@ -78,7 +85,12 @@ if (is_post()) {
                 WHERE id = :id
             ");
             $stmt->execute(['id' => $id]);
-            $message = 'Expense marked as paid.';
+            redirect_to('/expenses.php?' . http_build_query([
+                'month' => $redirectMonth,
+                'status' => 'all',
+                'scope' => 'all',
+                'paid' => 1,
+            ]));
         }
     } else {
         $id = (int) ($_POST['id'] ?? 0);
@@ -119,39 +131,48 @@ if (is_post()) {
                 'note' => $note !== '' ? $note : null,
             ];
 
-            if ($id > 0) {
-                $stmt = db()->prepare("
-                    UPDATE db_expenses
-                    SET title = :title,
-                        category = :category,
-                        amount_uah = :amount_uah,
-                        currency = :currency,
-                        expense_type = :expense_type,
-                        due_date = :due_date,
-                        repeat_day = :repeat_day,
-                        repeat_until = :repeat_until,
-                        total_debt_amount_uah = :total_debt_amount_uah,
-                        paid_amount_uah = :paid_amount_uah,
-                        status = :status,
-                        is_strategic = :is_strategic,
-                        note = :note
-                    WHERE id = :id
-                ");
-                $params['id'] = $id;
-                $stmt->execute($params);
-                $message = 'Expense updated.';
-            } else {
-                $stmt = db()->prepare("
-                    INSERT INTO db_expenses
-                        (title, category, amount_uah, currency, expense_type, due_date, repeat_day, repeat_until,
-                         total_debt_amount_uah, paid_amount_uah, status, is_strategic, note, created_by_user_id)
-                    VALUES
-                        (:title, :category, :amount_uah, :currency, :expense_type, :due_date, :repeat_day, :repeat_until,
-                         :total_debt_amount_uah, :paid_amount_uah, :status, :is_strategic, :note, :created_by_user_id)
-                ");
-                $params['created_by_user_id'] = (int) (current_user()['id'] ?? 0);
-                $stmt->execute($params);
-                $message = 'Expense added.';
+            try {
+                if ($id > 0) {
+                    $stmt = db()->prepare("
+                        UPDATE db_expenses
+                        SET title = :title,
+                            category = :category,
+                            amount_uah = :amount_uah,
+                            currency = :currency,
+                            expense_type = :expense_type,
+                            due_date = :due_date,
+                            repeat_day = :repeat_day,
+                            repeat_until = :repeat_until,
+                            total_debt_amount_uah = :total_debt_amount_uah,
+                            paid_amount_uah = :paid_amount_uah,
+                            status = :status,
+                            is_strategic = :is_strategic,
+                            note = :note
+                        WHERE id = :id
+                    ");
+                    $params['id'] = $id;
+                    $stmt->execute($params);
+                } else {
+                    $stmt = db()->prepare("
+                        INSERT INTO db_expenses
+                            (title, category, amount_uah, currency, expense_type, due_date, repeat_day, repeat_until,
+                             total_debt_amount_uah, paid_amount_uah, status, is_strategic, note, created_by_user_id)
+                        VALUES
+                            (:title, :category, :amount_uah, :currency, :expense_type, :due_date, :repeat_day, :repeat_until,
+                             :total_debt_amount_uah, :paid_amount_uah, :status, :is_strategic, :note, :created_by_user_id)
+                    ");
+                    $params['created_by_user_id'] = (int) (current_user()['id'] ?? 0);
+                    $stmt->execute($params);
+                }
+
+                redirect_to('/expenses.php?' . http_build_query([
+                    'month' => $redirectMonth,
+                    'status' => 'all',
+                    'scope' => 'all',
+                    'saved' => 1,
+                ]));
+            } catch (Throwable $e) {
+                $error = 'Витрату не збережено: ' . $e->getMessage();
             }
         }
     }
@@ -329,7 +350,7 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
                     <a class="button-secondary small-button" href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">Новий запис</a>
                 <?php endif; ?>
             </div>
-            <form method="post" action="<?= e(base_path('/expenses.php')) ?>" class="expense-form">
+            <form method="post" action="<?= e(base_path('/expenses.php?' . http_build_query(['month' => $selectedMonth, 'status' => 'all', 'scope' => 'all']))) ?>" class="expense-form">
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="save">
                 <input type="hidden" name="id" value="<?= e((string) ($editExpense['id'] ?? 0)) ?>">
@@ -344,7 +365,7 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
                 </label>
                 <label>
                     <span>Сума, UAH</span>
-                    <input type="number" step="0.01" min="0" name="amount_uah" value="<?= e((string) ($editExpense['amount_uah'] ?? '')) ?>">
+                    <input type="number" step="0.01" min="0" name="amount_uah" required value="<?= e((string) ($editExpense['amount_uah'] ?? '')) ?>">
                 </label>
                 <label>
                     <span>Валюта</span>

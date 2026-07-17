@@ -1,5 +1,23 @@
 # Implementation Report
 
+## 2026-07-17 — Expense Save Visibility Fix
+
+### Files Changed
+
+- `expenses.php`
+- `docs/IMPLEMENTATION_REPORT.md`
+
+### Problem Found
+
+After saving an expense, the page could still show the default `planned` filter. If the saved expense had another status or scope, it looked like the record was not saved.
+
+### What Changed
+
+- After add/edit, the page redirects to `status=all&scope=all`.
+- Added visible success messages after saving and marking paid.
+- Added required amount field.
+- If database save fails, the page now shows an explicit error instead of silently looking unchanged.
+
 ## 2026-07-17 — Sync UX Cleanup
 
 ### Files Changed
