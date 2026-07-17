@@ -62,13 +62,17 @@ Recommendation:
 
 Goal: inspect selected-month sales orders and product lines.
 
-Status: functional and valuable.
+Status: improved after PDF review.
 
 Problems:
 
 - Needs filters: client, manager, payment status, order status.
-- Long product rows can make the table heavy.
+- Long product rows made the old table visually heavy.
 - No pagination.
+
+Change made:
+
+- Replaced the old mixed order/product table with order cards and compact product rows inside each order.
 
 Recommendation:
 
@@ -94,13 +98,17 @@ Recommendation:
 
 Goal: create and control invoices, PDF packages and document closing.
 
-Status: core foundation exists.
+Status: improved after PDF review, but still needs a focused invoice workstation pass.
 
 Problems:
 
-- Page is still too large: create, edit, registry, PDFs, statuses all in one file.
+- Page is still too large internally: create, edit, registry, PDFs, statuses all in one file.
 - UX must become more like a professional document workstation.
 - Needs better client/legal-entity/contact selection flow.
+
+Change made:
+
+- Replaced the wide invoice registry table with compact working cards so payer names, files, statuses and actions do not get pushed off-screen.
 
 Recommendation:
 

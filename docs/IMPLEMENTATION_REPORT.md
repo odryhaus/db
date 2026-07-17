@@ -1,5 +1,39 @@
 # Implementation Report
 
+## 2026-07-17 — Professional Cockpit Layout Pass
+
+### Files Changed
+
+- `cockpit_layout.php`
+- `sales.php`
+- `invoices.php`
+- `assets/app.css`
+- `docs/IMPLEMENTATION_REPORT.md`
+- `docs/NEXT_STEPS.md`
+- `docs/PAGE_AUDIT.md`
+
+### Problems Found From PDF Review
+
+- Pages had too little top spacing because the shared shell had no top padding.
+- The `Адмін` dropdown used native `details`, which felt awkward and did not behave like a modern app menu.
+- `sales.php` mixed orders and product lines in one table, making the page visually noisy.
+- `invoices.php` registry was still a wide table; long payer names and action buttons were pushed out of view.
+- Some labels were too technical for CEO work, for example `Gross margin` on the sales page.
+
+### What Changed
+
+- Replaced the admin dropdown with a controlled `Ще` popover that closes on outside click or Escape.
+- Added consistent top breathing room for all app/page shells.
+- Reworked Sales into order cards with money metrics and compact product rows inside each order.
+- Reworked Invoice Registry into professional working cards: number/date, payer/contact, amount/seller, payment status, deadline, files, document status, and actions.
+- Kept the same database and POST behavior; this is a layout/UX pass only.
+
+### Verification
+
+- Rendered the provided PDF exports to PNG and reviewed the visual issues.
+- `git diff --check` passed.
+- Local `php -l` could not be run because this environment has no PHP binary.
+
 ## 2026-07-17 — Client Balance Search And Page Audit
 
 ### Files Changed

@@ -25,9 +25,9 @@ function cockpit_nav(string $active, string $month): void
         <?php foreach ($items as $key => [$label, $href]): ?>
             <a class="<?= $active === $key ? 'active' : '' ?>" href="<?= e(base_path($href)) ?>"><?= e($label) ?></a>
         <?php endforeach; ?>
-        <details class="nav-more" <?= array_key_exists($active, $adminItems) || in_array($active, ['our_companies','history_sync'], true) ? 'open' : '' ?>>
-            <summary>Адмін</summary>
-            <div>
+        <div class="nav-more" data-nav-more>
+            <button type="button" class="<?= array_key_exists($active, $adminItems) || in_array($active, ['our_companies','history_sync'], true) ? 'active' : '' ?>" data-nav-more-button aria-expanded="false">Ще</button>
+            <div data-nav-more-menu>
                 <?php foreach ($adminItems as $key => [$label, $href]): ?>
                     <a class="<?= $active === $key ? 'active' : '' ?>" href="<?= e(base_path($href)) ?>"><?= e($label) ?></a>
                 <?php endforeach; ?>
@@ -42,9 +42,34 @@ function cockpit_nav(string $active, string $month): void
                     <a href="<?= e(base_path('/index.php' . $monthQuery)) ?>">Старий Dashboard</a>
                 <?php endif; ?>
             </div>
-        </details>
+        </div>
         <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>
     </nav>
+    <script>
+        (function () {
+            document.querySelectorAll('[data-nav-more]').forEach(function (wrap) {
+                var button = wrap.querySelector('[data-nav-more-button]');
+                if (!button) return;
+                button.addEventListener('click', function (event) {
+                    event.stopPropagation();
+                    var isOpen = wrap.classList.toggle('is-open');
+                    button.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+                });
+                document.addEventListener('click', function (event) {
+                    if (!wrap.contains(event.target)) {
+                        wrap.classList.remove('is-open');
+                        button.setAttribute('aria-expanded', 'false');
+                    }
+                });
+                document.addEventListener('keydown', function (event) {
+                    if (event.key === 'Escape') {
+                        wrap.classList.remove('is-open');
+                        button.setAttribute('aria-expanded', 'false');
+                    }
+                });
+            });
+        })();
+    </script>
     <?php
 }
 

@@ -2078,15 +2078,8 @@ foreach ($invoices as $invoiceRow) {
     <link rel="stylesheet" href="<?= e(asset_path('/assets/app.css')) ?>">
 </head>
 <body>
-    <main class="page">
-        <header class="topbar">
-            <div class="brand-block">
-                <p class="eyebrow">Documents</p>
-                <h1>Рахунки</h1>
-                <p class="muted">Редаговані рахунки і видаткові з локальних замовлень KeyCRM</p>
-            </div>
-            <?php cockpit_nav('invoices', date('Y-m')); ?>
-        </header>
+    <main class="app-shell cockpit-shell invoice-workspace">
+        <?php cockpit_page_header('Documents', 'Рахунки', 'Реєстр, PDF-пакети і закриття документів з локальних замовлень KeyCRM.', 'invoices', date('Y-m'), false); ?>
 
         <?php if ($message !== ''): ?>
             <div class="notice"><?= e($message) ?></div>
@@ -2372,34 +2365,19 @@ foreach ($invoices as $invoiceRow) {
             </section>
         <?php endif; ?>
 
-        <section class="panel table-panel">
+        <section class="panel table-panel invoice-registry-panel">
             <div class="section-heading padded">
                 <div>
                     <span class="label">Основний список для роботи</span>
                     <h2>Реєстр рахунків</h2>
                 </div>
+                <span class="status-badge">PDF · видаткова · акт · пакет</span>
             </div>
-            <div class="table-wrap table-scroll">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Номер</th>
-                            <th>Платник / контакт</th>
-                            <th class="num">Сума</th>
-                            <th>Оплата</th>
-                            <th>Дедлайн оплати</th>
-                            <th>Дата</th>
-                            <th>Від кого</th>
-                            <th>Файли</th>
-                            <th>Статус документів</th>
-                            <th>Дія</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (!$invoices): ?>
-                            <tr><td colspan="10">Рахунків ще немає.</td></tr>
-                        <?php endif; ?>
-                        <?php foreach ($invoices as $invoiceRow): ?>
+            <div class="invoice-registry-list">
+                <?php if (!$invoices): ?>
+                    <div class="empty-state">Рахунків ще немає.</div>
+                <?php endif; ?>
+                <?php foreach ($invoices as $invoiceRow): ?>
                             <?php
                             $documentButtons = [
                                 'invoice' => '',
@@ -2422,10 +2400,17 @@ foreach ($invoices as $invoiceRow) {
                             }
                             $recipientName = invoice_recipient_name($invoiceRow);
                             $contactName = invoice_contact_name($invoiceRow);
+                            $isOverdue = invoice_is_overdue($invoiceRow);
                             ?>
-                            <tr>
-                                <td class="<?= invoice_is_overdue($invoiceRow) ? 'flag-danger-cell' : '' ?>"><strong><?= e((string) $invoiceRow['invoice_number']) ?></strong></td>
-                                <td class="wrap">
+                    <article class="invoice-registry-card <?= $isOverdue ? 'is-overdue' : '' ?>">
+                        <div class="invoice-registry-card__head">
+                            <div class="invoice-number-block">
+                                <span class="label">Номер</span>
+                                <strong><?= e((string) $invoiceRow['invoice_number']) ?></strong>
+                                <small><?= e(invoice_date_label((string) $invoiceRow['invoice_date'])) ?> / <?= e(invoice_datetime_time_label((string) ($invoiceRow['updated_at'] ?: $invoiceRow['created_at']))) ?></small>
+                            </div>
+                            <div class="invoice-client-block">
+                                <span class="label">Платник / контакт</span>
                                     <?php if ($recipientName !== ''): ?>
                                         <strong><?= e($recipientName) ?></strong>
                                     <?php else: ?>
@@ -2434,9 +2419,16 @@ foreach ($invoices as $invoiceRow) {
                                     <?php if ($contactName !== ''): ?>
                                         <small><?= e($contactName) ?></small>
                                     <?php endif; ?>
-                                </td>
-                                <td class="num"><?= e(invoice_money($invoiceRow['total_with_vat_uah'] ?? 0)) ?></td>
-                                <td>
+                            </div>
+                            <div class="invoice-amount-block">
+                                <span class="label">Сума</span>
+                                <strong><?= e(invoice_money($invoiceRow['total_with_vat_uah'] ?? 0)) ?></strong>
+                                <small><?= e((string) ($invoiceRow['seller_short_name'] ?: '—')) ?></small>
+                            </div>
+                        </div>
+                        <div class="invoice-registry-card__controls">
+                            <div class="invoice-control">
+                                <span class="label">Оплата</span>
                                     <form method="post" action="<?= e(base_path('/invoices.php')) ?>" class="inline-cell-form">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="action" value="status">
@@ -2459,21 +2451,18 @@ foreach ($invoices as $invoiceRow) {
                                             <?php endforeach; ?>
                                         </select>
                                     </form>
-                                </td>
-                                <td>
+                            </div>
+                            <div class="invoice-control">
+                                <span class="label">Дедлайн</span>
                                     <form method="post" action="<?= e(base_path('/invoices.php')) ?>" class="inline-cell-form payment-control-form">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="action" value="payment_due_date">
                                         <input type="hidden" name="id" value="<?= e((string) $invoiceRow['id']) ?>">
                                         <input class="deadline-date <?= e(invoice_deadline_class($invoiceRow)) ?>" type="date" name="payment_due_date" value="<?= e((string) (($invoiceRow['payment_due_date'] ?? '') ?: ($invoiceRow['expected_payment_date'] ?? ''))) ?>" onchange="this.form.submit()">
                                     </form>
-                                </td>
-                                <td class="registry-date">
-                                    <?= e(invoice_date_label((string) $invoiceRow['invoice_date'])) ?>
-                                    <small>/ <?= e(invoice_datetime_time_label((string) ($invoiceRow['updated_at'] ?: $invoiceRow['created_at']))) ?></small>
-                                </td>
-                                <td><?= e((string) ($invoiceRow['seller_short_name'] ?: '—')) ?></td>
-                                <td>
+                            </div>
+                            <div class="invoice-control invoice-files-control">
+                                <span class="label">Файли</span>
                                     <div class="invoice-doc-actions">
                                         <?php foreach (array_keys(invoice_document_types_for_seller($invoiceRow)) as $documentType): ?>
                                             <?php if ($documentButtons[$documentType] !== ''): ?>
@@ -2492,8 +2481,9 @@ foreach ($invoices as $invoiceRow) {
                                             <a class="file-chip file-chip--package" href="<?= e(base_path('/invoices.php?package=' . (int) $invoiceRow['id'])) ?>">Пакет</a>
                                         <?php endif; ?>
                                     </div>
-                                </td>
-                                <td>
+                            </div>
+                            <div class="invoice-control">
+                                <span class="label">Документи</span>
                                     <form method="post" action="<?= e(base_path('/invoices.php')) ?>" class="inline-cell-form">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="action" value="status">
@@ -2512,8 +2502,9 @@ foreach ($invoices as $invoiceRow) {
                                             <?php endforeach; ?>
                                         </select>
                                     </form>
-                                </td>
-                                <td>
+                            </div>
+                            <div class="invoice-control invoice-row-actions">
+                                <span class="label">Дія</span>
                                     <div class="row-actions">
                                         <a class="button small-button" href="<?= e(base_path('/invoices.php?edit=' . (int) $invoiceRow['id'])) ?>">Редагувати</a>
                                         <form method="post" action="<?= e(base_path('/invoices.php')) ?>" class="inline-cell-form">
@@ -2523,11 +2514,10 @@ foreach ($invoices as $invoiceRow) {
                                             <button type="submit" class="button-danger small-button icon-delete-button" data-confirm="Видалити рахунок <?= e((string) $invoiceRow['invoice_number']) ?>?">×</button>
                                         </form>
                                     </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+                            </div>
+                        </div>
+                    </article>
+                <?php endforeach; ?>
             </div>
         </section>
         <?= app_version_badge() ?>

@@ -74,6 +74,9 @@ Product direction:
 - Create one client profile page with orders, invoices, payments, buyers, legal entities, receivables, and notes.
 - Turn `Потрібна дія` into a real workflow: call client, check payment, pay supplier, close documents, snooze, done.
 - Make invoices a compact document workstation with registry first and focused edit/create panels.
+- Continue removing technical labels from CEO pages: replace internal field names/statuses with business language.
+- Add pagination and filters to `Продажі`, `Клієнти`, and `Документи` before these lists grow too large.
+- Add a proper client drill-down instead of trying to fit all months, buyers, orders, and debts into one table row.
 
 Planning file:
 

@@ -76,67 +76,67 @@ try {
 </head>
 <body>
 <main class="app-shell cockpit-shell">
-    <?php cockpit_page_header('CEO Money Cockpit', 'Продажі', 'Замовлення за місяцем продажу: db_orders.order_month.' . ($managerFilter !== '' ? ' Менеджер: ' . $managerFilter : ''), 'sales', $month); ?>
+    <?php cockpit_page_header('CEO Money Cockpit', 'Продажі', 'Замовлення, товари, оплата і борг за вибраний місяць.' . ($managerFilter !== '' ? ' Менеджер: ' . $managerFilter : ''), 'sales', $month); ?>
 
     <section class="kpi-grid">
         <div class="kpi-card"><span class="label">Факт</span><strong><?= e(finance_money($summary['sales_fact'])) ?></strong></div>
         <div class="kpi-card"><span class="label">Замовлення</span><strong><?= e((string) $summary['order_count']) ?></strong></div>
-        <div class="kpi-card"><span class="label">Gross margin</span><strong><?= e(finance_money($summary['gross_margin'])) ?></strong><small><?= e((string) $summary['gross_margin_percent']) ?>%</small></div>
+        <div class="kpi-card"><span class="label">Маржа</span><strong><?= e(finance_money($summary['gross_margin'])) ?></strong><small><?= e((string) $summary['gross_margin_percent']) ?>%</small></div>
         <div class="kpi-card"><span class="label">Борг за місяць</span><strong><?= e(finance_money($summary['sales_unpaid_by_order'])) ?></strong></div>
     </section>
 
-    <section class="panel dashboard-section">
+    <section class="panel dashboard-section sales-workstation">
         <div class="section-heading">
             <div><p class="eyebrow">Деталізація</p><h2>Замовлення за <?= e($month) ?></h2></div>
+            <span class="status-badge">товари показані всередині замовлення</span>
         </div>
-        <div class="table-scroll">
-            <table class="data-table">
-                <thead><tr><th>№</th><th>Дата</th><th>Клієнт</th><th>Менеджер</th><th>Статус</th><th>Товари</th><th>Сума</th><th>Оплачено</th><th>Борг</th><th>Margin</th></tr></thead>
-                <tbody>
-                <?php if (!$orders): ?><tr><td colspan="10">Немає даних.</td></tr><?php endif; ?>
-                <?php foreach ($orders as $order): ?>
-                    <tr>
-                        <td><?= e((string) $order['order_number']) ?></td>
-                        <td><?= e((string) $order['ordered_at']) ?></td>
-                        <td><strong><?= e((string) (($order['company_name'] ?? '') ?: ($order['buyer_name'] ?? '—'))) ?></strong><small><?= e((string) ($order['buyer_name'] ?? '')) ?></small></td>
-                        <td><?= e((string) ($order['manager_name'] ?: '—')) ?></td>
-                        <td><?= e((string) ($order['status_name'] ?: '—')) ?></td>
-                        <td><?= e((string) $order['item_count']) ?></td>
-                        <td class="num"><?= e(finance_money($order['total_amount_uah'])) ?></td>
-                        <td class="num"><?= e(finance_money($order['paid_amount_uah'])) ?></td>
-                        <td class="num"><strong><?= e(finance_money($order['unpaid_amount_uah'])) ?></strong></td>
-                        <td class="num"><?= e(finance_money($order['margin_sum_uah'])) ?></td>
-                    </tr>
-                    <?php $items = $orderItems[(int) ($order['keycrm_id'] ?? 0)] ?? []; ?>
+        <div class="order-feed">
+            <?php if (!$orders): ?><div class="empty-state">Немає даних.</div><?php endif; ?>
+            <?php foreach ($orders as $order): ?>
+                <?php
+                $items = $orderItems[(int) ($order['keycrm_id'] ?? 0)] ?? [];
+                $clientName = (string) (($order['company_name'] ?? '') ?: ($order['buyer_name'] ?? '—'));
+                $buyerName = trim((string) ($order['buyer_name'] ?? ''));
+                $unpaid = (float) ($order['unpaid_amount_uah'] ?? 0);
+                ?>
+                <article class="order-card <?= $unpaid > 0 ? 'has-debt' : '' ?>">
+                    <div class="order-card__main">
+                        <div class="order-card__identity">
+                            <span class="order-number">№ <?= e((string) $order['order_number']) ?></span>
+                            <strong><?= e($clientName) ?></strong>
+                            <?php if ($buyerName !== '' && $buyerName !== $clientName): ?><small><?= e($buyerName) ?></small><?php endif; ?>
+                            <small><?= e((string) $order['ordered_at']) ?> · <?= e((string) ($order['manager_name'] ?: 'Без менеджера')) ?></small>
+                        </div>
+                        <div class="order-card__status">
+                            <span class="status-badge"><?= e((string) ($order['status_name'] ?: '—')) ?></span>
+                            <small><?= e((string) $order['item_count']) ?> поз.</small>
+                        </div>
+                        <div class="order-card__money">
+                            <div><span>Сума</span><strong><?= e(finance_money($order['total_amount_uah'])) ?></strong></div>
+                            <div><span>Оплачено</span><strong><?= e(finance_money($order['paid_amount_uah'])) ?></strong></div>
+                            <div><span>Борг</span><strong class="<?= $unpaid > 0 ? 'danger-text' : '' ?>"><?= e(finance_money($order['unpaid_amount_uah'])) ?></strong></div>
+                            <div><span>Маржа</span><strong><?= e(finance_money($order['margin_sum_uah'])) ?></strong></div>
+                        </div>
+                    </div>
                     <?php if ($items): ?>
-                        <tr class="order-items-row">
-                            <td colspan="10">
-                                <div class="order-items-list">
-                                    <?php foreach ($items as $item): ?>
-                                        <div class="order-item-card">
-                                            <div>
-                                                <strong><?= e((string) ($item['name'] ?: 'Позиція')) ?></strong>
-                                                <?php if (!empty($item['properties_text'])): ?><small><?= e((string) $item['properties_text']) ?></small><?php endif; ?>
-                                                <?php if (!empty($item['comment'])): ?><small><?= e((string) $item['comment']) ?></small><?php endif; ?>
-                                            </div>
-                                            <span><?= e((string) ($item['quantity'] ?? '0')) ?> <?= e((string) (($item['unit'] ?? '') ?: 'шт')) ?></span>
-                                            <span><?= e(finance_money($item['sale_price'] ?? $item['product_price'] ?? 0)) ?></span>
-                                            <?php if ((float) ($item['discount_amount'] ?? 0) > 0 || (float) ($item['discount_percent'] ?? 0) > 0): ?>
-                                                <span class="muted">знижка <?= e(finance_money($item['discount_amount'] ?? 0)) ?> / <?= e((string) (float) ($item['discount_percent'] ?? 0)) ?>%</span>
-                                            <?php endif; ?>
-                                            <?php if ($canSeeCosts): ?>
-                                                <span class="muted">с/в <?= e(finance_money($item['purchase_price'] ?? 0)) ?></span>
-                                            <?php endif; ?>
-                                            <strong><?= e(finance_money($item['total_amount'] ?? 0)) ?></strong>
-                                        </div>
-                                    <?php endforeach; ?>
+                        <div class="order-products">
+                            <?php foreach ($items as $item): ?>
+                                <div class="order-product">
+                                    <div>
+                                        <strong><?= e((string) ($item['name'] ?: 'Позиція')) ?></strong>
+                                        <?php if (!empty($item['properties_text'])): ?><small><?= e((string) $item['properties_text']) ?></small><?php endif; ?>
+                                        <?php if (!empty($item['comment'])): ?><small><?= e((string) $item['comment']) ?></small><?php endif; ?>
+                                    </div>
+                                    <span><?= e((string) ($item['quantity'] ?? '0')) ?> <?= e((string) (($item['unit'] ?? '') ?: 'шт')) ?></span>
+                                    <span><?= e(finance_money($item['sale_price'] ?? $item['product_price'] ?? 0)) ?></span>
+                                    <?php if ($canSeeCosts): ?><span class="muted">с/в <?= e(finance_money($item['purchase_price'] ?? 0)) ?></span><?php endif; ?>
+                                    <strong><?= e(finance_money($item['total_amount'] ?? 0)) ?></strong>
                                 </div>
-                            </td>
-                        </tr>
+                            <?php endforeach; ?>
+                        </div>
                     <?php endif; ?>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
+                </article>
+            <?php endforeach; ?>
         </div>
     </section>
 </main>
