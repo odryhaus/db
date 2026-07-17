@@ -139,3 +139,4 @@ Known gaps:
 - Client balance grouping quality depends on cached `company_id` and `buyer_id`; rows without stable ids fall back to names.
 - Historical backfill uses KeyCRM `created_between` as the documented order-date filter. Validate the first imported month in production before importing very large ranges.
 - Historical backfill jobs may take time if a month has many orders; cron should process `cron/sync_worker.php` regularly.
+- `Потрібна дія` is currently generated from existing data and is not yet a task workflow. It has no owner override, snooze, completion, comments, or reminder history.

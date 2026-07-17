@@ -249,6 +249,22 @@ Decision:
 - Do not automatically scan all history.
 - Do not reset delta sync state when running historical backfill.
 
+## Cockpit v3 Navigation And Action Queue
+
+Decision:
+
+- Treat `dashboard_v2.php` as the daily CEO command center.
+- Keep the daily navigation to five product areas:
+  - Cockpit
+  - Клієнти
+  - Продажі
+  - Гроші
+  - Документи
+- Move technical and secondary pages into `Адмін`.
+- Add `Потрібна дія` to the main Cockpit so CEO sees what needs action before drilling into tables.
+- Action queue is read-only for now and links into the relevant existing page.
+- Do not delete technical pages; hide them from the daily path.
+
 ## Dashboard Hero Dedup, Pacing, Aging, Client Debt (2026-07-03)
 
 The CEO flagged that the KPI strip and the "План продажів" panel repeated the same План/Факт/Прогрес numbers twice, and asked for a graphical Факт → Оплачено/Не оплачено breakdown, debt aging, plan pacing, and a per-client negative-balance view she can turn into a statement to send.

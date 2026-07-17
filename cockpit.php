@@ -310,6 +310,155 @@ function cockpit_attention_items(string $month): array
     return $items;
 }
 
+function cockpit_action_queue(string $month): array
+{
+    $month = cockpit_valid_month($month);
+    $actions = [];
+    $notCanceled = cockpit_not_canceled_sql('o');
+
+    if (invoice_table_exists('db_orders')) {
+        $stmt = db()->query("
+            SELECT o.order_number, o.ordered_at, o.company_name, o.buyer_name, o.manager_name,
+                   o.unpaid_amount_uah, DATEDIFF(CURDATE(), o.ordered_at) AS debt_age
+            FROM db_orders o
+            WHERE o.unpaid_amount_uah > 0
+              AND {$notCanceled}
+            ORDER BY o.unpaid_amount_uah DESC, o.ordered_at ASC
+            LIMIT 5
+        ");
+        foreach ($stmt->fetchAll() as $row) {
+            $client = (string) (($row['company_name'] ?? '') ?: (($row['buyer_name'] ?? '') ?: 'Без клієнта'));
+            $actions[] = [
+                'level' => (int) ($row['debt_age'] ?? 0) > 30 ? 'danger' : 'warning',
+                'title' => 'Нагадати оплату',
+                'meta' => '#' . (string) $row['order_number'] . ' · ' . $client . ' · ' . (string) max(0, (int) ($row['debt_age'] ?? 0)) . ' дн.',
+                'value' => money_uah_compact($row['unpaid_amount_uah'] ?? 0),
+                'href' => '/receivables.php?month=' . urlencode($month),
+                'cta' => 'Дебіторка',
+            ];
+        }
+    }
+
+    if (invoice_table_exists('db_payment_obligations')) {
+        $stmt = db()->query("
+            SELECT title, payee_name, amount_uah, paid_amount_uah, due_date, priority
+            FROM db_payment_obligations
+            WHERE status IN ('planned','moved','problem')
+              AND is_strategic = 0
+              AND due_date IS NOT NULL
+              AND due_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+            ORDER BY due_date ASC, amount_uah DESC
+            LIMIT 4
+        ");
+        foreach ($stmt->fetchAll() as $row) {
+            $left = max((float) ($row['amount_uah'] ?? 0) - (float) ($row['paid_amount_uah'] ?? 0), 0);
+            $dueDate = (string) ($row['due_date'] ?? '');
+            $actions[] = [
+                'level' => $dueDate < date('Y-m-d') ? 'danger' : 'neutral',
+                'title' => 'Оплатити зобов’язання',
+                'meta' => trim((string) ($row['payee_name'] ?? '')) !== '' ? (string) $row['payee_name'] . ' · ' . $dueDate : (string) ($row['title'] ?? '') . ' · ' . $dueDate,
+                'value' => money_uah_compact($left),
+                'href' => '/expenses.php?month=' . urlencode($month),
+                'cta' => 'Витрати',
+            ];
+        }
+    } elseif (invoice_table_exists('db_expenses')) {
+        $stmt = db()->query("
+            SELECT title, category, amount_uah, paid_amount_uah, due_date
+            FROM db_expenses
+            WHERE status = 'planned'
+              AND is_strategic = 0
+              AND due_date IS NOT NULL
+              AND due_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+            ORDER BY due_date ASC, amount_uah DESC
+            LIMIT 4
+        ");
+        foreach ($stmt->fetchAll() as $row) {
+            $left = max((float) ($row['amount_uah'] ?? 0) - (float) ($row['paid_amount_uah'] ?? 0), 0);
+            $dueDate = (string) ($row['due_date'] ?? '');
+            $actions[] = [
+                'level' => $dueDate < date('Y-m-d') ? 'danger' : 'neutral',
+                'title' => 'Оплатити витрату',
+                'meta' => (string) ($row['title'] ?? '') . ' · ' . $dueDate,
+                'value' => money_uah_compact($left),
+                'href' => '/expenses.php?month=' . urlencode($month),
+                'cta' => 'Витрати',
+            ];
+        }
+    }
+
+    if (invoice_table_exists('db_invoices')) {
+        $stmt = db()->query("
+            SELECT invoice_number, buyer_display_name, recipient_legal_name, total_amount_uah,
+                   payment_status, payment_due_date, expected_payment_date
+            FROM db_invoices
+            WHERE payment_status IN ('waiting_payment','problem')
+              AND COALESCE(payment_due_date, expected_payment_date) IS NOT NULL
+              AND COALESCE(payment_due_date, expected_payment_date) <= DATE_ADD(CURDATE(), INTERVAL 3 DAY)
+            ORDER BY COALESCE(payment_due_date, expected_payment_date) ASC, total_amount_uah DESC
+            LIMIT 4
+        ");
+        foreach ($stmt->fetchAll() as $row) {
+            $dueDate = (string) (($row['payment_due_date'] ?? '') ?: ($row['expected_payment_date'] ?? ''));
+            $client = (string) (($row['recipient_legal_name'] ?? '') ?: (($row['buyer_display_name'] ?? '') ?: 'Без платника'));
+            $actions[] = [
+                'level' => $dueDate < date('Y-m-d') ? 'danger' : 'warning',
+                'title' => 'Контроль рахунку',
+                'meta' => '№ ' . (string) $row['invoice_number'] . ' · ' . $client . ' · ' . $dueDate,
+                'value' => money_uah_compact($row['total_amount_uah'] ?? 0),
+                'href' => '/invoices.php',
+                'cta' => 'Рахунки',
+            ];
+        }
+    }
+
+    if (invoice_table_exists('db_financial_transactions') && function_exists('finance_has_column') && finance_has_column('db_financial_transactions', 'allocation_status')) {
+        $count = (int) db()->query("
+            SELECT COUNT(*)
+            FROM db_financial_transactions
+            WHERE allocation_status = 'needs_review'
+              AND status = 'completed'
+        ")->fetchColumn();
+        if ($count > 0) {
+            $actions[] = [
+                'level' => 'neutral',
+                'title' => 'Рознести операції',
+                'meta' => 'Нерозподілені платежі за рахунками',
+                'value' => (string) $count,
+                'href' => '/payments.php?month=' . urlencode($month),
+                'cta' => 'Операції',
+            ];
+        }
+    }
+
+    if (invoice_table_exists('db_sync_jobs')) {
+        $failed = db()->query("
+            SELECT job_type, error_message
+            FROM db_sync_jobs
+            WHERE status = 'failed'
+            ORDER BY id DESC
+            LIMIT 1
+        ")->fetch();
+        if ($failed) {
+            $actions[] = [
+                'level' => 'danger',
+                'title' => 'Перевірити sync',
+                'meta' => (string) ($failed['job_type'] ?? 'sync') . ' · ' . substr((string) ($failed['error_message'] ?? ''), 0, 90),
+                'value' => 'failed',
+                'href' => '/history_sync.php?month=' . urlencode($month),
+                'cta' => 'Імпорт',
+            ];
+        }
+    }
+
+    usort($actions, static function (array $a, array $b): int {
+        $rank = ['danger' => 0, 'warning' => 1, 'neutral' => 2];
+        return ($rank[(string) ($a['level'] ?? 'neutral')] ?? 2) <=> ($rank[(string) ($b['level'] ?? 'neutral')] ?? 2);
+    });
+
+    return array_slice($actions, 0, 10);
+}
+
 function money_uah_compact($value): string
 {
     return number_format((float) $value, 0, '.', ' ') . ' UAH';

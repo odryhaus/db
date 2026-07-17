@@ -739,3 +739,28 @@ Reason: old payments already saved in `db_order_payments` need one more sync pas
 - `Закупки всього` uses all cached non-canceled orders.
 - `Факт` uses the selected month.
 - `Гроші` uses selected-month payment dates.
+
+## 2026-07-17 — Cockpit v3 Navigation And Action Queue
+
+### What Changed
+
+- Simplified the shared Cockpit navigation to five daily sections:
+  - Cockpit
+  - Клієнти
+  - Продажі
+  - Гроші
+  - Документи
+- Moved secondary/technical pages under `Адмін`.
+- Added an action-first `Потрібна дія` section to `dashboard_v2.php`.
+- Action queue currently surfaces:
+  - largest client receivables
+  - overdue/upcoming outgoing obligations or expenses
+  - invoice payment deadlines
+  - unallocated financial operations
+  - failed sync jobs
+
+### Product Direction
+
+- The system should guide CEO attention instead of exposing every table in the main menu.
+- Technical sync pages remain available but are not part of the daily workflow.
+- This is the first step toward CEO Money Cockpit v3: fewer entry points, more decision support.

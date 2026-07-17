@@ -46,6 +46,12 @@ try {
     $dashboardError = 'CEO Money Cockpit v2 data is not available yet.';
 }
 
+try {
+    $actionQueue = cockpit_action_queue($selectedMonth);
+} catch (Throwable $e) {
+    $actionQueue = [];
+}
+
 $syncQueued = isset($_GET['sync_queued']);
 
 ?><!doctype html>
@@ -117,6 +123,39 @@ $syncQueued = isset($_GET['sync_queued']);
                     <span><?= e((string) $item['title']) ?></span>
                     <strong><?= e((string) $item['value']) ?></strong>
                 </div>
+            <?php endforeach; ?>
+        </div>
+    </section>
+
+    <section class="cockpit-section action-queue-section">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Action queue</p>
+                <h2>Потрібна дія</h2>
+            </div>
+            <span class="status-badge">не звіт, а список роботи</span>
+        </div>
+        <div class="action-queue">
+            <?php if (!$actionQueue): ?>
+                <div class="action-card neutral">
+                    <div>
+                        <strong>Критичних дій немає</strong>
+                        <span>Система не бачить прострочених оплат, критичних боргів або sync-помилок.</span>
+                    </div>
+                    <span class="status-badge status-badge--success">OK</span>
+                </div>
+            <?php endif; ?>
+            <?php foreach ($actionQueue as $action): ?>
+                <a class="action-card <?= e((string) ($action['level'] ?? 'neutral')) ?>" href="<?= e(base_path((string) ($action['href'] ?? '/dashboard_v2.php?month=' . urlencode($selectedMonth)))) ?>">
+                    <div>
+                        <strong><?= e((string) ($action['title'] ?? 'Дія')) ?></strong>
+                        <span><?= e((string) ($action['meta'] ?? '')) ?></span>
+                    </div>
+                    <div class="action-card__value">
+                        <strong><?= e((string) ($action['value'] ?? '')) ?></strong>
+                        <small><?= e((string) ($action['cta'] ?? 'Відкрити')) ?></small>
+                    </div>
+                </a>
             <?php endforeach; ?>
         </div>
     </section>

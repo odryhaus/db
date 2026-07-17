@@ -301,6 +301,8 @@ After deploy:
 
 ## Cockpit v2 Remaining Detail Work
 
+- Validate Cockpit v3 navigation with CEO: daily pages should be enough without opening `Адмін`.
+- Turn `Потрібна дія` into a real workflow later: owner, due date, follow-up status, note, done/snooze.
 - Add pagination to `sales.php`, `cash.php`, `receivables.php`, `payments.php`.
 - Complete filters on `sales.php`: manager, client, payment status, order status.
 - Complete filters on `cash.php`: company, account, payment method, current/old order, allocation status.
