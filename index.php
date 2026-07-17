@@ -992,7 +992,7 @@ try {
                         <form class="inline-sync-form" method="post" action="<?= e(base_path('/index.php?month=' . urlencode($selectedMonth))) ?>">
                             <?= csrf_field() ?>
                             <input type="hidden" name="action" value="enqueue_global_sync">
-                            <button type="submit" class="small-button" <?= ($syncSummary['active'] ?? false) ? 'disabled' : '' ?>>Оновити все</button>
+                            <button type="submit" class="small-button"><?= ($syncSummary['active'] ?? false) ? 'Оновлюється...' : 'Оновити все' ?></button>
                         </form>
                         <a href="<?= e(base_path('/sync_orders.php')) ?>">Sync</a>
                         <a href="<?= e(base_path('/clients_sync.php')) ?>">Клієнти Sync</a>

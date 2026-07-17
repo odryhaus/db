@@ -1,5 +1,25 @@
 # Implementation Report
 
+## 2026-07-17 — Sync Button Stuck Active Fix
+
+### Files Changed
+
+- `sync_core.php`
+- `index.php`
+- `config/config.example.php`
+- documentation files
+
+### Problem Found
+
+The dashboard button became disabled whenever any sync job stayed `queued` or `running`. If a worker request timed out or cron was not fully configured, the button could remain inactive even after visible data refreshed.
+
+### What Changed
+
+- The CEO button is no longer hard-disabled.
+- While sync is active, the button text changes to `Оновлюється...`, but it remains clickable.
+- Stale running sync jobs are auto-recovered after `keycrm.sync_job_timeout_minutes` minutes.
+- Stuck parent `global_refresh` jobs are closed as `partial` if child jobs are no longer active.
+
 ## 2026-07-17 — Sync Debt Refresh Fix
 
 ### Files Changed

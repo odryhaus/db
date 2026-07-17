@@ -166,6 +166,7 @@ function sync_order_filter_endpoint(int $orderId): string
 function sync_enqueue_global_refresh(int $userId): int
 {
     ensure_sync_tables();
+    sync_recover_stale_jobs();
     $pdo = db();
     $active = $pdo->query("
         SELECT id
@@ -259,6 +260,7 @@ function sync_enqueue_delta_jobs(?int $userId = null): int
 
 function sync_claim_job(): ?array
 {
+    sync_recover_stale_jobs();
     $pdo = db();
     $pdo->beginTransaction();
     $job = $pdo->query("
@@ -374,6 +376,50 @@ function sync_update_parent_job(int $parentId): void
         'status' => $status,
         'id' => $parentId,
     ]);
+}
+
+function sync_recover_stale_jobs(): void
+{
+    if (!invoice_table_exists('db_sync_jobs')) {
+        return;
+    }
+
+    $timeoutMinutes = max(5, (int) app_config('keycrm.sync_job_timeout_minutes', 15));
+    db()->exec("
+        UPDATE db_sync_jobs
+        SET status = 'failed',
+            finished_at = NOW(),
+            error_message = COALESCE(error_message, 'Sync job timed out and was auto-recovered.')
+        WHERE status = 'running'
+          AND job_type <> 'global_refresh'
+          AND started_at IS NOT NULL
+          AND started_at < DATE_SUB(NOW(), INTERVAL {$timeoutMinutes} MINUTE)
+    ");
+
+    $parents = db()->query("
+        SELECT DISTINCT parent_job_id
+        FROM db_sync_jobs
+        WHERE parent_job_id IS NOT NULL
+    ")->fetchAll();
+    foreach ($parents as $parent) {
+        sync_update_parent_job((int) ($parent['parent_job_id'] ?? 0));
+    }
+
+    db()->exec("
+        UPDATE db_sync_jobs parent
+        SET parent.status = 'partial',
+            parent.finished_at = NOW(),
+            parent.error_message = COALESCE(parent.error_message, 'Global refresh timed out and was auto-recovered.')
+        WHERE parent.job_type = 'global_refresh'
+          AND parent.status = 'running'
+          AND parent.created_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+          AND NOT EXISTS (
+              SELECT 1
+              FROM db_sync_jobs child
+              WHERE child.parent_job_id = parent.id
+                AND child.status IN ('queued','running')
+          )
+    ");
 }
 
 function sync_upsert_order_from_keycrm(array $order): string
@@ -939,6 +985,7 @@ function sync_worker_run_once(): ?array
 function sync_active_summary(): array
 {
     ensure_sync_tables();
+    sync_recover_stale_jobs();
     $activeGlobal = db()->query("
         SELECT id
         FROM db_sync_jobs
