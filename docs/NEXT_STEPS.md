@@ -65,7 +65,23 @@ Rules:
 
 ## Next Milestone
 
-Payment Obligations v0.1 — create `db_payment_obligations` table and compact payment timeline UI.
+CEO Money Cockpit v3.1 — reduce daily work to fewer clearer pages.
+
+Product direction:
+
+- Keep daily navigation focused on `Cockpit`, `Клієнти`, `Продажі`, `Гроші`, and `Документи`.
+- Move technical pages to `Адмін` or direct drill-down links.
+- Create one client profile page with orders, invoices, payments, buyers, legal entities, receivables, and notes.
+- Turn `Потрібна дія` into a real workflow: call client, check payment, pay supplier, close documents, snooze, done.
+- Make invoices a compact document workstation with registry first and focused edit/create panels.
+
+Planning file:
+
+```text
+docs/PAGE_AUDIT.md
+```
+
+Payment Obligations v0.1 remains the next money-control foundation task: create `db_payment_obligations` table and compact payment timeline UI.
 
 Before that, verify Near Real-Time Sync v0.1 in production:
 

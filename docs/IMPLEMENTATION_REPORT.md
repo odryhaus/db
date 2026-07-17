@@ -1,5 +1,29 @@
 # Implementation Report
 
+## 2026-07-17 — Client Balance Search And Page Audit
+
+### Files Changed
+
+- `client_balances.php`
+- `docs/PAGE_AUDIT.md`
+- `docs/IMPLEMENTATION_REPORT.md`
+- `docs/NEXT_STEPS.md`
+
+### Problem Found
+
+`client_balances.php` search depended on individual SQL columns and could return an empty page even when the company existed in cached order/client data. SQL errors were also hidden behind the same `Даних немає` empty state.
+
+### What Changed
+
+- Client balance search now builds one combined text haystack from company, buyer, contact, manager, order number, and raw order JSON where available.
+- Search now matches all entered words, so partial company/contact phrases work better.
+- SQL failures are logged and shown as a visible page error instead of looking like no data exists.
+- Added `docs/PAGE_AUDIT.md` with page-by-page goals, current problems, and recommendations.
+
+### Recommendation
+
+Next product cleanup should create one client profile page and keep daily navigation focused on `Cockpit`, `Клієнти`, `Продажі`, `Гроші`, and `Документи`.
+
 ## 2026-07-17 — Expense Page Polish
 
 ### Files Changed

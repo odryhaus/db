@@ -13,6 +13,7 @@ $bounds = cockpit_month_bounds($month);
 $summary = cockpit_monthly_summary($month);
 $rowsByKey = [];
 $trend = [];
+$pageError = '';
 $hasOrders = invoice_table_exists('db_orders');
 $hasPayments = invoice_table_exists('db_order_payments');
 $orderColumns = $hasOrders ? finance_columns('db_orders') : [];
@@ -126,6 +127,12 @@ function client_balances_exprs(array $orderColumns, bool $hasClientCompanies, bo
             }
         }
     }
+    $searchFields[] = $companyName;
+    $searchFields[] = $buyerName;
+    if (in_array('raw_json', $orderColumns, true)) {
+        $searchFields[] = "o.raw_json";
+    }
+    $searchHaystack = "LOWER(CONCAT_WS(' ', " . implode(', ', array_map(static fn($field) => "COALESCE(CAST({$field} AS CHAR), '')", $searchFields)) . "))";
 
     return [
         'key' => $key,
@@ -133,7 +140,31 @@ function client_balances_exprs(array $orderColumns, bool $hasClientCompanies, bo
         'buyer_name' => $buyerName,
         'manager_name' => $hasManagerName ? "COALESCE(NULLIF(MAX(o.manager_name), ''), 'Без менеджера')" : "'Без менеджера'",
         'joins' => trim($companyJoin . "\n" . $contactJoin),
-        'search_sql' => $searchFields ? '(' . implode(' OR ', array_map(static fn($field) => "{$field} LIKE :search", $searchFields)) . ')' : '1=1',
+        'search_haystack' => $searchHaystack,
+    ];
+}
+
+function client_balances_search_filter(string $search, string $haystack): array
+{
+    $normalizedSearch = function_exists('mb_strtolower')
+        ? mb_strtolower(trim($search), 'UTF-8')
+        : strtolower(trim($search));
+    $tokens = preg_split('/\s+/u', $normalizedSearch, -1, PREG_SPLIT_NO_EMPTY);
+    if (!$tokens) {
+        return ['sql' => '', 'params' => []];
+    }
+
+    $parts = [];
+    $params = [];
+    foreach (array_values($tokens) as $index => $token) {
+        $key = 'search_' . $index;
+        $parts[] = "{$haystack} LIKE :{$key}";
+        $params[$key] = '%' . $token . '%';
+    }
+
+    return [
+        'sql' => ' AND (' . implode(' AND ', $parts) . ')',
+        'params' => $params,
     ];
 }
 
@@ -191,8 +222,9 @@ try {
     if ($hasOrders) {
         $expr = client_balances_exprs($orderColumns, $hasClientCompanies, $hasClientContacts, $clientCompanyColumns, $clientContactColumns);
         $notCanceled = cockpit_not_canceled_sql('o');
-        $searchSql = $search !== '' ? ' AND ' . $expr['search_sql'] : '';
-        $searchParams = $search !== '' ? ['search' => '%' . $search . '%'] : [];
+        $searchFilter = client_balances_search_filter($search, (string) $expr['search_haystack']);
+        $searchSql = (string) $searchFilter['sql'];
+        $searchParams = $searchFilter['params'];
 
         $stmt = db()->prepare("
             SELECT
@@ -351,6 +383,8 @@ try {
         }
     }
 } catch (Throwable $e) {
+    error_log('client_balances failed: ' . $e->getMessage());
+    $pageError = 'Не вдалося побудувати баланс клієнтів. Помилка записана в server error log.';
     $rowsByKey = [];
 }
 
@@ -383,6 +417,12 @@ $activeClientCount = count(array_filter($rows, static fn($row) => (float) $row['
         <div class="kpi-card"><span class="label">Нам повинні</span><strong><?= e(finance_money($summary['receivables_total'])) ?></strong><small>усі місяці</small></div>
         <div class="kpi-card"><span class="label">Активні у місяці</span><strong><?= e((string) $activeClientCount) ?></strong><small>компаній</small></div>
     </section>
+
+    <?php if ($pageError !== ''): ?>
+        <section class="panel dashboard-section">
+            <span class="status-badge status-badge--danger"><?= e($pageError) ?></span>
+        </section>
+    <?php endif; ?>
 
     <section class="panel dashboard-section">
         <form class="client-balance-toolbar" method="get" action="<?= e(base_path('/client_balances.php')) ?>">
