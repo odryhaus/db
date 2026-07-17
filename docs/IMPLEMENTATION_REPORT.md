@@ -720,3 +720,22 @@ Reason: old payments already saved in `db_order_payments` need one more sync pas
 - Daily `Оновити все` is a delta refresh, optimized for recent changes.
 - It does not automatically scan old months if old orders were not recently updated.
 - Historical backfill is intentionally explicit and month-bounded so the dashboard stays fast.
+
+## 2026-07-17 — Client Balance Search And Grouping Polish
+
+### What Changed
+
+- Reworked `client_balances.php` into one company-first list.
+- Removed the separate company/buyer mode from the working UI.
+- Buyers/contacts now appear inside the company row.
+- Company totals aggregate all buyers under the company.
+- Search now checks available local order, company, contact, email, phone, order number, and manager fields.
+- Rows sort by total purchases descending, then selected-month sales.
+
+### Data Rules
+
+- Company is the primary balance owner.
+- Buyer/contact is detail inside the company.
+- `Закупки всього` uses all cached non-canceled orders.
+- `Факт` uses the selected month.
+- `Гроші` uses selected-month payment dates.
