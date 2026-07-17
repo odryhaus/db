@@ -19,9 +19,9 @@ $monthDate = DateTimeImmutable::createFromFormat('!Y-m', $selectedMonth) ?: new 
 $monthStart = $monthDate->modify('first day of this month')->format('Y-m-d');
 $monthEnd = $monthDate->modify('last day of this month')->format('Y-m-d');
 
-$statusFilter = (string) ($_GET['status'] ?? 'planned');
+$statusFilter = (string) ($_GET['status'] ?? 'all');
 if (!in_array($statusFilter, array_merge(expense_statuses(), ['all']), true)) {
-    $statusFilter = 'planned';
+    $statusFilter = 'all';
 }
 
 $scopeFilter = (string) ($_GET['scope'] ?? 'all');
@@ -113,6 +113,9 @@ if (is_post()) {
         } else {
             if ($expenseType === 'strategic_debt') {
                 $isStrategic = 1;
+            }
+            if ($status === 'paid' && $paidAmount <= 0) {
+                $paidAmount = $amount;
             }
 
             $params = [
@@ -249,6 +252,31 @@ $monthlyStmt->execute([
 ]);
 $monthlyPlanned = $monthlyStmt->fetch() ?: [];
 
+$monthlyPaidStmt = db()->prepare("
+    SELECT
+        COALESCE(SUM(CASE WHEN paid_amount_uah > 0 THEN paid_amount_uah ELSE amount_uah END), 0) AS paid_total,
+        COUNT(*) AS paid_count
+    FROM db_expenses
+    WHERE status = 'paid'
+      AND is_strategic = 0
+      AND expense_type <> 'strategic_debt'
+      AND (
+        due_date BETWEEN :month_start AND :month_end
+        OR (
+            due_date IS NULL
+            AND updated_at >= :month_start_dt
+            AND updated_at < DATE_ADD(:month_end_dt, INTERVAL 1 DAY)
+        )
+      )
+");
+$monthlyPaidStmt->execute([
+    'month_start' => $monthStart,
+    'month_end' => $monthEnd,
+    'month_start_dt' => $monthStart,
+    'month_end_dt' => $monthEnd,
+]);
+$monthlyPaid = $monthlyPaidStmt->fetch() ?: [];
+
 $strategicStmt = db()->query("
     SELECT
         COALESCE(SUM(GREATEST(COALESCE(total_debt_amount_uah, amount_uah) - paid_amount_uah, 0)), 0) AS strategic_total,
@@ -306,6 +334,11 @@ $strategicDebt = $strategicStmt->fetch() ?: [];
                 <span class="label">Стратегічні борги</span>
                 <strong><?= e(expense_money($strategicDebt['strategic_total'] ?? 0)) ?></strong>
                 <small><?= e((string) ($strategicDebt['strategic_count'] ?? 0)) ?> записів</small>
+            </div>
+            <div class="kpi-card">
+                <span class="label">Оплачено за місяць</span>
+                <strong><?= e(expense_money($monthlyPaid['paid_total'] ?? 0)) ?></strong>
+                <small><?= e((string) ($monthlyPaid['paid_count'] ?? 0)) ?> оплат</small>
             </div>
             <div class="kpi-card">
                 <span class="label">Найближчі платежі</span>

@@ -46,6 +46,7 @@ $expectedProgress = 0;
 $paidShare = 0;
 $unpaidShare = 0;
 $operationalDueThisMonth = 0;
+$operationalPaidThisMonth = 0;
 $strategicDebtTotal = 0;
 $operationalDueThisWeek = 0;
 $overdueTotal = 0;
@@ -905,6 +906,29 @@ try {
     ]);
     $operationalDueThisMonth = (float) ($operationalStmt->fetchColumn() ?: 0);
 
+    $operationalPaidStmt = db()->prepare("
+        SELECT COALESCE(SUM(CASE WHEN paid_amount_uah > 0 THEN paid_amount_uah ELSE amount_uah END), 0)
+        FROM db_expenses
+        WHERE status = 'paid'
+          AND is_strategic = 0
+          AND expense_type <> 'strategic_debt'
+          AND (
+            due_date BETWEEN :month_start AND :month_end
+            OR (
+                due_date IS NULL
+                AND updated_at >= :month_start_dt
+                AND updated_at < DATE_ADD(:month_end_dt, INTERVAL 1 DAY)
+            )
+          )
+    ");
+    $operationalPaidStmt->execute([
+        'month_start' => $monthStart->format('Y-m-d'),
+        'month_end' => $monthEnd->format('Y-m-d'),
+        'month_start_dt' => $monthStart->format('Y-m-d'),
+        'month_end_dt' => $monthEnd->format('Y-m-d'),
+    ]);
+    $operationalPaidThisMonth = (float) ($operationalPaidStmt->fetchColumn() ?: 0);
+
     $strategicStmt = db()->query("
         SELECT COALESCE(SUM(GREATEST(COALESCE(total_debt_amount_uah, amount_uah) - paid_amount_uah, 0)), 0)
         FROM db_expenses
@@ -1335,6 +1359,10 @@ try {
                 <div>
                     <dt>Операційні платежі цього місяця</dt>
                     <dd><?= e(money_uah($operationalDueThisMonth)) ?></dd>
+                </div>
+                <div>
+                    <dt>Вже оплачено цього місяця</dt>
+                    <dd><?= e(money_uah($operationalPaidThisMonth)) ?></dd>
                 </div>
                 <div>
                     <dt>Платежі цього тижня</dt>

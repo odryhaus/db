@@ -1,5 +1,28 @@
 # Implementation Report
 
+## 2026-07-17 — Paid Expenses Visibility And Balance
+
+### Files Changed
+
+- `expenses.php`
+- `index.php`
+- `docs/IMPLEMENTATION_REPORT.md`
+
+### Problem Found
+
+Paid expenses were saved, but the expenses page defaulted to the `planned` filter, so paid rows were hidden by default. Paid expenses also did not have a clear monthly total in the balance view.
+
+### What Changed
+
+- Expenses journal now defaults to `all` statuses.
+- If an expense is saved with status `paid` and no paid amount, `paid_amount_uah` is set to the expense amount.
+- Expenses page now shows `Оплачено за місяць`.
+- Main dashboard `Ми повинні` block now shows `Вже оплачено цього місяця`.
+
+### Note
+
+Until a dedicated `paid_at` field exists, paid-month reporting uses `due_date`; if `due_date` is empty, it uses `updated_at`.
+
 ## 2026-07-17 — Expense Save Visibility Fix
 
 ### Files Changed
