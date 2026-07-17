@@ -46,6 +46,64 @@ function ensure_finance_tables(): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_payment_obligations (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
+            payee_name VARCHAR(255) NULL,
+            amount_uah DECIMAL(14,2) NOT NULL DEFAULT 0,
+            currency VARCHAR(10) DEFAULT 'UAH',
+            due_date DATE NULL,
+            status ENUM('planned','paid','moved','canceled','problem') NOT NULL DEFAULT 'planned',
+            priority ENUM('low','normal','high','critical') NOT NULL DEFAULT 'normal',
+            obligation_type ENUM('order_contractor','supplier','rent','salary','tax','subscription','loan_payment','operational_debt','strategic_debt','other') NOT NULL DEFAULT 'other',
+            category VARCHAR(100) NULL,
+            keycrm_order_id INT UNSIGNED NULL,
+            order_number VARCHAR(50) NULL,
+            invoice_id INT UNSIGNED NULL,
+            is_recurring TINYINT(1) NOT NULL DEFAULT 0,
+            recurrence_type ENUM('none','monthly','weekly','custom') NOT NULL DEFAULT 'none',
+            repeat_day TINYINT UNSIGNED NULL,
+            repeat_until DATE NULL,
+            is_strategic TINYINT(1) NOT NULL DEFAULT 0,
+            total_debt_amount_uah DECIMAL(14,2) NULL,
+            paid_amount_uah DECIMAL(14,2) NOT NULL DEFAULT 0,
+            note TEXT NULL,
+            created_by_user_id INT UNSIGNED NULL,
+            paid_at DATETIME NULL,
+            moved_from_due_date DATE NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_due_date (due_date),
+            KEY idx_status (status),
+            KEY idx_obligation_type (obligation_type),
+            KEY idx_is_strategic (is_strategic),
+            KEY idx_keycrm_order_id (keycrm_order_id),
+            KEY idx_invoice_id (invoice_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS db_monthly_costs (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            month CHAR(7) NOT NULL,
+            cost_type ENUM('direct','operating','financial','tax','other') NOT NULL DEFAULT 'operating',
+            category VARCHAR(120) NULL,
+            title VARCHAR(255) NOT NULL,
+            amount_uah DECIMAL(14,2) NOT NULL DEFAULT 0,
+            source ENUM('manual','payment_obligation','keycrm_expense','import') NOT NULL DEFAULT 'manual',
+            source_id INT UNSIGNED NULL,
+            is_locked TINYINT(1) NOT NULL DEFAULT 0,
+            note TEXT NULL,
+            created_by_user_id INT UNSIGNED NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_month (month),
+            KEY idx_cost_type (cost_type),
+            KEY idx_source (source, source_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
     ensure_sync_tables();
 }
 
@@ -80,6 +138,7 @@ function ensure_sync_tables(): void
             error_message TEXT NULL,
             created_by_user_id INT UNSIGNED NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             KEY idx_parent_job_id (parent_job_id),
             KEY idx_job_type_status (job_type, status),
             KEY idx_status_created (status, created_at)
@@ -91,22 +150,34 @@ function ensure_sync_tables(): void
             id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             keycrm_payment_id VARCHAR(80) NOT NULL,
             keycrm_order_id INT UNSIGNED NOT NULL,
+            order_number VARCHAR(80) NULL,
             payment_method_id INT UNSIGNED NULL,
             payment_method_name VARCHAR(190) NULL,
+            seller_company_id INT UNSIGNED NULL,
+            seller_account_id INT UNSIGNED NULL,
             amount DECIMAL(14,2) NOT NULL DEFAULT 0,
             currency VARCHAR(10) NOT NULL DEFAULT 'UAH',
             status VARCHAR(50) NULL,
             payment_date DATETIME NULL,
+            source_created_at DATETIME NULL,
             source_updated_at DATETIME NULL,
             source_hash CHAR(64) NULL,
             raw_json LONGTEXT NULL,
             synced_at DATETIME NULL,
+            is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+            deleted_at DATETIME NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE KEY uq_keycrm_payment_id (keycrm_payment_id),
             KEY idx_keycrm_order_id (keycrm_order_id),
+            KEY idx_order_number (order_number),
             KEY idx_payment_date (payment_date),
-            KEY idx_status (status)
+            KEY idx_status (status),
+            KEY idx_payment_method_id (payment_method_id),
+            KEY idx_seller_company_id (seller_company_id),
+            KEY idx_seller_account_id (seller_account_id),
+            KEY idx_source_updated_at (source_updated_at),
+            KEY idx_is_deleted (is_deleted)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
@@ -154,6 +225,19 @@ function ensure_sync_tables(): void
     invoice_add_column_if_missing('db_sync_state', 'last_cursor', 'VARCHAR(190) NULL');
     invoice_add_column_if_missing('db_sync_state', 'last_page', 'INT UNSIGNED NULL');
     invoice_modify_column_if_exists('db_sync_state', 'status', "ENUM('idle','queued','running','success','partial','failed') NOT NULL DEFAULT 'idle'");
+    invoice_add_column_if_missing('db_sync_jobs', 'updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
+    invoice_add_column_if_missing('db_order_payments', 'order_number', 'VARCHAR(80) NULL');
+    invoice_add_column_if_missing('db_order_payments', 'seller_company_id', 'INT UNSIGNED NULL');
+    invoice_add_column_if_missing('db_order_payments', 'seller_account_id', 'INT UNSIGNED NULL');
+    invoice_add_column_if_missing('db_order_payments', 'source_created_at', 'DATETIME NULL');
+    invoice_add_column_if_missing('db_order_payments', 'is_deleted', 'TINYINT(1) NOT NULL DEFAULT 0');
+    invoice_add_column_if_missing('db_order_payments', 'deleted_at', 'DATETIME NULL');
+    invoice_add_index_if_missing('db_order_payments', 'idx_order_number', 'order_number');
+    invoice_add_index_if_missing('db_order_payments', 'idx_payment_method_id', 'payment_method_id');
+    invoice_add_index_if_missing('db_order_payments', 'idx_seller_company_id', 'seller_company_id');
+    invoice_add_index_if_missing('db_order_payments', 'idx_seller_account_id', 'seller_account_id');
+    invoice_add_index_if_missing('db_order_payments', 'idx_source_updated_at', 'source_updated_at');
+    invoice_add_index_if_missing('db_order_payments', 'idx_is_deleted', 'is_deleted');
     if (invoice_table_exists('db_orders')) {
         invoice_add_column_if_missing('db_orders', 'source_hash', 'CHAR(64) NULL');
         invoice_add_index_if_missing('db_orders', 'idx_source_updated_at', 'source_updated_at');

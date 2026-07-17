@@ -490,7 +490,39 @@ function sync_upsert_order_from_keycrm(array $order): string
     return $insert ? 'inserted' : 'updated';
 }
 
-function sync_upsert_payment(array $payment, int $orderId): string
+function sync_payment_method_name(array $payment): ?string
+{
+    $method = $payment['payment_method'] ?? null;
+    if (is_array($method)) {
+        foreach (['name', 'title', 'label'] as $key) {
+            $value = trim((string) ($method[$key] ?? ''));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+    }
+
+    $methodValue = $payment['payment_method'] ?? '';
+    $method = is_scalar($methodValue) ? (string) $methodValue : '';
+    if ($method === '') {
+        $method = (string) ($payment['payment_method_name'] ?? '');
+    }
+    return trim($method) !== '' ? trim($method) : null;
+}
+
+function sync_payment_method_id(array $payment): ?int
+{
+    if (isset($payment['payment_method_id']) && (int) $payment['payment_method_id'] > 0) {
+        return (int) $payment['payment_method_id'];
+    }
+    if (is_array($payment['payment_method'] ?? null) && (int) ($payment['payment_method']['id'] ?? 0) > 0) {
+        return (int) $payment['payment_method']['id'];
+    }
+
+    return null;
+}
+
+function sync_upsert_payment(array $payment, int $orderId, ?string $orderNumber = null): string
 {
     $id = (string) (($payment['id'] ?? '') ?: (($payment['uuid'] ?? '') ?: hash('sha1', $orderId . json_encode($payment))));
     $hash = sync_source_hash($payment);
@@ -500,37 +532,53 @@ function sync_upsert_payment(array $payment, int $orderId): string
     if ($oldHash === $hash) {
         return 'unchanged';
     }
-    $method = (string) (($payment['payment_method'] ?? '') ?: ($payment['payment_method_name'] ?? ''));
+    $isDeleted = !empty($payment['is_deleted']) || !empty($payment['deleted_at']);
     $stmt = db()->prepare("
         INSERT INTO db_order_payments
-            (keycrm_payment_id, keycrm_order_id, payment_method_id, payment_method_name, amount, currency, status, payment_date, source_updated_at, source_hash, raw_json, synced_at)
+            (keycrm_payment_id, keycrm_order_id, order_number, payment_method_id, payment_method_name,
+             seller_company_id, seller_account_id, amount, currency, status, payment_date, source_created_at,
+             source_updated_at, source_hash, raw_json, synced_at, is_deleted, deleted_at)
         VALUES
-            (:keycrm_payment_id, :keycrm_order_id, :payment_method_id, :payment_method_name, :amount, :currency, :status, :payment_date, :source_updated_at, :source_hash, :raw_json, NOW())
+            (:keycrm_payment_id, :keycrm_order_id, :order_number, :payment_method_id, :payment_method_name,
+             :seller_company_id, :seller_account_id, :amount, :currency, :status, :payment_date, :source_created_at,
+             :source_updated_at, :source_hash, :raw_json, NOW(), :is_deleted, :deleted_at)
         ON DUPLICATE KEY UPDATE
             keycrm_order_id = VALUES(keycrm_order_id),
+            order_number = VALUES(order_number),
             payment_method_id = VALUES(payment_method_id),
             payment_method_name = VALUES(payment_method_name),
+            seller_company_id = VALUES(seller_company_id),
+            seller_account_id = VALUES(seller_account_id),
             amount = VALUES(amount),
             currency = VALUES(currency),
             status = VALUES(status),
             payment_date = VALUES(payment_date),
+            source_created_at = VALUES(source_created_at),
             source_updated_at = VALUES(source_updated_at),
             source_hash = VALUES(source_hash),
             raw_json = VALUES(raw_json),
+            is_deleted = VALUES(is_deleted),
+            deleted_at = VALUES(deleted_at),
             synced_at = NOW()
     ");
     $stmt->execute([
         'keycrm_payment_id' => $id,
         'keycrm_order_id' => $orderId,
-        'payment_method_id' => $payment['payment_method_id'] ?? null,
-        'payment_method_name' => $method !== '' ? $method : null,
+        'order_number' => $orderNumber,
+        'payment_method_id' => sync_payment_method_id($payment),
+        'payment_method_name' => sync_payment_method_name($payment),
+        'seller_company_id' => $payment['seller_company_id'] ?? null,
+        'seller_account_id' => $payment['seller_account_id'] ?? null,
         'amount' => round((float) ($payment['amount'] ?? 0), 2),
         'currency' => (string) (($payment['actual_currency'] ?? '') ?: (($payment['currency'] ?? '') ?: 'UAH')),
         'status' => $payment['status'] ?? null,
         'payment_date' => sync_datetime($payment['payment_date'] ?? null),
+        'source_created_at' => sync_datetime($payment['created_at'] ?? null),
         'source_updated_at' => sync_datetime($payment['updated_at'] ?? null),
         'source_hash' => $hash,
         'raw_json' => json_encode($payment, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        'is_deleted' => $isDeleted ? 1 : 0,
+        'deleted_at' => sync_datetime($payment['deleted_at'] ?? null),
     ]);
 
     sync_recalculate_order_payment_totals($orderId);
@@ -565,6 +613,7 @@ function sync_recalculate_order_payment_totals(int $orderId): void
         SELECT amount, status
         FROM db_order_payments
         WHERE keycrm_order_id = :order_id
+          AND is_deleted = 0
     ");
     $payments->execute(['order_id' => $orderId]);
     $paid = 0.0;
@@ -679,9 +728,10 @@ function sync_run_job_type(string $jobType): array
                     $counts[$result]++;
                 }
                 if (in_array($jobType, ['orders','payments'], true)) {
+                    $orderNumber = (string) (($row['number'] ?? '') ?: (($row['source_uuid'] ?? '') ?: $orderId));
                     foreach ((array) ($row['payments'] ?? []) as $payment) {
                         if (is_array($payment) && $orderId > 0) {
-                            $counts[sync_upsert_payment($payment, $orderId)]++;
+                            $counts[sync_upsert_payment($payment, $orderId, $orderNumber)]++;
                         }
                     }
                 }
@@ -764,7 +814,8 @@ function sync_run_unpaid_orders_refresh(string $apiKey): array
 
         foreach ((array) ($order['payments'] ?? []) as $payment) {
             if (is_array($payment)) {
-                $counts[sync_upsert_payment($payment, $orderId)]++;
+                $orderNumber = (string) (($order['number'] ?? '') ?: (($order['source_uuid'] ?? '') ?: $orderId));
+                $counts[sync_upsert_payment($payment, $orderId, $orderNumber)]++;
             }
         }
         sync_recalculate_order_payment_totals($orderId);
