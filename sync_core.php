@@ -720,7 +720,7 @@ function sync_run_unpaid_orders_refresh(string $apiKey): array
         return $counts;
     }
 
-    $limit = (int) app_config('keycrm.unpaid_refresh_limit', 500);
+    $limit = (int) app_config('keycrm.unpaid_refresh_limit', 50);
     $stmt = db()->prepare("
         SELECT keycrm_id
         FROM db_orders

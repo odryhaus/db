@@ -1,5 +1,30 @@
 # Implementation Report
 
+## 2026-07-17 — Sync UX Cleanup
+
+### Files Changed
+
+- `index.php`
+- `invoices.php`
+- `targets.php`
+- `users.php`
+- `expenses.php`
+- `sync_core.php`
+- `config/config.example.php`
+- documentation files
+
+### What Changed
+
+- Daily UI now has one main refresh control: `Оновити все` on the dashboard.
+- Removed old `Sync` / `Клієнти Sync` links from daily navigation.
+- Technical sync pages remain available by direct URL for admin/debug use, but they are not part of the normal CEO workflow.
+- Dashboard sync status now shows text like `Синхронізація: оновлюється, задач: N` instead of making the refresh button look stuck.
+- Reduced web fallback unpaid-order batch size from 500 to 50 so the site stays responsive if cron is not configured.
+
+### Recommendation
+
+Configure cron for real near-online updates. The browser fallback is only a safety net.
+
 ## 2026-07-17 — Sync Button Stuck Active Fix
 
 ### Files Changed

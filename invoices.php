@@ -2012,8 +2012,6 @@ foreach ($invoices as $invoiceRow) {
                 <?php endif; ?>
                 <a href="<?= e(base_path('/expenses.php')) ?>">Витрати</a>
                 <?php if (user_role() === 'ceo'): ?>
-                    <a href="<?= e(base_path('/sync_orders.php')) ?>">Синхронізація</a>
-                    <a href="<?= e(base_path('/clients_sync.php')) ?>">Клієнти Sync</a>
                     <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
                 <?php endif; ?>
                 <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>

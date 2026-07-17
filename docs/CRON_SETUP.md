@@ -20,7 +20,7 @@ Run every minute to process one queued job:
 
 If hosting allows multiple cron lines, run the worker twice per minute or add a second identical worker command. The worker claims one job at a time and skips duplicate running jobs of the same type.
 
-The dashboard also has a CEO-only web fallback that processes one queued job while the page is open, but cron is still recommended for reliable near-real-time updates.
+The dashboard also has a CEO-only web fallback that processes queued jobs while the page is open, but cron is still recommended for reliable near-real-time updates.
 
 ## Manual CEO Refresh
 

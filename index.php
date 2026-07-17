@@ -992,10 +992,8 @@ try {
                         <form class="inline-sync-form" method="post" action="<?= e(base_path('/index.php?month=' . urlencode($selectedMonth))) ?>">
                             <?= csrf_field() ?>
                             <input type="hidden" name="action" value="enqueue_global_sync">
-                            <button type="submit" class="small-button"><?= ($syncSummary['active'] ?? false) ? 'Оновлюється...' : 'Оновити все' ?></button>
+                            <button type="submit" class="small-button">Оновити все</button>
                         </form>
-                        <a href="<?= e(base_path('/sync_orders.php')) ?>">Sync</a>
-                        <a href="<?= e(base_path('/clients_sync.php')) ?>">Клієнти Sync</a>
                         <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
                     <?php endif; ?>
                     <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>
@@ -1371,7 +1369,8 @@ try {
                             return;
                         }
                         if (data.active) {
-                            line.textContent = 'Синхронізація: оновлюється зараз';
+                            var count = data.active_jobs && data.active_jobs.length ? data.active_jobs.length : 0;
+                            line.textContent = 'Синхронізація: оновлюється' + (count ? ', задач: ' + count : '');
                             return;
                         }
                         var finished = data.last_global_job && data.last_global_job.finished_at ? data.last_global_job.finished_at : 'ще не було';
@@ -1387,7 +1386,7 @@ try {
                     .then(function () { refreshSyncStatus(); })
                     .catch(function () { refreshSyncStatus(); });
             }
-            var timer = active ? setInterval(runSyncTick, 3000) : null;
+            var timer = active ? setInterval(runSyncTick, 5000) : null;
             if (active) {
                 runSyncTick();
             }

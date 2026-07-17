@@ -215,6 +215,7 @@ Decision:
 
 - Use background sync jobs instead of long browser requests.
 - CEO dashboard has one global button: `Оновити все`.
+- Old manual sync pages are technical/admin fallback pages and should not appear in daily navigation.
 - Jobs are stored in `db_sync_jobs` and processed by `cron/sync_worker.php`.
 - Use KeyCRM `filter[updated_between]` with a 120 second overlap for delta sync.
 - Keep bounded page limits as protection.

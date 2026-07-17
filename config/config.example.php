@@ -20,7 +20,7 @@ return [
         'api_key' => 'CHANGE_ME_IN_REAL_CONFIG',
         'sync_delta_pages' => 10,
         'sync_job_timeout_minutes' => 15,
-        'unpaid_refresh_limit' => 500,
+        'unpaid_refresh_limit' => 50,
         'client_sync_delta_pages' => 20,
         'client_sync_initial_pages' => 200,
     ],

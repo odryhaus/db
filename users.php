@@ -76,7 +76,6 @@ $users = $stmt->fetchAll();
                 <a href="<?= e(base_path('/targets.php')) ?>">Плани</a>
                 <a href="<?= e(base_path('/invoices.php')) ?>">Рахунки</a>
                 <a href="<?= e(base_path('/expenses.php')) ?>">Витрати</a>
-                <a href="<?= e(base_path('/sync_orders.php')) ?>">Синхронізація</a>
                 <a class="active" href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
                 <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>
             </nav>
