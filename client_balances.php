@@ -297,6 +297,19 @@ function client_balances_trend_rank(string $trendClass): int
     return $ranks[$trendClass] ?? 5;
 }
 
+function client_balances_count_label(int $count, string $one, string $few, string $many): string
+{
+    $mod10 = $count % 10;
+    $mod100 = $count % 100;
+    if ($mod10 === 1 && $mod100 !== 11) {
+        return $one;
+    }
+    if (in_array($mod10, [2, 3, 4], true) && !in_array($mod100, [12, 13, 14], true)) {
+        return $few;
+    }
+    return $many;
+}
+
 function client_balances_trend(array $trend, string $clientKey, array $months, array $previousMonths): array
 {
     $current = 0.0;
@@ -659,45 +672,35 @@ $rows = array_slice($filteredRows, 0, 200);
                 $trendLabel = (string) $row['trend_label'];
                 $currentQuarterSales = (float) $row['current_quarter_sales'];
                 $previousQuarterSales = (float) $row['previous_quarter_sales'];
-                $trendArrow = $trendClass === 'up' ? '↑' : ($trendClass === 'down' || $trendClass === 'sleeping' ? '↓' : ($trendClass === 'idle' ? '–' : '→'));
+                $trendArrow = $trendClass === 'up' ? '↑' : ($trendClass === 'down' ? '↓' : ($trendClass === 'new' ? '→' : ($trendClass === 'idle' ? '–' : '')));
+                $extraBuyers = (int) $row['buyers_count'] - count($row['buyers']);
                 $salesLink = base_path('/sales.php?' . client_balances_query([
                     'from_month' => $months[0],
                     'to_month' => $months[2],
                     'client_key' => $clientKey,
                 ]));
                 ?>
-                <article class="client-command-card <?= e($trendClass) ?>">
-                    <div class="client-command-main">
-                        <div class="client-trend-badge <?= e($trendClass) ?>">
-                            <strong><?= e($trendArrow) ?></strong>
-                            <span><?= e($trendLabel) ?></span>
-                        </div>
-                        <div class="client-stack">
-                            <a class="client-stack-company client-company-link" href="<?= e($salesLink) ?>"><?= e((string) $row['client_name']) ?></a>
-                            <?php if ($row['buyers']): ?>
-                                <span class="client-stack-contact"><?= e(implode(' / ', $row['buyers'])) ?></span>
-                            <?php endif; ?>
-                            <?php if ((int) $row['buyers_count'] > count($row['buyers'])): ?>
-                                <span class="client-stack-contact">+<?= e((string) ((int) $row['buyers_count'] - count($row['buyers']))) ?> ще</span>
-                            <?php endif; ?>
-                        </div>
-                        <div class="client-manager-pill"><?= e((string) ($row['manager_name'] ?: 'Без менеджера')) ?></div>
+                <article class="client-row <?= e($trendClass) ?>">
+                    <div class="client-row-head">
+                        <a class="client-row-name" href="<?= e($salesLink) ?>"><?= e((string) $row['client_name']) ?></a>
+                        <span class="client-row-status">
+                            <span class="client-status-dot <?= e($trendClass) ?>"></span><?= e($trendArrow !== '' ? $trendArrow . ' ' : '') ?><?= e($trendLabel) ?>
+                        </span>
+                        <?php if ($row['buyers']): ?>
+                            <details class="client-row-contacts">
+                                <summary><?= e((string) $row['buyers_count']) ?> <?= e(client_balances_count_label((int) $row['buyers_count'], 'контакт', 'контакти', 'контактів')) ?></summary>
+                                <div class="client-row-contacts-list">
+                                    <?= e(implode(' / ', $row['buyers'])) ?><?= $extraBuyers > 0 ? ' +' . e((string) $extraBuyers) . ' ще' : '' ?>
+                                </div>
+                            </details>
+                        <?php endif; ?>
+                        <span class="client-manager-tag"><?= e((string) ($row['manager_name'] ?: 'Без менеджера')) ?></span>
                     </div>
-                    <div class="client-command-metrics">
-                        <div><span>Квартал</span><strong><?= e(finance_money($currentQuarterSales)) ?></strong><small>було <?= e(finance_money($previousQuarterSales)) ?></small></div>
-                        <div><span>Гроші</span><strong><?= e(finance_money($row['cash_received'])) ?></strong><small><?= (int) $row['cash_count'] > 0 ? e((string) $row['cash_count']) . ' пл.' : '&nbsp;' ?></small></div>
-                        <div><span>Борг</span><strong class="<?= (float) $row['receivable_total'] > 0 ? 'danger-text' : '' ?>"><?= e(finance_money($row['receivable_total'])) ?></strong><small><?= (int) $row['receivable_count'] > 0 ? e((string) $row['receivable_count']) . ' борг.' : '&nbsp;' ?></small></div>
-                    </div>
-                    <p class="client-command-secondary">Закупки всього <strong><?= e(finance_money($row['total_purchases'])) ?></strong> · Оплачено в замовленнях <strong><?= e(finance_money($row['paid_by_order'])) ?></strong></p>
-                    <div class="client-month-strip client-quarter-strip">
-                        <?php foreach ($months as $trendMonth): ?>
-                            <?php $monthData = $trend[$clientKey][$trendMonth] ?? ['sales' => 0, 'paid' => 0, 'unpaid' => 0, 'count' => 0]; ?>
-                            <span class="client-month-cell <?= (float) $monthData['sales'] > 0 ? 'has-sales' : '' ?>">
-                                <small><?= e(client_balances_month_label($trendMonth)) ?></small>
-                                <strong><?= e(money_uah_compact($monthData['sales'])) ?></strong>
-                                <?php if ((float) $monthData['unpaid'] > 0): ?><em>борг <?= e(money_uah_compact($monthData['unpaid'])) ?></em><?php endif; ?>
-                            </span>
-                        <?php endforeach; ?>
+                    <div class="client-stat-row">
+                        <div class="client-stat"><span>Квартал</span><strong><?= e(finance_money($currentQuarterSales)) ?></strong><small>було <?= e(finance_money($previousQuarterSales)) ?></small></div>
+                        <div class="client-stat"><span>Гроші</span><strong><?= e(finance_money($row['cash_received'])) ?></strong><small><?= (int) $row['cash_count'] > 0 ? e((string) $row['cash_count']) . ' пл.' : '&nbsp;' ?></small></div>
+                        <div class="client-stat"><span>Борг</span><strong class="<?= (float) $row['receivable_total'] > 0 ? 'danger-text' : '' ?>"><?= e(finance_money($row['receivable_total'])) ?></strong><small><?= (int) $row['receivable_count'] > 0 ? e((string) $row['receivable_count']) . ' борг.' : '&nbsp;' ?></small></div>
+                        <div class="client-stat client-stat-muted"><span>Закупки всього</span><strong><?= e(finance_money($row['total_purchases'])) ?></strong><small>&nbsp;</small></div>
                     </div>
                 </article>
             <?php endforeach; ?>

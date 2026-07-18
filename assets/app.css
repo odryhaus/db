@@ -42,6 +42,11 @@
     --chart-red: #f43f5e;
     --chart-blue: #3b82f6;
 
+    /* client-tracking accent — bold flat yellow, used only as a status dot/attention marker */
+    --accent-yellow: #ffc72c;
+    --accent-yellow-ink: #6b4c00;
+    --accent-yellow-soft: #fff6dd;
+
     /* radius */
     --radius-sm: 6px;
     --radius-md: 8px;
@@ -1821,162 +1826,155 @@ tr:last-child td {
     text-align: center;
 }
 
-.client-command-card {
+.client-row {
     display: grid;
-    gap: 10px;
+    gap: 6px;
     border: 0;
     border-bottom: 1px solid var(--line);
-    border-radius: 0;
     background: transparent;
-    padding: 16px 0 16px 12px;
+    padding: 10px 0 10px 12px;
     box-shadow: inset 3px 0 0 var(--line);
 }
 
-.client-command-card.down {
-    box-shadow: inset 3px 0 0 var(--danger);
+.client-row.down {
+    box-shadow: inset 3px 0 0 var(--text);
 }
 
-.client-command-card.sleeping {
-    box-shadow: inset 3px 0 0 var(--warning);
+.client-row.sleeping {
+    box-shadow: inset 3px 0 0 var(--accent-yellow);
 }
 
-.client-command-card.up,
-.client-command-card.new {
-    box-shadow: inset 3px 0 0 var(--success);
+.client-row-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
 }
 
-.client-command-main {
-    display: grid;
-    grid-template-columns: minmax(110px, auto) minmax(260px, 1fr) minmax(150px, auto);
-    gap: 16px;
-    align-items: start;
-}
-
-.client-company-link {
+.client-row-name {
     color: var(--text);
+    font-size: 13px;
+    font-weight: 700;
     text-decoration: none;
 }
 
-.client-company-link:hover {
+.client-row-name:hover {
     text-decoration: underline;
     text-decoration-thickness: 2px;
     text-underline-offset: 3px;
 }
 
-.client-trend-badge,
-.client-manager-pill {
+.client-row-status {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    min-height: 28px;
-    border-radius: 999px;
-    padding: 4px 9px;
+    gap: 5px;
+    color: var(--muted);
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
     white-space: nowrap;
 }
 
-.client-trend-badge {
-    gap: 6px;
-    min-width: 96px;
-    border: 1px solid var(--line);
-    background: var(--surface-muted);
-    color: var(--muted);
+.client-status-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--line-strong);
 }
 
-.client-trend-badge.up,
-.client-trend-badge.new {
-    border-color: var(--success-border);
-    background: var(--success-soft);
-    color: var(--success);
+.client-status-dot.down,
+.client-status-dot.up,
+.client-status-dot.new {
+    background: var(--text);
 }
 
-.client-trend-badge.down {
-    border-color: var(--danger-border);
-    background: var(--danger-soft);
-    color: var(--danger);
+.client-status-dot.sleeping {
+    background: var(--accent-yellow);
 }
 
-.client-trend-badge.sleeping {
-    border-color: var(--warning-border);
-    background: var(--warning-soft);
-    color: var(--warning);
-}
-
-.client-trend-badge.idle,
-.client-trend-badge.steady {
-    border-color: var(--line);
-    background: var(--surface-muted);
-    color: var(--muted);
-}
-
-.client-manager-pill {
-    border: 1px solid var(--line);
-    background: transparent;
-    color: var(--muted);
-}
-
-.client-command-metrics {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(140px, 220px));
-    gap: 18px;
-}
-
-.client-command-metrics div {
-    border: 0;
-    border-left: 1px solid var(--line);
-    border-radius: 0;
-    background: transparent;
-    padding: 0 0 0 12px;
-}
-
-.client-command-metrics span,
-.client-command-metrics small {
-    display: block;
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 700;
-}
-
-.client-command-metrics strong {
-    display: block;
-    margin-top: 2px;
-    font-variant-numeric: tabular-nums;
-}
-
-.client-command-secondary {
-    margin: 0;
-    color: var(--muted);
-    font-size: 11px;
-}
-
-.client-command-secondary strong {
+.client-row.down .client-row-status {
     color: var(--text);
     font-weight: 700;
+}
+
+.client-row.sleeping .client-row-status {
+    color: var(--accent-yellow-ink);
+    font-weight: 700;
+}
+
+.client-row-contacts {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.client-row-contacts summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.client-row-contacts summary::-webkit-details-marker {
+    display: none;
+}
+
+.client-row-contacts summary::before {
+    content: '⌄';
+    display: inline-block;
+    margin-right: 3px;
+}
+
+.client-row-contacts[open] summary::before {
+    content: '⌃';
+}
+
+.client-row-contacts-list {
+    max-width: 480px;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.client-manager-tag {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.client-stat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+}
+
+.client-stat span {
+    display: block;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.client-stat strong {
+    display: block;
+    margin-top: 1px;
+    font-size: 13px;
     font-variant-numeric: tabular-nums;
 }
 
-.client-quarter-strip {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 14px;
-    min-width: 0;
+.client-stat small {
+    display: block;
+    color: var(--faint);
+    font-size: 10px;
 }
 
-.client-quarter-strip .client-month-cell {
-    min-height: 0;
-    min-width: 130px;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    padding: 0;
+.client-stat-muted {
+    color: var(--muted);
 }
 
-.client-quarter-strip .client-month-cell small,
-.client-quarter-strip .client-month-cell strong,
-.client-quarter-strip .client-month-cell em {
-    display: inline;
-    margin-right: 5px;
+.client-stat-muted strong {
+    font-weight: 600;
 }
 
 .client-work-note {
@@ -1997,59 +1995,6 @@ tr:last-child td {
     padding: 0;
 }
 
-.client-balance-table {
-    min-width: 1500px;
-}
-
-.client-balance-table td small {
-    display: block;
-    margin-top: 2px;
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 600;
-}
-
-.client-month-strip {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(92px, 1fr));
-    gap: 6px;
-    min-width: 600px;
-}
-
-.client-month-cell {
-    display: grid;
-    gap: 2px;
-    min-height: 54px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    background: var(--surface-muted);
-    padding: 6px 8px;
-}
-
-.client-month-cell.has-sales {
-    border-color: var(--line-strong);
-    background: var(--panel);
-}
-
-.client-month-cell small {
-    margin: 0;
-    color: var(--muted);
-    font-size: 10px;
-    font-weight: 700;
-}
-
-.client-month-cell strong {
-    color: var(--text);
-    font-size: 11px;
-    font-weight: 700;
-}
-
-.client-month-cell em {
-    color: var(--danger);
-    font-size: 10px;
-    font-style: normal;
-    font-weight: 700;
-}
 
 .data-table td .dual-progress {
     min-width: 220px;
@@ -2418,9 +2363,7 @@ tr:last-child td {
     .order-card__main,
     .invoice-registry-card__head,
     .invoice-registry-card__controls,
-    .client-command-toolbar,
-    .client-command-main,
-    .client-command-metrics {
+    .client-command-toolbar {
         grid-template-columns: 1fr;
     }
 
