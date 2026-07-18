@@ -14,6 +14,7 @@ $toMonth = cockpit_valid_month((string) ($_POST['to_month'] ?? $_GET['to_month']
 $message = '';
 $error = '';
 $backfillMonthLimit = (int) app_config('keycrm.sync_backfill_month_limit', 72);
+$currentMonth = date('Y-m');
 
 function history_sync_month_count(string $fromMonth, string $toMonth): int
 {
@@ -55,9 +56,9 @@ if (is_post() && (string) ($_POST['action'] ?? '') === 'process_one_job') {
         if (function_exists('set_time_limit')) {
             set_time_limit(80);
         }
-        $result = sync_worker_run_once();
+        $result = sync_worker_run_orders_backfill_once();
         if ($result === null) {
-            $message = 'У черзі немає задач для обробки.';
+            $message = 'У черзі немає історичних задач orders_backfill для обробки.';
         } else {
             $job = $result['job'] ?? [];
             $counts = is_array($result['counts'] ?? null) ? $result['counts'] : [];
@@ -73,9 +74,42 @@ if (is_post() && (string) ($_POST['action'] ?? '') === 'process_one_job') {
     }
 }
 
+if (is_post() && (string) ($_POST['action'] ?? '') === 'clear_queued_backfill') {
+    if (!csrf_is_valid()) {
+        http_response_code(400);
+        exit('Invalid CSRF token');
+    }
+
+    try {
+        $stmt = db()->prepare("
+            DELETE FROM db_sync_jobs
+            WHERE status = 'queued'
+              AND job_type LIKE 'orders_backfill_%'
+        ");
+        $stmt->execute();
+        $message = 'Видалено queued історичних задач: ' . (string) $stmt->rowCount() . '. Успішні, failed і running задачі не чіпали.';
+    } catch (Throwable $e) {
+        $error = 'Не вдалося очистити queued історію: ' . $e->getMessage();
+    }
+}
+
 $jobs = [];
+$jobSummary = ['queued_count' => 0, 'running_count' => 0, 'success_count' => 0, 'failed_count' => 0, 'partial_count' => 0];
 try {
     if (invoice_table_exists('db_sync_jobs')) {
+        $summary = db()->query("
+            SELECT
+                SUM(status = 'queued') AS queued_count,
+                SUM(status = 'running') AS running_count,
+                SUM(status = 'success') AS success_count,
+                SUM(status = 'failed') AS failed_count,
+                SUM(status = 'partial') AS partial_count
+            FROM db_sync_jobs
+            WHERE job_type LIKE 'orders_backfill_%'
+        ")->fetch() ?: [];
+        foreach ($jobSummary as $key => $value) {
+            $jobSummary[$key] = (int) ($summary[$key] ?? 0);
+        }
         $jobs = db()->query("
             SELECT id, job_type, status, started_at, finished_at, records_seen, records_inserted,
                    records_updated, records_unchanged, error_message, created_at
@@ -137,11 +171,35 @@ try {
         </form>
         <p class="muted">Обраний діапазон: <strong><?= e((string) $selectedMonthCount) ?></strong> міс. Для повної історії постав: з <strong>2022-07</strong> по <strong><?= e(date('Y-m')) ?></strong>. Місяці створюються як окремі задачі `queued`; їх має поступово забрати cron/worker.</p>
         <p class="muted">Якщо production config має менший `keycrm.sync_backfill_month_limit`, діапазон може обрізатися або показати помилку. Для 2022-07 → <?= e(date('Y-m')) ?> потрібно щонайменше <?= e((string) history_sync_month_count('2022-07', date('Y-m'))) ?> міс.</p>
+        <div class="segmented-scroll client-trend-filter">
+            <span class="client-filter-label">Частинами</span>
+            <?php
+            $ranges = [
+                ['2022-07', '2022-12', '2022 H2'],
+                ['2023-01', '2023-06', '2023 H1'],
+                ['2023-07', '2023-12', '2023 H2'],
+                ['2024-01', '2024-06', '2024 H1'],
+                ['2024-07', '2024-12', '2024 H2'],
+                ['2025-01', '2025-06', '2025 H1'],
+                ['2025-07', '2025-12', '2025 H2'],
+                ['2026-01', $currentMonth, '2026'],
+            ];
+            ?>
+            <?php foreach ($ranges as [$rangeFrom, $rangeTo, $rangeLabel]): ?>
+                <a href="<?= e(base_path('/history_sync.php?' . http_build_query(['from_month' => $rangeFrom, 'to_month' => $rangeTo, 'month' => $month]))) ?>"><?= e($rangeLabel) ?></a>
+            <?php endforeach; ?>
+        </div>
         <form class="inline-form" method="post" action="<?= e(base_path('/history_sync.php?month=' . urlencode($month))) ?>">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="process_one_job">
-            <button type="submit" class="button-secondary">Обробити 1 задачу зараз</button>
-            <span class="muted">Якщо все стоїть `queued`, натисни для перевірки. Для повного імпорту все одно потрібен cron.</span>
+            <button type="submit" class="button-secondary">Обробити 1 історичний місяць</button>
+            <span class="muted">Працює тільки з `orders_backfill_*`, не забирає `buyers/companies` із загальної черги.</span>
+        </form>
+        <form class="inline-form" method="post" action="<?= e(base_path('/history_sync.php?month=' . urlencode($month))) ?>" onsubmit="return confirm('Видалити тільки queued історичні задачі orders_backfill? Успішні/failed/running не чіпаємо.');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="clear_queued_backfill">
+            <button type="submit" class="button-secondary">Очистити queued історію</button>
+            <span class="muted">Після очищення можна ставити імпорт частинами: 2022 H2, 2023 H1 тощо.</span>
         </form>
     </section>
 
@@ -151,6 +209,7 @@ try {
                 <p class="eyebrow">Черга</p>
                 <h2>Останні історичні імпорти</h2>
             </div>
+            <span class="status-badge">queued <?= e((string) $jobSummary['queued_count']) ?> · running <?= e((string) $jobSummary['running_count']) ?> · success <?= e((string) $jobSummary['success_count']) ?> · failed <?= e((string) $jobSummary['failed_count']) ?></span>
         </div>
         <div class="table-scroll">
             <table class="data-table">

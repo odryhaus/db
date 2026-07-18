@@ -128,7 +128,8 @@ Before that, verify Near Real-Time Sync v0.1 in production:
 - For full history from July 2022, use `Імпорт історії` with `from_month=2022-07` and current month as `to_month`.
 - If many jobs remain `queued`, check cron for `cron/sync_worker.php`; queued means the app created jobs, not that KeyCRM import has finished.
 - Do not use dashboard `Оновити все` for first full-history load. It is optimized for delta/recent updates after the base history already exists.
-- If historical jobs remain `queued`, use `Імпорт історії → Обробити 1 задачу зараз` as a diagnostic, then configure cron for continuous processing.
+- If historical jobs remain `queued`, use `Імпорт історії → Обробити 1 історичний місяць` as a diagnostic, then configure cron for continuous processing.
+- If the history queue is too large, use `Очистити queued історію`, then enqueue half-year ranges one by one.
 
 The milestone should:
 

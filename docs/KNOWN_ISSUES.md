@@ -141,4 +141,5 @@ Known gaps:
 - Historical backfill jobs may take time if a month has many orders; cron should process `cron/sync_worker.php` regularly.
 - Dashboard `Оновити все` is not a full history loader. Full .BRAND history from `2022-07` must be queued through `history_sync.php`.
 - `history_sync.php` has a manual one-job processor for diagnostics, but production still needs cron for a long historical import.
+- The manual history processor intentionally handles only one `orders_backfill_*` month per click to avoid browser/server timeouts.
 - `Потрібна дія` is currently generated from existing data and is not yet a task workflow. It has no owner override, snooze, completion, comments, or reminder history.

@@ -1,5 +1,37 @@
 # Implementation Report
 
+## 2026-07-18 — Historical Queue Cleanup And Targeted Backfill Tick
+
+### Files Changed
+
+- `sync_core.php`
+- `history_sync.php`
+- documentation files
+
+### What Changed
+
+- Added a targeted worker helper for one historical order backfill job only.
+- `Імпорт історії → Обробити 1 історичний місяць` now processes only `orders_backfill_*` jobs.
+- Added `Очистити queued історію`, which deletes only queued `orders_backfill_*` jobs.
+- Running, success, failed and partial jobs are not deleted.
+- Added half-year quick ranges so history can be re-queued in smaller parts.
+- Added queue summary counts for historical jobs: queued, running, success, failed.
+
+### Problem Found
+
+The previous manual button used the general worker. If old `buyers`, `companies`, or other sync jobs were queued earlier, the button could process those first. That is why the page reported `buyers: success` instead of an historical order month.
+
+### Health Formula
+
+Client `Health` is a transparent rule-based score, not AI:
+
+- recent order activity adds the largest part of the score;
+- more active months add frequency points;
+- all-time value segment adds monetary points;
+- growth/new/returned signals add a small bonus;
+- falling/sleeping signals subtract points;
+- receivables subtract points based on debt pressure.
+
 ## 2026-07-18 — Client Health Guide And Backfill Queue Control
 
 ### Files Changed
@@ -19,7 +51,7 @@
   - `0-29`: cold
 - `VIP / ключові / основні / стартові` now always use all-time purchases.
 - The `Цінність` switch still changes the displayed period revenue, but does not change the lifetime segment.
-- Added a CEO-only `Обробити 1 задачу зараз` button to `Імпорт історії` so queued jobs can be manually tested from the page.
+- Added a CEO-only `Обробити 1 історичний місяць` button to `Імпорт історії` so historical queued jobs can be manually tested from the page.
 
 ### Operational Note
 

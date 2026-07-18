@@ -479,6 +479,33 @@ function sync_claim_job(): ?array
     return $job;
 }
 
+function sync_claim_orders_backfill_job(): ?array
+{
+    sync_recover_stale_jobs();
+    $pdo = db();
+    $pdo->beginTransaction();
+    $job = $pdo->query("
+        SELECT *
+        FROM db_sync_jobs
+        WHERE status = 'queued'
+          AND job_type LIKE 'orders_backfill_%'
+        ORDER BY id ASC
+        LIMIT 1
+        FOR UPDATE
+    ")->fetch();
+    if (!$job) {
+        $pdo->commit();
+        return null;
+    }
+
+    $stmt = $pdo->prepare("UPDATE db_sync_jobs SET status = 'running', started_at = NOW() WHERE id = :id");
+    $stmt->execute(['id' => (int) $job['id']]);
+    $pdo->commit();
+    $job['status'] = 'running';
+
+    return $job;
+}
+
 function sync_finish_job(array $job, string $status, array $counts, ?string $error = null): void
 {
     $stmt = db()->prepare("
@@ -1557,6 +1584,25 @@ function sync_worker_run_once(): ?array
         return null;
     }
     $job = sync_claim_job();
+    if (!$job) {
+        return null;
+    }
+    try {
+        $counts = sync_run_job_type((string) $job['job_type']);
+        sync_finish_job($job, 'success', $counts);
+        return ['job' => $job, 'status' => 'success', 'counts' => $counts];
+    } catch (Throwable $e) {
+        sync_finish_job($job, 'failed', ['seen' => 0, 'inserted' => 0, 'updated' => 0, 'unchanged' => 0], $e->getMessage());
+        return ['job' => $job, 'status' => 'failed', 'error' => $e->getMessage()];
+    }
+}
+
+function sync_worker_run_orders_backfill_once(): ?array
+{
+    if (!invoice_table_exists('db_sync_jobs')) {
+        return null;
+    }
+    $job = sync_claim_orders_backfill_job();
     if (!$job) {
         return null;
     }
