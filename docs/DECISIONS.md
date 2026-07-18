@@ -407,10 +407,11 @@ Reason: the first goal is reliable visibility and reconciliation before adding e
 Decision:
 
 - `client_balances.php` should be treated as the client command center, not only a balance table.
-- The page uses quarter navigation because client behavior is easier to read in 3-month blocks than in one isolated month.
+- The page uses month navigation for daily CEO control. Older `quarter=YYYY-MM` URLs are accepted only as compatibility input.
 - Company names link to filtered sales/orders for that client.
 - Manager filtering is allowed from existing order manager data.
-- Trend badges are simple leading indicators: growing, falling, sleeping, new/returned, stable.
+- Trend badges are simple leading indicators: new, returned, growing, falling, sleeping, active, no movement.
+- Client size badges use lifetime purchases: VIP from 2,000,000 UAH, large from 1,000,000 UAH, medium from 250,000 UAH, small below 250,000 UAH.
 - Manager reassignment must wait for local company/contact ownership fields and should not rewrite historical `db_orders.manager_name`.
 
 Reason: the CEO needs to notice falling or sleeping clients early and assign action before the client disappears.

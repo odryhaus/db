@@ -82,7 +82,7 @@ Product direction:
   - buyers/contacts under the company;
   - legal entities;
   - debt and invoices;
-  - quarter trend;
+  - monthly trend;
   - manager owner;
   - next follow-up date and note.
 - Build local manager reassignment only after the local ownership fields are verified:
@@ -97,6 +97,11 @@ Product direction:
   - payment delays;
   - last contact/follow-up;
   - manager ownership.
+- Add follow-up workflow for falling/sleeping/VIP clients:
+  - next contact date;
+  - responsible manager;
+  - reason for pause;
+  - result of last call.
 
 Planning file:
 

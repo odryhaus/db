@@ -53,10 +53,11 @@ Changes made:
 - Buyers shown inside company.
 - Search now uses a combined text haystack and token matching.
 - SQL errors are no longer hidden as "Даних немає".
-- Selected month search was removed; the page now uses quarter navigation.
+- Selected month search was removed; the page now uses month navigation for the client health snapshot.
 - Company name opens filtered sales/orders for that client.
 - Added manager filter.
-- Added simple client trend badges: growing, falling, sleeping, new/returned, stable.
+- Added simple client trend badges: new, returned, growing, falling, sleeping, active, no movement.
+- Added lifetime client size badges: VIP, large, medium, small.
 
 Recommendation:
 

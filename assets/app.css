@@ -1786,7 +1786,8 @@ tr:last-child td {
     margin-top: 4px;
 }
 
-.client-quarter-nav {
+.client-quarter-nav,
+.client-month-nav {
     display: grid;
     grid-template-columns: 42px minmax(170px, 1fr) 42px;
     gap: 8px;
@@ -1853,7 +1854,9 @@ tr:last-child td {
 }
 
 .client-row.up .client-row-head,
-.client-row.new .client-row-head {
+.client-row.new .client-row-head,
+.client-row.returned .client-row-head,
+.client-row.active .client-row-head {
     box-shadow: inset 3px 0 0 var(--success);
 }
 
@@ -1896,9 +1899,41 @@ tr:last-child td {
 }
 
 .client-row-status.chip.up,
-.client-row-status.chip.new {
+.client-row-status.chip.new,
+.client-row-status.chip.returned {
     background: var(--success);
     color: #fff;
+}
+
+.client-row-status.chip.active {
+    background: var(--text);
+    color: #fff;
+}
+
+.client-row-segment {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 8px;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1.3;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.client-row-segment.vip {
+    border-color: var(--text);
+    background: var(--text);
+    color: #fff;
+}
+
+.client-row-segment.large {
+    border-color: var(--accent-yellow);
+    background: var(--accent-yellow);
+    color: #171717;
 }
 
 .client-row-contacts {

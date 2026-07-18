@@ -1,5 +1,44 @@
 # Implementation Report
 
+## 2026-07-18 — Client Monthly Health Signals
+
+### Files Changed
+
+- `client_balances.php`
+- `assets/app.css`
+- documentation files
+
+### What Changed
+
+- `Клієнти` now uses selected month navigation instead of three-month quarter blocks.
+- Old `quarter=YYYY-MM` links still work as compatibility input, but new links use `month=YYYY-MM`.
+- Trend signals were split into clearer monthly rules:
+  - `новий`: first known order is in the selected month.
+  - `повернувся`: had older orders, skipped the previous month, and bought again in the selected month.
+  - `росте`: three-month sales sequence grows month by month.
+  - `падає`: previous month had sales, selected month has no sales.
+  - `спить`: no sales for selected month and previous two months, but the client bought before.
+  - `активний`: bought in the selected month but is not new/returned/growing.
+  - `немає руху`: no useful movement in the available data.
+- Added simple lifetime client size segments:
+  - `VIP`: 2,000,000 UAH+
+  - `великий`: 1,000,000-1,999,999 UAH
+  - `середній`: 250,000-999,999 UAH
+  - `малий`: under 250,000 UAH
+- Client names now open `sales.php` for the same selected month and client.
+- Kept the compact row design from the latest Claude pass.
+
+### Product Rationale
+
+The client page now follows a simpler RFM/customer-health direction: recency, purchase trend, lifetime value, debt, and manager ownership. It is not a full CRM; it is a fast warning screen for who needs attention now.
+
+### What Was Not Implemented
+
+- No database schema changes.
+- No client notes/follow-up dates yet.
+- No automated churn prediction.
+- No manager reassignment UI yet.
+
 ## 2026-07-18 — Client Command Center Quarter View
 
 ### Files Changed
