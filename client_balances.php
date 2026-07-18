@@ -683,8 +683,8 @@ $rows = array_slice($filteredRows, 0, 200);
                 <article class="client-row <?= e($trendClass) ?>">
                     <div class="client-row-head">
                         <a class="client-row-name" href="<?= e($salesLink) ?>"><?= e((string) $row['client_name']) ?></a>
-                        <span class="client-row-status">
-                            <span class="client-status-dot <?= e($trendClass) ?>"></span><?= e($trendArrow !== '' ? $trendArrow . ' ' : '') ?><?= e($trendLabel) ?>
+                        <span class="client-row-status <?= e($trendClass) ?> <?= $trendClass === 'down' || $trendClass === 'sleeping' ? 'attention' : '' ?>">
+                            <?= e($trendArrow !== '' ? $trendArrow . ' ' : '') ?><?= e($trendLabel) ?>
                         </span>
                         <?php if ($row['buyers']): ?>
                             <details class="client-row-contacts">
@@ -697,10 +697,10 @@ $rows = array_slice($filteredRows, 0, 200);
                         <span class="client-manager-tag"><?= e((string) ($row['manager_name'] ?: 'Без менеджера')) ?></span>
                     </div>
                     <div class="client-stat-row">
-                        <div class="client-stat"><span>Квартал</span><strong><?= e(finance_money($currentQuarterSales)) ?></strong><small>було <?= e(finance_money($previousQuarterSales)) ?></small></div>
-                        <div class="client-stat"><span>Гроші</span><strong><?= e(finance_money($row['cash_received'])) ?></strong><small><?= (int) $row['cash_count'] > 0 ? e((string) $row['cash_count']) . ' пл.' : '&nbsp;' ?></small></div>
+                        <div class="client-stat"><span>Купив всього</span><strong><?= e(finance_money($row['total_purchases'])) ?></strong><small>&nbsp;</small></div>
                         <div class="client-stat"><span>Борг</span><strong class="<?= (float) $row['receivable_total'] > 0 ? 'danger-text' : '' ?>"><?= e(finance_money($row['receivable_total'])) ?></strong><small><?= (int) $row['receivable_count'] > 0 ? e((string) $row['receivable_count']) . ' борг.' : '&nbsp;' ?></small></div>
-                        <div class="client-stat client-stat-muted"><span>Закупки всього</span><strong><?= e(finance_money($row['total_purchases'])) ?></strong><small>&nbsp;</small></div>
+                        <div class="client-stat"><span>Оплатили</span><strong><?= e(finance_money($row['cash_received'])) ?></strong><small><?= (int) $row['cash_count'] > 0 ? e((string) $row['cash_count']) . ' пл.' : '&nbsp;' ?></small></div>
+                        <div class="client-stat"><span>Квартал</span><strong><?= e(finance_money($currentQuarterSales)) ?></strong><small>було <?= e(finance_money($previousQuarterSales)) ?></small></div>
                     </div>
                 </article>
             <?php endforeach; ?>

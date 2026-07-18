@@ -1828,20 +1828,11 @@ tr:last-child td {
 
 .client-row {
     display: grid;
-    gap: 6px;
+    gap: 8px;
     border: 0;
     border-bottom: 1px solid var(--line);
     background: transparent;
-    padding: 10px 0 10px 12px;
-    box-shadow: inset 3px 0 0 var(--line);
-}
-
-.client-row.down {
-    box-shadow: inset 3px 0 0 var(--text);
-}
-
-.client-row.sleeping {
-    box-shadow: inset 3px 0 0 var(--accent-yellow);
+    padding: 10px 0;
 }
 
 .client-row-head {
@@ -1849,6 +1840,13 @@ tr:last-child td {
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
+    padding-left: 10px;
+    box-shadow: inset 3px 0 0 var(--line);
+}
+
+.client-row.down .client-row-head,
+.client-row.sleeping .client-row-head {
+    box-shadow: inset 3px 0 0 var(--accent-yellow);
 }
 
 .client-row-name {
@@ -1867,39 +1865,23 @@ tr:last-child td {
 .client-row-status {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
     color: var(--muted);
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 700;
     white-space: nowrap;
 }
 
-.client-status-dot {
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--line-strong);
-}
-
-.client-status-dot.down,
-.client-status-dot.up,
-.client-status-dot.new {
-    background: var(--text);
-}
-
-.client-status-dot.sleeping {
+.client-row-status.attention {
+    border-radius: 999px;
     background: var(--accent-yellow);
+    padding: 3px 9px;
+    color: #171717;
+    font-weight: 800;
 }
 
-.client-row.down .client-row-status {
+.client-row-status.up,
+.client-row-status.new {
     color: var(--text);
-    font-weight: 700;
-}
-
-.client-row.sleeping .client-row-status {
-    color: var(--accent-yellow-ink);
-    font-weight: 700;
 }
 
 .client-row-contacts {
@@ -1945,6 +1927,7 @@ tr:last-child td {
     display: flex;
     flex-wrap: wrap;
     gap: 22px;
+    padding-left: 10px;
 }
 
 .client-stat span {
@@ -1969,13 +1952,6 @@ tr:last-child td {
     font-size: 10px;
 }
 
-.client-stat-muted {
-    color: var(--muted);
-}
-
-.client-stat-muted strong {
-    font-weight: 600;
-}
 
 .client-work-note {
     display: flex;
