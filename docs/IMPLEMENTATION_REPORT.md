@@ -20,11 +20,18 @@
   - `спить`: no sales for selected month and previous two months, but the client bought before.
   - `активний`: bought in the selected month but is not new/returned/growing.
   - `немає руху`: no useful movement in the available data.
-- Added simple lifetime client size segments:
+- Added a `Цінність` switch: all time, last 12 months, selected month.
+- Added segment filters based on purchases in the selected value period:
   - `VIP`: 2,000,000 UAH+
-  - `великий`: 1,000,000-1,999,999 UAH
-  - `середній`: 250,000-999,999 UAH
-  - `малий`: under 250,000 UAH
+  - `ключовий`: 1,000,000-1,999,999 UAH
+  - `основний`: 250,000-999,999 UAH
+  - `стартовий`: under 250,000 UAH
+- Added a first transparent customer-health score:
+  - recency of last order;
+  - active months in the selected value period;
+  - purchase value segment;
+  - growth/return trend;
+  - receivables penalty.
 - Client names now open `sales.php` for the same selected month and client.
 - Kept the compact row design from the latest Claude pass.
 
@@ -36,7 +43,7 @@ The client page now follows a simpler RFM/customer-health direction: recency, pu
 
 - No database schema changes.
 - No client notes/follow-up dates yet.
-- No automated churn prediction.
+- No automated churn prediction; health is a transparent rule-based score.
 - No manager reassignment UI yet.
 
 ## 2026-07-18 — Client Command Center Quarter View

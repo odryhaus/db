@@ -411,7 +411,9 @@ Decision:
 - Company names link to filtered sales/orders for that client.
 - Manager filtering is allowed from existing order manager data.
 - Trend badges are simple leading indicators: new, returned, growing, falling, sleeping, active, no movement.
-- Client size badges use lifetime purchases: VIP from 2,000,000 UAH, large from 1,000,000 UAH, medium from 250,000 UAH, small below 250,000 UAH.
+- Client value badges use purchases in the selected value period: VIP from 2,000,000 UAH, key from 1,000,000 UAH, core from 250,000 UAH, starter below 250,000 UAH.
+- The value period can be all time, last 12 months, or selected month.
+- Customer health is rule-based first: recency, frequency, monetary value, trend, and receivables pressure. No black-box prediction yet.
 - Manager reassignment must wait for local company/contact ownership fields and should not rewrite historical `db_orders.manager_name`.
 
 Reason: the CEO needs to notice falling or sleeping clients early and assign action before the client disappears.

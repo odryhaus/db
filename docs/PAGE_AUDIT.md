@@ -57,7 +57,9 @@ Changes made:
 - Company name opens filtered sales/orders for that client.
 - Added manager filter.
 - Added simple client trend badges: new, returned, growing, falling, sleeping, active, no movement.
-- Added lifetime client size badges: VIP, large, medium, small.
+- Added client value scope: all time, last 12 months, selected month.
+- Added segment filters: VIP, key, core, starter.
+- Added first rule-based health score.
 
 Recommendation:
 

@@ -1786,6 +1786,16 @@ tr:last-child td {
     margin-top: 4px;
 }
 
+.client-filter-label {
+    display: inline-flex;
+    align-items: center;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
 .client-quarter-nav,
 .client-month-nav {
     display: grid;
@@ -1936,6 +1946,16 @@ tr:last-child td {
     color: #171717;
 }
 
+.client-row-segment.medium {
+    border-color: var(--text);
+    color: var(--text);
+}
+
+.client-row-segment.small {
+    border-color: var(--line);
+    color: var(--muted);
+}
+
 .client-row-contacts {
     color: var(--muted);
     font-size: 12px;
@@ -2002,6 +2022,36 @@ tr:last-child td {
     display: block;
     color: var(--faint);
     font-size: 10px;
+}
+
+.client-health-stat {
+    min-width: 108px;
+}
+
+.client-health-bar {
+    display: block;
+    width: 100%;
+    height: 4px;
+    margin-top: 4px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--line);
+}
+
+.client-health-bar i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--text);
+}
+
+.client-health-bar i.watch {
+    background: var(--accent-yellow);
+}
+
+.client-health-bar i.risk,
+.client-health-bar i.cold {
+    background: var(--danger);
 }
 
 

@@ -14,6 +14,14 @@ $trendFilter = trim((string) ($_GET['trend'] ?? ''));
 if (!array_key_exists($trendFilter, ['down' => 1, 'sleeping' => 1, 'new' => 1, 'returned' => 1, 'up' => 1, 'active' => 1, 'idle' => 1])) {
     $trendFilter = '';
 }
+$segmentFilter = trim((string) ($_GET['segment'] ?? ''));
+if (!array_key_exists($segmentFilter, ['vip' => 1, 'large' => 1, 'medium' => 1, 'small' => 1])) {
+    $segmentFilter = '';
+}
+$valueScope = trim((string) ($_GET['scope'] ?? 'all'));
+if (!array_key_exists($valueScope, ['all' => 1, 'year' => 1, 'month' => 1])) {
+    $valueScope = 'all';
+}
 $rowsByKey = [];
 $trend = [];
 $pageError = '';
@@ -28,25 +36,6 @@ $hasClientContacts = invoice_table_exists('db_client_contacts');
 $clientCompanyColumns = $hasClientCompanies ? finance_columns('db_client_companies') : [];
 $clientContactColumns = $hasClientContacts ? finance_columns('db_client_contacts') : [];
 $managerOptions = [];
-
-function client_balances_quarter_start(string $month): string
-{
-    $month = cockpit_valid_month($month);
-    $year = (int) substr($month, 0, 4);
-    $monthNumber = (int) substr($month, 5, 2);
-    $quarterMonth = ((int) floor(($monthNumber - 1) / 3) * 3) + 1;
-    return sprintf('%04d-%02d', $year, $quarterMonth);
-}
-
-function client_balances_quarter_months(string $quarterStart): array
-{
-    $date = DateTimeImmutable::createFromFormat('!Y-m', client_balances_quarter_start($quarterStart)) ?: new DateTimeImmutable('first day of this month');
-    return [
-        $date->format('Y-m'),
-        $date->modify('+1 month')->format('Y-m'),
-        $date->modify('+2 months')->format('Y-m'),
-    ];
-}
 
 function client_balances_month_label(string $month): string
 {
@@ -71,16 +60,6 @@ function client_balances_query(array $params): string
 {
     $query = array_filter($params, static fn($value) => $value !== null && $value !== '');
     return http_build_query($query);
-}
-
-function client_balances_months(string $month, int $count = 6): array
-{
-    $date = DateTimeImmutable::createFromFormat('!Y-m', cockpit_valid_month($month)) ?: new DateTimeImmutable('first day of this month');
-    $months = [];
-    for ($i = $count - 1; $i >= 0; $i--) {
-        $months[] = $date->modify("-{$i} months")->format('Y-m');
-    }
-    return $months;
 }
 
 function client_balances_coalesce(array $expressions, string $fallback): string
@@ -244,6 +223,8 @@ function client_balances_blank_row(string $key, string $name = ''): array
         'paid_by_order' => 0.0,
         'unpaid_by_order' => 0.0,
         'total_purchases' => 0.0,
+        'scope_purchases' => 0.0,
+        'scope_active_month_count' => 0,
         'receivable_total' => 0.0,
         'receivable_count' => 0,
         'largest_receivable' => 0.0,
@@ -310,15 +291,97 @@ function client_balances_segment(float $totalPurchases): array
         return ['class' => 'vip', 'label' => 'VIP'];
     }
     if ($totalPurchases >= 1000000) {
-        return ['class' => 'large', 'label' => 'великий'];
+        return ['class' => 'large', 'label' => 'ключовий'];
     }
     if ($totalPurchases >= 250000) {
-        return ['class' => 'medium', 'label' => 'середній'];
+        return ['class' => 'medium', 'label' => 'основний'];
     }
     if ($totalPurchases > 0) {
-        return ['class' => 'small', 'label' => 'малий'];
+        return ['class' => 'small', 'label' => 'стартовий'];
     }
     return ['class' => 'none', 'label' => 'без закупок'];
+}
+
+function client_balances_segment_labels(): array
+{
+    return [
+        'vip' => 'VIP',
+        'large' => 'ключові',
+        'medium' => 'основні',
+        'small' => 'стартові',
+    ];
+}
+
+function client_balances_scope_labels(): array
+{
+    return [
+        'all' => 'весь час',
+        'year' => '12 міс.',
+        'month' => 'місяць',
+    ];
+}
+
+function client_balances_month_distance(string $selectedMonth, string $lastOrderMonth): int
+{
+    if ($lastOrderMonth === '') {
+        return 999;
+    }
+    $selected = DateTimeImmutable::createFromFormat('!Y-m', cockpit_valid_month($selectedMonth));
+    $last = DateTimeImmutable::createFromFormat('!Y-m', cockpit_valid_month($lastOrderMonth));
+    if (!$selected || !$last) {
+        return 999;
+    }
+    $months = (((int) $selected->format('Y')) - ((int) $last->format('Y'))) * 12;
+    $months += ((int) $selected->format('m')) - ((int) $last->format('m'));
+    return max(0, $months);
+}
+
+function client_balances_health(float $scopePurchases, float $receivableTotal, int $scopeActiveMonths, int $monthsSinceLast, string $trendClass): array
+{
+    $score = 0;
+    if ($monthsSinceLast === 0) {
+        $score += 40;
+    } elseif ($monthsSinceLast === 1) {
+        $score += 28;
+    } elseif ($monthsSinceLast === 2) {
+        $score += 18;
+    }
+
+    $score += min(20, $scopeActiveMonths * 4);
+
+    $segmentClass = client_balances_segment($scopePurchases)['class'];
+    $score += ['vip' => 30, 'large' => 22, 'medium' => 14, 'small' => 8, 'none' => 0][$segmentClass] ?? 0;
+
+    if (in_array($trendClass, ['up', 'new', 'returned'], true)) {
+        $score += 8;
+    } elseif ($trendClass === 'down') {
+        $score -= 10;
+    } elseif ($trendClass === 'sleeping') {
+        $score -= 18;
+    }
+
+    if ($receivableTotal > 0) {
+        $debtRatio = $scopePurchases > 0 ? $receivableTotal / $scopePurchases : 1;
+        if ($debtRatio >= 0.5) {
+            $score -= 25;
+        } elseif ($debtRatio >= 0.2) {
+            $score -= 15;
+        } else {
+            $score -= 8;
+        }
+    }
+
+    $score = max(0, min(100, $score));
+    if ($score >= 75) {
+        return ['score' => $score, 'class' => 'healthy', 'label' => 'здоровий'];
+    }
+    if ($score >= 50) {
+        return ['score' => $score, 'class' => 'watch', 'label' => 'увага'];
+    }
+    if ($score >= 30) {
+        return ['score' => $score, 'class' => 'risk', 'label' => 'ризик'];
+    }
+    return ['score' => $score, 'class' => 'cold', 'label' => 'холодний'];
 }
 
 function client_balances_count_label(int $count, string $one, string $few, string $many): string
@@ -372,17 +435,24 @@ $previousMonth = $monthDate->modify('-1 month')->format('Y-m');
 $twoMonthsAgo = $monthDate->modify('-2 months')->format('Y-m');
 $threeMonthsAgo = $monthDate->modify('-3 months')->format('Y-m');
 $allTrendMonths = [$threeMonthsAgo, $twoMonthsAgo, $previousMonth, $selectedMonth];
+$scopeStartMonth = $valueScope === 'year' ? $monthDate->modify('-11 months')->format('Y-m') : $selectedMonth;
 $boundsStart = $monthDate->format('Y-m-01 00:00:00');
 $boundsEnd = $monthDate->modify('last day of this month')->format('Y-m-d 23:59:59');
 $prevMonthUrl = base_path('/client_balances.php?' . client_balances_query([
     'month' => $monthDate->modify('-1 month')->format('Y-m'),
     'q' => $search,
     'manager' => $managerFilter,
+    'trend' => $trendFilter,
+    'segment' => $segmentFilter,
+    'scope' => $valueScope,
 ]));
 $nextMonthUrl = base_path('/client_balances.php?' . client_balances_query([
     'month' => $monthDate->modify('+1 month')->format('Y-m'),
     'q' => $search,
     'manager' => $managerFilter,
+    'trend' => $trendFilter,
+    'segment' => $segmentFilter,
+    'scope' => $valueScope,
 ]));
 
 try {
@@ -436,16 +506,32 @@ try {
             $rowsByKey[$key]['unpaid_by_order'] = (float) ($row['unpaid_by_order'] ?? 0);
         }
 
+        $scopePurchaseSql = 'COALESCE(SUM(o.total_amount_uah), 0)';
+        $scopeActiveSql = 'COUNT(DISTINCT o.order_month)';
+        $historyParams = array_merge(['history_selected_month' => $selectedMonth], $searchParams);
+        if ($valueScope === 'year') {
+            $scopePurchaseSql = "COALESCE(SUM(CASE WHEN o.order_month >= :scope_start AND o.order_month <= :scope_end THEN o.total_amount_uah ELSE 0 END), 0)";
+            $scopeActiveSql = "COUNT(DISTINCT CASE WHEN o.order_month >= :scope_start AND o.order_month <= :scope_end THEN o.order_month ELSE NULL END)";
+            $historyParams['scope_start'] = $scopeStartMonth;
+            $historyParams['scope_end'] = $selectedMonth;
+        } elseif ($valueScope === 'month') {
+            $scopePurchaseSql = "COALESCE(SUM(CASE WHEN o.order_month = :scope_month THEN o.total_amount_uah ELSE 0 END), 0)";
+            $scopeActiveSql = "COUNT(DISTINCT CASE WHEN o.order_month = :scope_month THEN o.order_month ELSE NULL END)";
+            $historyParams['scope_month'] = $selectedMonth;
+        }
+
         $stmt = db()->prepare("
             SELECT
                 {$expr['key']} AS client_key,
                 {$expr['company_name']} AS client_name,
                 {$expr['manager_name']} AS manager_name,
                 COALESCE(SUM(o.total_amount_uah), 0) AS total_purchases,
+                {$scopePurchaseSql} AS scope_purchases,
                 MIN(o.order_month) AS first_order_month,
                 MAX(o.order_month) AS last_order_month,
-                MAX(CASE WHEN o.order_month < :selected_month THEN o.order_month ELSE NULL END) AS last_before_month,
+                MAX(CASE WHEN o.order_month < :history_selected_month THEN o.order_month ELSE NULL END) AS last_before_month,
                 COUNT(DISTINCT o.order_month) AS active_month_count,
+                {$scopeActiveSql} AS scope_active_month_count,
                 COUNT(*) AS lifetime_order_count
             FROM db_orders o
             {$expr['joins']}
@@ -454,15 +540,17 @@ try {
               {$managerSql}
             GROUP BY client_key, client_name
         ");
-        $stmt->execute(array_merge(['selected_month' => $selectedMonth], $searchParams));
+        $stmt->execute($historyParams);
         foreach ($stmt->fetchAll() as $row) {
             $key = (string) ($row['client_key'] ?? 'unknown');
             client_balances_take_row($rowsByKey, $row);
             $rowsByKey[$key]['total_purchases'] = (float) ($row['total_purchases'] ?? 0);
+            $rowsByKey[$key]['scope_purchases'] = (float) ($row['scope_purchases'] ?? 0);
             $rowsByKey[$key]['first_order_month'] = (string) ($row['first_order_month'] ?? '');
             $rowsByKey[$key]['last_order_month'] = (string) ($row['last_order_month'] ?? '');
             $rowsByKey[$key]['last_before_month'] = (string) ($row['last_before_month'] ?? '');
             $rowsByKey[$key]['active_month_count'] = (int) ($row['active_month_count'] ?? 0);
+            $rowsByKey[$key]['scope_active_month_count'] = (int) ($row['scope_active_month_count'] ?? 0);
             $rowsByKey[$key]['lifetime_order_count'] = (int) ($row['lifetime_order_count'] ?? 0);
         }
 
@@ -597,13 +685,25 @@ foreach ($allRows as &$rowRef) {
         $rowRef['first_order_month'] !== '' ? (string) $rowRef['first_order_month'] : null,
         $rowRef['last_before_month'] !== '' ? (string) $rowRef['last_before_month'] : null
     );
-    $segmentInfo = client_balances_segment((float) $rowRef['total_purchases']);
+    $segmentInfo = client_balances_segment((float) $rowRef['scope_purchases']);
+    $monthsSinceLast = client_balances_month_distance($selectedMonth, (string) $rowRef['last_order_month']);
+    $healthInfo = client_balances_health(
+        (float) $rowRef['scope_purchases'],
+        (float) $rowRef['receivable_total'],
+        (int) $rowRef['scope_active_month_count'],
+        $monthsSinceLast,
+        (string) $trendInfo['class']
+    );
     $rowRef['trend_class'] = $trendInfo['class'];
     $rowRef['trend_label'] = $trendInfo['label'];
     $rowRef['current_month_sales'] = $trendInfo['current'];
     $rowRef['previous_month_sales'] = $trendInfo['previous'];
     $rowRef['segment_class'] = $segmentInfo['class'];
     $rowRef['segment_label'] = $segmentInfo['label'];
+    $rowRef['health_score'] = $healthInfo['score'];
+    $rowRef['health_class'] = $healthInfo['class'];
+    $rowRef['health_label'] = $healthInfo['label'];
+    $rowRef['months_since_last'] = $monthsSinceLast;
 }
 unset($rowRef);
 
@@ -613,13 +713,21 @@ $monthCashTotal = array_sum(array_map(static fn($row) => (float) $row['cash_rece
 $activeClientCount = count(array_filter($allRows, static fn($row) => (float) $row['sales_month'] > 0));
 
 $trendCounts = ['down' => 0, 'sleeping' => 0, 'new' => 0, 'returned' => 0, 'up' => 0, 'active' => 0, 'idle' => 0];
+$segmentCounts = ['vip' => 0, 'large' => 0, 'medium' => 0, 'small' => 0];
 foreach ($allRows as $row) {
     $trendCounts[$row['trend_class']] = ($trendCounts[$row['trend_class']] ?? 0) + 1;
+    if (isset($segmentCounts[$row['segment_class']])) {
+        $segmentCounts[$row['segment_class']]++;
+    }
 }
 
-$filteredRows = $trendFilter !== ''
-    ? array_values(array_filter($allRows, static fn($row) => $row['trend_class'] === $trendFilter))
-    : $allRows;
+$filteredRows = $allRows;
+if ($trendFilter !== '') {
+    $filteredRows = array_values(array_filter($filteredRows, static fn($row) => $row['trend_class'] === $trendFilter));
+}
+if ($segmentFilter !== '') {
+    $filteredRows = array_values(array_filter($filteredRows, static fn($row) => $row['segment_class'] === $segmentFilter));
+}
 
 usort($filteredRows, static function (array $a, array $b): int {
     $rankCompare = client_balances_trend_rank((string) $a['trend_class']) <=> client_balances_trend_rank((string) $b['trend_class']);
@@ -630,7 +738,7 @@ usort($filteredRows, static function (array $a, array $b): int {
     if ($receivableCompare !== 0) {
         return $receivableCompare;
     }
-    return (float) $b['total_purchases'] <=> (float) $a['total_purchases'];
+    return (float) $b['scope_purchases'] <=> (float) $a['scope_purchases'];
 });
 $rows = array_slice($filteredRows, 0, 200);
 
@@ -670,6 +778,9 @@ $rows = array_slice($filteredRows, 0, 200);
         </div>
         <form class="client-balance-toolbar client-balance-toolbar--clients" method="get" action="<?= e(base_path('/client_balances.php')) ?>">
             <input type="hidden" name="month" value="<?= e($selectedMonth) ?>">
+            <input type="hidden" name="scope" value="<?= e($valueScope) ?>">
+            <input type="hidden" name="trend" value="<?= e($trendFilter) ?>">
+            <input type="hidden" name="segment" value="<?= e($segmentFilter) ?>">
             <label class="client-balance-search">
                 <span>Пошук</span>
                 <input type="search" name="q" value="<?= e($search) ?>" placeholder="компанія, покупець, email, телефон, номер">
@@ -687,9 +798,23 @@ $rows = array_slice($filteredRows, 0, 200);
             <button type="submit">Показати</button>
         </form>
         <div class="segmented-scroll client-trend-filter">
-            <a class="<?= $trendFilter === '' ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter]))) ?>">Всі <small><?= e((string) count($allRows)) ?></small></a>
+            <span class="client-filter-label">Цінність</span>
+            <?php foreach (client_balances_scope_labels() as $scopeKey => $scopeLabelText): ?>
+                <a class="<?= $valueScope === $scopeKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentFilter, 'scope' => $scopeKey]))) ?>"><?= e($scopeLabelText) ?></a>
+            <?php endforeach; ?>
+        </div>
+        <div class="segmented-scroll client-trend-filter">
+            <span class="client-filter-label">Здоровʼя</span>
+            <a class="<?= $trendFilter === '' ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'segment' => $segmentFilter, 'scope' => $valueScope]))) ?>">Всі <small><?= e((string) count($allRows)) ?></small></a>
             <?php foreach (client_balances_trend_labels() as $trendKey => $trendLabelText): ?>
-                <a class="<?= $trendFilter === $trendKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendKey]))) ?>"><?= e($trendLabelText) ?> <small><?= e((string) ($trendCounts[$trendKey] ?? 0)) ?></small></a>
+                <a class="<?= $trendFilter === $trendKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendKey, 'segment' => $segmentFilter, 'scope' => $valueScope]))) ?>"><?= e($trendLabelText) ?> <small><?= e((string) ($trendCounts[$trendKey] ?? 0)) ?></small></a>
+            <?php endforeach; ?>
+        </div>
+        <div class="segmented-scroll client-trend-filter">
+            <span class="client-filter-label">Сегмент</span>
+            <a class="<?= $segmentFilter === '' ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'scope' => $valueScope]))) ?>">Всі <small><?= e((string) count($allRows)) ?></small></a>
+            <?php foreach (client_balances_segment_labels() as $segmentKey => $segmentLabelText): ?>
+                <a class="<?= $segmentFilter === $segmentKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentKey, 'scope' => $valueScope]))) ?>"><?= e($segmentLabelText) ?> <small><?= e((string) ($segmentCounts[$segmentKey] ?? 0)) ?></small></a>
             <?php endforeach; ?>
         </div>
     </section>
@@ -698,13 +823,13 @@ $rows = array_slice($filteredRows, 0, 200);
         <div class="section-heading">
             <div>
                 <p class="eyebrow">Top clients</p>
-                <h2>Компанії за сумою закупок</h2>
+                <h2>Компанії за цінністю: <?= e(client_balances_scope_labels()[$valueScope] ?? 'період') ?></h2>
             </div>
             <span class="status-badge">натисни назву, щоб відкрити замовлення</span>
         </div>
         <div class="client-command-list">
-            <?php if (!$rows && $trendFilter !== ''): ?>
-                <div class="empty-state">Немає клієнтів у категорії «<?= e(client_balances_trend_labels()[$trendFilter] ?? $trendFilter) ?>».</div>
+            <?php if (!$rows && ($trendFilter !== '' || $segmentFilter !== '')): ?>
+                <div class="empty-state">Немає клієнтів у вибраному фільтрі.</div>
             <?php elseif (!$rows): ?>
                 <div class="empty-state">Даних немає.</div>
             <?php endif; ?>
@@ -717,6 +842,7 @@ $rows = array_slice($filteredRows, 0, 200);
                 $previousMonthSales = (float) $row['previous_month_sales'];
                 $trendArrow = $trendClass === 'up' ? '↑' : ($trendClass === 'down' ? '↓' : (in_array($trendClass, ['new', 'returned', 'active'], true) ? '→' : ($trendClass === 'idle' ? '–' : '')));
                 $lastOrderLabel = $row['last_order_month'] !== '' ? client_balances_month_label((string) $row['last_order_month']) : 'немає';
+                $scopeLabel = client_balances_scope_labels()[$valueScope] ?? 'період';
                 $extraBuyers = (int) $row['buyers_count'] - count($row['buyers']);
                 $salesLink = base_path('/sales.php?' . client_balances_query([
                     'month' => $selectedMonth,
@@ -741,11 +867,17 @@ $rows = array_slice($filteredRows, 0, 200);
                         <span class="client-manager-tag"><?= e((string) ($row['manager_name'] ?: 'Без менеджера')) ?></span>
                     </div>
                     <div class="client-stat-row">
-                        <div class="client-stat"><span>Купив всього</span><strong><?= e(finance_money($row['total_purchases'])) ?></strong><small>&nbsp;</small></div>
+                        <div class="client-stat"><span>Купив <?= e($scopeLabel) ?></span><strong><?= e(finance_money($row['scope_purchases'])) ?></strong><small>всього <?= e(finance_money($row['total_purchases'])) ?></small></div>
                         <div class="client-stat"><span>Борг</span><strong class="<?= (float) $row['receivable_total'] > 0 ? 'danger-text' : '' ?>"><?= e(finance_money($row['receivable_total'])) ?></strong><small><?= (int) $row['receivable_count'] > 0 ? e((string) $row['receivable_count']) . ' борг.' : '&nbsp;' ?></small></div>
                         <div class="client-stat"><span>Оплатили</span><strong><?= e(finance_money($row['cash_received'])) ?></strong><small><?= (int) $row['cash_count'] > 0 ? e((string) $row['cash_count']) . ' пл.' : '&nbsp;' ?></small></div>
                         <div class="client-stat"><span>Місяць</span><strong><?= e(finance_money($currentMonthSales)) ?></strong><small>було <?= e(finance_money($previousMonthSales)) ?></small></div>
                         <div class="client-stat"><span>Останнє</span><strong><?= e($lastOrderLabel) ?></strong><small><?= e((string) $row['active_month_count']) ?> акт. міс.</small></div>
+                        <div class="client-stat client-health-stat">
+                            <span>Health</span>
+                            <strong><?= e((string) $row['health_score']) ?> / 100</strong>
+                            <small><?= e((string) $row['health_label']) ?></small>
+                            <span class="client-health-bar"><i class="<?= e((string) $row['health_class']) ?>" style="width: <?= e((string) $row['health_score']) ?>%"></i></span>
+                        </div>
                     </div>
                 </article>
             <?php endforeach; ?>
@@ -756,7 +888,7 @@ $rows = array_slice($filteredRows, 0, 200);
             <span>повернувся - швидко закріпити контакт, щоб не втратити повторно.</span>
             <span>↓ падає - менеджеру подзвонити до того, як клієнт зникне.</span>
             <span>спить - перевірити останній контакт і причину паузи.</span>
-            <span>VIP - клієнт від 2 млн UAH за весь час.</span>
+            <span>VIP - клієнт від 2 млн UAH за вибраний період цінності.</span>
             <span>борг - узгодити оплату або дату нагадування.</span>
         </div>
     </section>

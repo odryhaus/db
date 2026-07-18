@@ -91,12 +91,10 @@ Product direction:
   - inherit company manager;
   - bulk reassign from manager A to manager B.
 - Turn current simple client trend badges into a real client health score:
-  - purchase trend;
-  - months since last order;
-  - unpaid debt;
-  - payment delays;
-  - last contact/follow-up;
-  - manager ownership.
+  - add payment delay history;
+  - add last contact/follow-up;
+  - add manager ownership;
+  - add manual reason for pause/lost client.
 - Add follow-up workflow for falling/sleeping/VIP clients:
   - next contact date;
   - responsible manager;
