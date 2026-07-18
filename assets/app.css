@@ -1844,9 +1844,17 @@ tr:last-child td {
     box-shadow: inset 3px 0 0 var(--line);
 }
 
-.client-row.down .client-row-head,
+.client-row.down .client-row-head {
+    box-shadow: inset 3px 0 0 var(--danger);
+}
+
 .client-row.sleeping .client-row-head {
     box-shadow: inset 3px 0 0 var(--accent-yellow);
+}
+
+.client-row.up .client-row-head,
+.client-row.new .client-row-head {
+    box-shadow: inset 3px 0 0 var(--success);
 }
 
 .client-row-name {
@@ -1871,17 +1879,26 @@ tr:last-child td {
     white-space: nowrap;
 }
 
-.client-row-status.attention {
+.client-row-status.chip {
     border-radius: 999px;
-    background: var(--accent-yellow);
     padding: 3px 9px;
-    color: #171717;
     font-weight: 800;
 }
 
-.client-row-status.up,
-.client-row-status.new {
-    color: var(--text);
+.client-row-status.chip.down {
+    background: var(--danger);
+    color: #fff;
+}
+
+.client-row-status.chip.sleeping {
+    background: var(--accent-yellow);
+    color: #171717;
+}
+
+.client-row-status.chip.up,
+.client-row-status.chip.new {
+    background: var(--success);
+    color: #fff;
 }
 
 .client-row-contacts {

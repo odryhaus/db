@@ -683,7 +683,7 @@ $rows = array_slice($filteredRows, 0, 200);
                 <article class="client-row <?= e($trendClass) ?>">
                     <div class="client-row-head">
                         <a class="client-row-name" href="<?= e($salesLink) ?>"><?= e((string) $row['client_name']) ?></a>
-                        <span class="client-row-status <?= e($trendClass) ?> <?= $trendClass === 'down' || $trendClass === 'sleeping' ? 'attention' : '' ?>">
+                        <span class="client-row-status <?= e($trendClass) ?> <?= $trendClass !== 'idle' ? 'chip' : '' ?>">
                             <?= e($trendArrow !== '' ? $trendArrow . ' ' : '') ?><?= e($trendLabel) ?>
                         </span>
                         <?php if ($row['buyers']): ?>
