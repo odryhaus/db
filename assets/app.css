@@ -1776,6 +1776,11 @@ tr:last-child td {
     align-items: end;
 }
 
+.client-trend-filter {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+}
+
 .client-quarter-nav {
     display: grid;
     grid-template-columns: 42px minmax(170px, 1fr) 42px;
@@ -1809,6 +1814,13 @@ tr:last-child td {
     border-top: 1px solid var(--line);
 }
 
+.empty-state {
+    padding: var(--space-5) 0;
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+}
+
 .client-command-card {
     display: grid;
     gap: 10px;
@@ -1816,12 +1828,26 @@ tr:last-child td {
     border-bottom: 1px solid var(--line);
     border-radius: 0;
     background: transparent;
-    padding: 16px 0;
+    padding: 16px 0 16px 12px;
+    box-shadow: inset 3px 0 0 var(--line);
+}
+
+.client-command-card.down {
+    box-shadow: inset 3px 0 0 var(--danger);
+}
+
+.client-command-card.sleeping {
+    box-shadow: inset 3px 0 0 var(--warning);
+}
+
+.client-command-card.up,
+.client-command-card.new {
+    box-shadow: inset 3px 0 0 var(--success);
 }
 
 .client-command-main {
     display: grid;
-    grid-template-columns: minmax(320px, 1fr) minmax(120px, auto) minmax(150px, auto);
+    grid-template-columns: minmax(110px, auto) minmax(260px, 1fr) minmax(150px, auto);
     gap: 16px;
     align-items: start;
 }
@@ -1852,6 +1878,7 @@ tr:last-child td {
 
 .client-trend-badge {
     gap: 6px;
+    min-width: 96px;
     border: 1px solid var(--line);
     background: var(--surface-muted);
     color: var(--muted);
@@ -1891,7 +1918,7 @@ tr:last-child td {
 
 .client-command-metrics {
     display: grid;
-    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    grid-template-columns: repeat(3, minmax(140px, 220px));
     gap: 18px;
 }
 
@@ -1914,6 +1941,18 @@ tr:last-child td {
 .client-command-metrics strong {
     display: block;
     margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+}
+
+.client-command-secondary {
+    margin: 0;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.client-command-secondary strong {
+    color: var(--text);
+    font-weight: 700;
     font-variant-numeric: tabular-nums;
 }
 
