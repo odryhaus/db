@@ -1641,3 +1641,56 @@ Read-only Cockpit v2 drill-down pages:
 - `accounts.php` reads `db_financial_accounts` and transaction balances.
 
 No new schema creation is done by these pages.
+
+## Client Health And Payment Terms Plan
+
+Client Health must stay separate from client value.
+
+Current implementation uses existing data only:
+
+- order dates from `db_orders`;
+- unpaid amount from `db_orders.unpaid_amount_uah`;
+- invoice payment due date from `db_invoices.payment_due_date`;
+- fallback invoice due date from `db_invoices.expected_payment_date`;
+- manager name from cached orders.
+
+Planned additive fields for company-level payment terms:
+
+- `db_client_companies.payment_terms_type`
+- `db_client_companies.payment_terms_days`
+- `db_client_companies.payment_terms_day_type`
+- `db_client_companies.payment_terms_trigger`
+- `db_client_companies.payment_terms_note`
+
+Allowed values to review before implementation:
+
+- `payment_terms_type`: `prepayment`, `on_completion`, `postpayment`, `fixed_date`, `custom`
+- `payment_terms_day_type`: `calendar_days`, `banking_days`
+- `payment_terms_trigger`: `order_created`, `production_completed`, `order_received`, `delivery_completed`, `invoice_issued`, `custom_date`
+
+Planned additive fields for order/invoice overrides:
+
+- `payment_terms_type`
+- `payment_terms_days`
+- `payment_terms_day_type`
+- `payment_terms_trigger`
+- `payment_due_date`
+- `payment_terms_note`
+
+Planned additive fields for manager work:
+
+- `next_follow_up_at`
+- `last_contact_at`
+- `follow_up_status`
+- `pause_reason`
+- `client_health_note`
+- `is_seasonal`
+- `seasonality_note`
+
+Rules:
+
+- Do not mark receivables overdue without a due date.
+- Company terms are defaults only.
+- Invoice/order due date overrides company terms.
+- Seasonal/tender clients need a manual flag before cycle penalties can be trusted.
+- Do not create these columns automatically until approved.

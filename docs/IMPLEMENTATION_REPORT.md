@@ -1,5 +1,55 @@
 # Implementation Report
 
+## 2026-07-18 — Client Health Relationship Model
+
+### Files Changed
+
+- `client_health.php`
+- `client_balances.php`
+- `assets/app.css`
+- documentation files
+
+### What Changed
+
+- Replaced the old additive Health formula with `Health = 100 - risk penalties + small positive trend offsets`.
+- Removed all-time client value from Health. VIP/key/core/starter remains a separate value badge.
+- Added transparent Health reasons per client row.
+- Added separate signals:
+  - client value;
+  - Health;
+  - churn risk;
+  - manager work priority;
+  - order cycle;
+  - payment status.
+- Health now uses invoice `payment_due_date` / `expected_payment_date` when available.
+- Receivables without a due date are not treated as overdue and do not receive a payment penalty.
+
+### Current Payment Due Logic
+
+Current priority:
+
+1. `db_invoices.payment_due_date`
+2. `db_invoices.expected_payment_date`
+3. no due date known → `Строк не визначено`
+
+If due date has not arrived, unpaid receivable status is `У межах погодженого строку` and penalty is `0`.
+
+### Example Behavior
+
+- VIP with normal postpayment: value badge remains `VIP`; unpaid amount with future `payment_due_date` shows `У межах погодженого строку`; payment penalty is `0`.
+- VIP with overdue payment: value badge remains `VIP`; overdue due date applies payment penalty from `-5` to `-25`; work priority can become high.
+- Starter active client: value badge is `стартовий`; Health can still be high if the client orders in rhythm and has no overdue payment.
+- Sleeping client: trend/cycle penalties apply; Health can drop into risk/critical even if historical value is high.
+- Seasonal client: no special override exists yet; cycle penalties may need manual interpretation until seasonal/tender fields are approved.
+
+### What Was Not Implemented
+
+- No production schema changes.
+- No client/company payment terms fields yet.
+- No next follow-up fields yet.
+- No seasonal/tender client override yet.
+- No AI/black-box prediction.
+
 ## 2026-07-18 — Historical Queue Cleanup And Targeted Backfill Tick
 
 ### Files Changed
@@ -25,12 +75,12 @@ The previous manual button used the general worker. If old `buyers`, `companies`
 
 Client `Health` is a transparent rule-based score, not AI:
 
-- recent order activity adds the largest part of the score;
-- more active months add frequency points;
-- all-time value segment adds monetary points;
-- growth/new/returned signals add a small bonus;
+- score starts at 100;
+- individual order-cycle deviation subtracts points;
 - falling/sleeping signals subtract points;
-- receivables subtract points based on debt pressure.
+- growth/returned signals can offset a small amount;
+- overdue receivables subtract points only after a known payment due date;
+- lifetime value is separate and does not improve Health.
 
 ## 2026-07-18 — Client Health Guide And Backfill Queue Control
 
@@ -45,10 +95,10 @@ Client `Health` is a transparent rule-based score, not AI:
 
 - Moved the client work guide from the bottom of `Клієнти` to the top.
 - Added a compact explanation of `Health`:
-  - `75-100`: healthy
-  - `50-74`: watch
-  - `30-49`: risk
-  - `0-29`: cold
+  - `80-100`: healthy relationship
+  - `60-79`: needs attention
+  - `40-59`: risk
+  - `0-39`: critical
 - `VIP / ключові / основні / стартові` now always use all-time purchases.
 - The `Цінність` switch still changes the displayed period revenue, but does not change the lifetime segment.
 - Added a CEO-only `Обробити 1 історичний місяць` button to `Імпорт історії` so historical queued jobs can be manually tested from the page.
@@ -106,17 +156,16 @@ If months stay in `queued`, the data was not downloaded yet. It means jobs were 
   - `основний`: 250,000-999,999 UAH
   - `стартовий`: under 250,000 UAH
 - Added a first transparent customer-health score:
-  - recency of last order;
-  - active months in the selected display period;
-  - purchase value segment;
-  - growth/return trend;
-  - receivables penalty.
+  - individual order-cycle deviation;
+  - growth/return/down/sleeping trend;
+  - payment due status;
+  - no lifetime value bonus.
 - Client names now open `sales.php` for the same selected month and client.
 - Kept the compact row design from the latest Claude pass.
 
 ### Product Rationale
 
-The client page now follows a simpler RFM/customer-health direction: recency, purchase trend, lifetime value, debt, and manager ownership. It is not a full CRM; it is a fast warning screen for who needs attention now.
+The client page now follows a simpler RFM/customer-health direction: recency, frequency/cycle behavior, current payment due status, and manager work priority. Lifetime value remains visible as a separate segment, not as Health.
 
 ### What Was Not Implemented
 

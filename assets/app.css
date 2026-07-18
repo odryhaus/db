@@ -2059,8 +2059,21 @@ tr:last-child td {
 }
 
 .client-health-bar i.risk,
+.client-health-bar i.critical,
 .client-health-bar i.cold {
     background: var(--danger);
+}
+
+.client-reason-stat {
+    flex: 1 1 280px;
+    min-width: 240px;
+}
+
+.client-reason-stat strong {
+    max-width: 680px;
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.35;
 }
 
 

@@ -4,6 +4,7 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/cockpit.php';
 require_once __DIR__ . '/financial.php';
 require_once __DIR__ . '/cockpit_layout.php';
+require_once __DIR__ . '/client_health.php';
 
 require_login();
 
@@ -33,8 +34,10 @@ if (!in_array('manager_name', $orderColumns, true)) {
 }
 $hasClientCompanies = invoice_table_exists('db_client_companies');
 $hasClientContacts = invoice_table_exists('db_client_contacts');
+$hasInvoices = invoice_table_exists('db_invoices');
 $clientCompanyColumns = $hasClientCompanies ? finance_columns('db_client_companies') : [];
 $clientContactColumns = $hasClientContacts ? finance_columns('db_client_contacts') : [];
+$invoiceColumns = $hasInvoices ? finance_columns('db_invoices') : [];
 $managerOptions = [];
 
 function client_balances_month_label(string $month): string
@@ -234,8 +237,11 @@ function client_balances_blank_row(string $key, string $name = ''): array
         'first_order_month' => '',
         'last_order_month' => '',
         'last_before_month' => '',
+        'order_dates' => '',
         'active_month_count' => 0,
         'lifetime_order_count' => 0,
+        'payment_due_date' => '',
+        'undefined_payment_due_count' => 0,
     ];
 }
 
@@ -336,54 +342,6 @@ function client_balances_month_distance(string $selectedMonth, string $lastOrder
     return max(0, $months);
 }
 
-function client_balances_health(float $scopePurchases, float $receivableTotal, int $scopeActiveMonths, int $monthsSinceLast, string $trendClass): array
-{
-    $score = 0;
-    if ($monthsSinceLast === 0) {
-        $score += 40;
-    } elseif ($monthsSinceLast === 1) {
-        $score += 28;
-    } elseif ($monthsSinceLast === 2) {
-        $score += 18;
-    }
-
-    $score += min(20, $scopeActiveMonths * 4);
-
-    $segmentClass = client_balances_segment($scopePurchases)['class'];
-    $score += ['vip' => 30, 'large' => 22, 'medium' => 14, 'small' => 8, 'none' => 0][$segmentClass] ?? 0;
-
-    if (in_array($trendClass, ['up', 'new', 'returned'], true)) {
-        $score += 8;
-    } elseif ($trendClass === 'down') {
-        $score -= 10;
-    } elseif ($trendClass === 'sleeping') {
-        $score -= 18;
-    }
-
-    if ($receivableTotal > 0) {
-        $debtRatio = $scopePurchases > 0 ? $receivableTotal / $scopePurchases : 1;
-        if ($debtRatio >= 0.5) {
-            $score -= 25;
-        } elseif ($debtRatio >= 0.2) {
-            $score -= 15;
-        } else {
-            $score -= 8;
-        }
-    }
-
-    $score = max(0, min(100, $score));
-    if ($score >= 75) {
-        return ['score' => $score, 'class' => 'healthy', 'label' => 'здоровий'];
-    }
-    if ($score >= 50) {
-        return ['score' => $score, 'class' => 'watch', 'label' => 'увага'];
-    }
-    if ($score >= 30) {
-        return ['score' => $score, 'class' => 'risk', 'label' => 'ризик'];
-    }
-    return ['score' => $score, 'class' => 'cold', 'label' => 'холодний'];
-}
-
 function client_balances_count_label(int $count, string $one, string $few, string $many): string
 {
     $mod10 = $count % 10;
@@ -464,6 +422,29 @@ try {
         $managerFilterSql = client_balances_manager_filter($managerFilter);
         $managerSql = (string) $managerFilterSql['sql'];
         $searchParams = array_merge($searchFilter['params'], $managerFilterSql['params']);
+        $orderDateExpr = in_array('ordered_at', $orderColumns, true) ? 'DATE(o.ordered_at)' : "CONCAT(o.order_month, '-01')";
+        $hasOrderKeycrmId = in_array('keycrm_id', $orderColumns, true);
+        $canJoinInvoiceDue = $hasInvoices
+            && $hasOrderKeycrmId
+            && in_array('keycrm_order_id', $invoiceColumns, true)
+            && (in_array('payment_due_date', $invoiceColumns, true) || in_array('expected_payment_date', $invoiceColumns, true));
+        $invoiceDueExprs = [];
+        if (in_array('payment_due_date', $invoiceColumns, true)) {
+            $invoiceDueExprs[] = 'i.payment_due_date';
+        }
+        if (in_array('expected_payment_date', $invoiceColumns, true)) {
+            $invoiceDueExprs[] = 'i.expected_payment_date';
+        }
+        $invoiceDueExpr = $invoiceDueExprs ? 'COALESCE(' . implode(', ', $invoiceDueExprs) . ')' : 'NULL';
+        $invoiceJoin = $canJoinInvoiceDue
+            ? "LEFT JOIN (
+                SELECT keycrm_order_id, MIN({$invoiceDueExpr}) AS invoice_payment_due_date
+                FROM db_invoices i
+                WHERE keycrm_order_id IS NOT NULL
+                GROUP BY keycrm_order_id
+            ) inv ON inv.keycrm_order_id = o.keycrm_id"
+            : '';
+        $clientPaymentDueExpr = $canJoinInvoiceDue ? 'inv.invoice_payment_due_date' : 'NULL';
 
         if (in_array('manager_name', $orderColumns, true)) {
             $managerStmt = db()->query("
@@ -532,7 +513,8 @@ try {
                 MAX(CASE WHEN o.order_month < :history_selected_month THEN o.order_month ELSE NULL END) AS last_before_month,
                 COUNT(DISTINCT o.order_month) AS active_month_count,
                 {$scopeActiveSql} AS scope_active_month_count,
-                COUNT(*) AS lifetime_order_count
+                COUNT(*) AS lifetime_order_count,
+                GROUP_CONCAT(DISTINCT {$orderDateExpr} ORDER BY {$orderDateExpr} SEPARATOR '|||') AS order_dates
             FROM db_orders o
             {$expr['joins']}
             WHERE {$notCanceled}
@@ -549,6 +531,7 @@ try {
             $rowsByKey[$key]['first_order_month'] = (string) ($row['first_order_month'] ?? '');
             $rowsByKey[$key]['last_order_month'] = (string) ($row['last_order_month'] ?? '');
             $rowsByKey[$key]['last_before_month'] = (string) ($row['last_before_month'] ?? '');
+            $rowsByKey[$key]['order_dates'] = (string) ($row['order_dates'] ?? '');
             $rowsByKey[$key]['active_month_count'] = (int) ($row['active_month_count'] ?? 0);
             $rowsByKey[$key]['scope_active_month_count'] = (int) ($row['scope_active_month_count'] ?? 0);
             $rowsByKey[$key]['lifetime_order_count'] = (int) ($row['lifetime_order_count'] ?? 0);
@@ -561,9 +544,12 @@ try {
                 {$expr['manager_name']} AS manager_name,
                 COUNT(*) AS receivable_count,
                 COALESCE(SUM(o.unpaid_amount_uah), 0) AS receivable_total,
-                COALESCE(MAX(o.unpaid_amount_uah), 0) AS largest_receivable
+                COALESCE(MAX(o.unpaid_amount_uah), 0) AS largest_receivable,
+                MIN(CASE WHEN o.unpaid_amount_uah > 0 THEN {$clientPaymentDueExpr} ELSE NULL END) AS payment_due_date,
+                SUM(CASE WHEN o.unpaid_amount_uah > 0 AND {$clientPaymentDueExpr} IS NULL THEN 1 ELSE 0 END) AS undefined_payment_due_count
             FROM db_orders o
             {$expr['joins']}
+            {$invoiceJoin}
             WHERE o.unpaid_amount_uah > 0
               AND {$notCanceled}
               {$searchSql}
@@ -578,6 +564,8 @@ try {
             $rowsByKey[$key]['receivable_count'] = (int) ($row['receivable_count'] ?? 0);
             $rowsByKey[$key]['receivable_total'] = (float) ($row['receivable_total'] ?? 0);
             $rowsByKey[$key]['largest_receivable'] = (float) ($row['largest_receivable'] ?? 0);
+            $rowsByKey[$key]['payment_due_date'] = (string) ($row['payment_due_date'] ?? '');
+            $rowsByKey[$key]['undefined_payment_due_count'] = (int) ($row['undefined_payment_due_count'] ?? 0);
         }
 
         $stmt = db()->prepare("
@@ -687,13 +675,14 @@ foreach ($allRows as &$rowRef) {
     );
     $segmentInfo = client_balances_segment((float) $rowRef['total_purchases']);
     $monthsSinceLast = client_balances_month_distance($selectedMonth, (string) $rowRef['last_order_month']);
-    $healthInfo = client_balances_health(
-        (float) $rowRef['total_purchases'],
-        (float) $rowRef['receivable_total'],
-        (int) $rowRef['scope_active_month_count'],
-        $monthsSinceLast,
-        (string) $trendInfo['class']
-    );
+    $healthInfo = client_health_calculate([
+        'selected_month' => $selectedMonth,
+        'trend_class' => (string) $trendInfo['class'],
+        'value_segment' => $segmentInfo,
+        'order_dates' => client_health_parse_order_dates((string) $rowRef['order_dates']),
+        'receivable_total' => (float) $rowRef['receivable_total'],
+        'payment_due_date' => (string) $rowRef['payment_due_date'],
+    ]);
     $rowRef['trend_class'] = $trendInfo['class'];
     $rowRef['trend_label'] = $trendInfo['label'];
     $rowRef['current_month_sales'] = $trendInfo['current'];
@@ -703,6 +692,17 @@ foreach ($allRows as &$rowRef) {
     $rowRef['health_score'] = $healthInfo['score'];
     $rowRef['health_class'] = $healthInfo['class'];
     $rowRef['health_label'] = $healthInfo['label'];
+    $rowRef['health_reasons'] = $healthInfo['reasons'];
+    $rowRef['cycle_label'] = (string) ($healthInfo['cycle']['cycle_label'] ?? 'цикл невідомий');
+    $rowRef['cycle_deviation_label'] = (string) ($healthInfo['cycle']['deviation_label'] ?? '');
+    $rowRef['payment_status_label'] = (string) ($healthInfo['payment']['status'] ?? 'Строк не визначено');
+    $rowRef['payment_due_label'] = (string) ($healthInfo['payment']['detail'] ?? '');
+    $rowRef['payment_days_overdue'] = $healthInfo['payment']['days_overdue'] ?? null;
+    $rowRef['churn_risk_class'] = (string) ($healthInfo['churn_risk']['class'] ?? 'low');
+    $rowRef['churn_risk_label'] = (string) ($healthInfo['churn_risk']['label'] ?? 'низький');
+    $rowRef['work_priority_class'] = (string) ($healthInfo['priority']['class'] ?? 'low');
+    $rowRef['work_priority_label'] = (string) ($healthInfo['priority']['label'] ?? 'низький');
+    $rowRef['recommended_action'] = (string) ($healthInfo['priority']['action'] ?? 'підтримувати регулярний контакт');
     $rowRef['months_since_last'] = $monthsSinceLast;
 }
 unset($rowRef);
@@ -770,10 +770,11 @@ $rows = array_slice($filteredRows, 0, 200);
     <section class="panel dashboard-section client-command-toolbar">
         <div class="client-work-note client-work-note--top">
             <strong>Як читати клієнтів:</strong>
-            <span>Health 75-100 - здоровий клієнт; 50-74 - увага; 30-49 - ризик; 0-29 - холодний.</span>
-            <span>Наприклад, 49 / 100 ризик означає: є сигнал падіння, пауза, слабка активність або борг. Менеджеру треба контакт.</span>
+            <span>Health 80-100 - здорові відносини; 60-79 - потребує уваги; 40-59 - ризик; 0-39 - критичний стан.</span>
+            <span>Health рахує стан відносин, а не історичну цінність. VIP не отримує бонус у Health автоматично.</span>
+            <span>Наприклад, 49 / 100 ризик означає: клієнт суттєво відхилився від звичного циклу або є невирішена проблема.</span>
             <span>VIP / ключові / основні / стартові рахуються за всі покупки за весь час.</span>
-            <span>Цінність `12 міс.` або `місяць` показує оборот за період, але не змінює lifetime-сегмент.</span>
+            <span>Борг не штрафує Health, якщо строк оплати не настав або строк не визначено.</span>
         </div>
         <div class="client-month-nav">
             <a class="quarter-arrow" href="<?= e($prevMonthUrl) ?>" aria-label="Попередній місяць">‹</a>
@@ -881,12 +882,16 @@ $rows = array_slice($filteredRows, 0, 200);
                         <div class="client-stat"><span>Оплатили</span><strong><?= e(finance_money($row['cash_received'])) ?></strong><small><?= (int) $row['cash_count'] > 0 ? e((string) $row['cash_count']) . ' пл.' : '&nbsp;' ?></small></div>
                         <div class="client-stat"><span>Місяць</span><strong><?= e(finance_money($currentMonthSales)) ?></strong><small>було <?= e(finance_money($previousMonthSales)) ?></small></div>
                         <div class="client-stat"><span>Останнє</span><strong><?= e($lastOrderLabel) ?></strong><small><?= e((string) $row['active_month_count']) ?> акт. міс.</small></div>
+                        <div class="client-stat"><span>Цикл</span><strong><?= e((string) $row['cycle_label']) ?></strong><small><?= e((string) $row['cycle_deviation_label']) ?></small></div>
+                        <div class="client-stat"><span>Строк оплати</span><strong><?= e((string) $row['payment_status_label']) ?></strong><small><?= e((string) $row['payment_due_label']) ?></small></div>
                         <div class="client-stat client-health-stat">
                             <span>Health</span>
                             <strong><?= e((string) $row['health_score']) ?> / 100</strong>
                             <small><?= e((string) $row['health_label']) ?></small>
                             <span class="client-health-bar"><i class="<?= e((string) $row['health_class']) ?>" style="width: <?= e((string) $row['health_score']) ?>%"></i></span>
                         </div>
+                        <div class="client-stat"><span>Ризик втрати</span><strong><?= e((string) $row['churn_risk_label']) ?></strong><small>пріоритет: <?= e((string) $row['work_priority_label']) ?></small></div>
+                        <div class="client-stat client-reason-stat"><span>Причини</span><strong><?= e(implode('; ', (array) $row['health_reasons'])) ?></strong><small><?= e((string) $row['recommended_action']) ?></small></div>
                     </div>
                 </article>
             <?php endforeach; ?>

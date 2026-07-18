@@ -106,6 +106,13 @@ Product direction:
   - `спить`: win-back reason and next offer;
   - `повернувся`: keep warm and propose next order;
   - `стартовий + росте`: nurture into core account.
+- Review and approve additive client health fields:
+  - company payment terms;
+  - order/invoice payment due overrides;
+  - next follow-up;
+  - last contact;
+  - pause reason;
+  - seasonal/tender flag.
 
 Planning file:
 

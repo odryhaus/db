@@ -413,7 +413,10 @@ Decision:
 - Trend badges are simple leading indicators: new, returned, growing, falling, sleeping, active, no movement.
 - Client value badges use all-time purchases: VIP from 2,000,000 UAH, key from 1,000,000 UAH, core from 250,000 UAH, starter below 250,000 UAH.
 - The value period switch can show all-time, last 12 months, or selected-month revenue, but it does not change the lifetime segment.
-- Customer health is rule-based first: recency, frequency, monetary value, trend, and receivables pressure. No black-box prediction yet.
+- Customer Health measures relationship condition, not value. It starts from 100 and subtracts transparent risk penalties.
+- Lifetime value is never added to Health. VIP clients can still have poor Health.
+- Receivables affect Health only after a known payment due date is overdue.
+- If payment due date is unknown, show `Строк не визначено` and do not treat it as overdue automatically.
 - Manager reassignment must wait for local company/contact ownership fields and should not rewrite historical `db_orders.manager_name`.
 
 Reason: the CEO needs to notice falling or sleeping clients early and assign action before the client disappears.
