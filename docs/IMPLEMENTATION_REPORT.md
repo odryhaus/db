@@ -28,6 +28,8 @@
 - `sales.php` now supports `from_month`, `to_month`, `client_key`, and `q` filters.
 - Historical backfill month limit changed from hardcoded 24 months to config value `keycrm.sync_backfill_month_limit`, default `72`.
 - `history_sync.php` now defaults to `2022-07` and explains that queued monthly jobs require cron/worker processing.
+- Fixed zero-sales clients: if current and previous quarter are both `0`, the client now shows `немає руху`, not `стабільно`.
+- Simplified the client and sales layouts: fewer nested boxes, more text/number rows, black/yellow/gray accents, red reserved for debt.
 
 ### Product Rationale
 

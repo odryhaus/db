@@ -577,9 +577,12 @@ $rows = array_slice($allRows, 0, 200);
                 foreach ($previousMonths as $trendMonth) {
                     $previousQuarterSales += (float) ($trend[$clientKey][$trendMonth]['sales'] ?? 0);
                 }
-                $trendClass = 'steady';
-                $trendLabel = 'стабільно';
-                if ($currentQuarterSales <= 0 && $previousQuarterSales > 0) {
+                $trendClass = 'idle';
+                $trendLabel = 'немає руху';
+                if ($currentQuarterSales <= 0 && $previousQuarterSales <= 0) {
+                    $trendClass = 'idle';
+                    $trendLabel = 'немає руху';
+                } elseif ($currentQuarterSales <= 0 && $previousQuarterSales > 0) {
                     $trendClass = 'sleeping';
                     $trendLabel = 'спить';
                 } elseif ($previousQuarterSales > 0 && $currentQuarterSales >= $previousQuarterSales * 1.15) {
@@ -610,7 +613,7 @@ $rows = array_slice($allRows, 0, 200);
                             <?php endif; ?>
                         </div>
                         <div class="client-trend-badge <?= e($trendClass) ?>">
-                            <strong><?= $trendClass === 'up' ? '↑' : ($trendClass === 'down' || $trendClass === 'sleeping' ? '↓' : '→') ?></strong>
+                            <strong><?= $trendClass === 'up' ? '↑' : ($trendClass === 'down' || $trendClass === 'sleeping' ? '↓' : ($trendClass === 'idle' ? '–' : '→')) ?></strong>
                             <span><?= e($trendLabel) ?></span>
                         </div>
                         <div class="client-manager-pill"><?= e((string) ($row['manager_name'] ?: 'Без менеджера')) ?></div>

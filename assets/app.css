@@ -1799,32 +1799,24 @@ tr:last-child td {
 
 .client-command-list {
     display: grid;
-    gap: 12px;
+    gap: 0;
+    border-top: 1px solid var(--line);
 }
 
 .client-command-card {
     display: grid;
-    gap: 12px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: #fff;
-    padding: 14px;
-}
-
-.client-command-card.down,
-.client-command-card.sleeping {
-    border-color: #fed7aa;
-    background: #fffaf3;
-}
-
-.client-command-card.up {
-    border-color: #bbf7d0;
+    gap: 10px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+    padding: 16px 0;
 }
 
 .client-command-main {
     display: grid;
-    grid-template-columns: minmax(280px, 1fr) auto minmax(150px, auto);
-    gap: 12px;
+    grid-template-columns: minmax(320px, 1fr) minmax(120px, auto) minmax(150px, auto);
+    gap: 16px;
     align-items: start;
 }
 
@@ -1844,50 +1836,56 @@ tr:last-child td {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 34px;
+    min-height: 28px;
     border-radius: 999px;
-    padding: 7px 11px;
+    padding: 4px 9px;
+    font-size: 13px;
     font-weight: 800;
     white-space: nowrap;
 }
 
 .client-trend-badge {
     gap: 6px;
-    border: 1px solid var(--line);
-    background: #f3f4f6;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
 }
 
 .client-trend-badge.up,
 .client-trend-badge.new {
-    border-color: #86efac;
-    background: #f0fdf4;
-    color: #166534;
+    background: #111827;
+    color: #ffbc0d;
 }
 
 .client-trend-badge.down,
 .client-trend-badge.sleeping {
-    border-color: #fbbf24;
-    background: #fffbeb;
-    color: #92400e;
+    background: #ffbc0d;
+    color: #111827;
+}
+
+.client-trend-badge.idle,
+.client-trend-badge.steady {
+    color: var(--muted);
 }
 
 .client-manager-pill {
     border: 1px solid var(--line);
-    background: var(--surface-muted);
+    background: transparent;
     color: var(--muted);
 }
 
 .client-command-metrics {
     display: grid;
     grid-template-columns: repeat(5, minmax(120px, 1fr));
-    gap: 8px;
+    gap: 18px;
 }
 
 .client-command-metrics div {
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    background: var(--surface-muted);
-    padding: 8px 10px;
+    border: 0;
+    border-left: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+    padding: 0 0 0 12px;
 }
 
 .client-command-metrics span,
@@ -1905,14 +1903,32 @@ tr:last-child td {
 }
 
 .client-quarter-strip {
-    grid-template-columns: repeat(3, minmax(140px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
     min-width: 0;
+}
+
+.client-quarter-strip .client-month-cell {
+    min-height: 0;
+    min-width: 130px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
+}
+
+.client-quarter-strip .client-month-cell small,
+.client-quarter-strip .client-month-cell strong,
+.client-quarter-strip .client-month-cell em {
+    display: inline;
+    margin-right: 5px;
 }
 
 .client-work-note {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 12px;
     margin-top: 14px;
     border-top: 1px solid var(--line);
     padding-top: 12px;
@@ -1922,9 +1938,9 @@ tr:last-child td {
 }
 
 .client-work-note span {
-    border-radius: 999px;
-    background: var(--surface-muted);
-    padding: 5px 8px;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
 }
 
 .client-balance-table {
@@ -1995,26 +2011,28 @@ tr:last-child td {
 
 .order-feed {
     display: grid;
-    gap: 12px;
+    gap: 0;
+    border-top: 1px solid var(--line);
 }
 
 .order-card {
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: #fff;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
     overflow: hidden;
 }
 
 .order-card.has-debt {
-    border-color: #fed7aa;
+    border-color: var(--line);
 }
 
 .order-card__main {
     display: grid;
-    grid-template-columns: minmax(260px, 1.1fr) minmax(120px, .35fr) minmax(520px, 1.4fr);
-    gap: 14px;
+    grid-template-columns: minmax(260px, 1.1fr) minmax(110px, .35fr) minmax(520px, 1.4fr);
+    gap: 18px;
     align-items: center;
-    padding: 14px 16px;
+    padding: 14px 0;
 }
 
 .order-card__identity,
@@ -2029,8 +2047,8 @@ tr:last-child td {
     display: inline-flex;
     margin-bottom: 4px;
     border-radius: 999px;
-    background: #f3f4f6;
-    padding: 3px 8px;
+    background: transparent;
+    padding: 0;
     color: var(--muted);
     font-size: 12px;
     font-weight: 800;
@@ -2063,14 +2081,15 @@ tr:last-child td {
 .order-card__money {
     display: grid;
     grid-template-columns: repeat(4, minmax(90px, 1fr));
-    gap: 8px;
+    gap: 18px;
 }
 
 .order-card__money div {
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    background: var(--surface-muted);
-    padding: 8px 10px;
+    border: 0;
+    border-left: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+    padding: 0 0 0 12px;
 }
 
 .order-card__money span,
@@ -2094,10 +2113,10 @@ tr:last-child td {
 
 .order-products {
     display: grid;
-    gap: 6px;
+    gap: 0;
     border-top: 1px solid var(--line);
-    background: #fbfbfc;
-    padding: 10px 12px 12px;
+    background: transparent;
+    padding: 6px 0 10px;
 }
 
 .order-product {
@@ -2105,10 +2124,15 @@ tr:last-child td {
     grid-template-columns: minmax(260px, 1fr) 90px 110px 110px 120px;
     gap: 10px;
     align-items: start;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    background: #fff;
-    padding: 8px 10px;
+    border: 0;
+    border-bottom: 1px solid #eef0f3;
+    border-radius: 0;
+    background: transparent;
+    padding: 8px 0;
+}
+
+.order-product:last-child {
+    border-bottom: 0;
 }
 
 .order-product strong,
