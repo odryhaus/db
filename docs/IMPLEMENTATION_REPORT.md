@@ -1,5 +1,27 @@
 # Implementation Report
 
+## 2026-07-18 — Historical Backfill Clarification
+
+### Files Changed
+
+- `history_sync.php`
+- documentation files
+
+### What Changed
+
+- `Імпорт історії` now clearly explains that dashboard `Оновити все` is a delta/recent refresh, not a full historical import.
+- The page shows the selected month count and configured backfill month limit.
+- The page documents `.BRAND` full-history start as `2022-07`.
+- The backfill success message now shows both queued months and requested months.
+
+### Why January 2026 Was Confusing
+
+Some older documentation mentioned loading missing 2026 data from `2026-01`. That was only for the first dashboard validation pass, not the full .BRAND database. Full historical order import should start from `2022-07`.
+
+### Operational Note
+
+If months stay in `queued`, the data was not downloaded yet. It means jobs were created and must be processed by `cron/sync_worker.php` or the web tick fallback while the cockpit is open.
+
 ## 2026-07-18 — Client Monthly Health Signals
 
 ### Files Changed
@@ -865,10 +887,10 @@ Reason: old payments already saved in `db_order_payments` need one more sync pas
   - order products/items
   - order expenses
 
-### How To Load Missing 2026 Data
+### How To Load Full .BRAND History
 
 1. Open `history_sync.php`.
-2. Set `З місяця = 2026-01`.
+2. Set `З місяця = 2022-07`.
 3. Set `По місяць = current month`.
 4. Click `Дозавантажити`.
 5. Let cron run `cron/sync_worker.php`, or keep Cockpit open so web ticks process queued jobs.

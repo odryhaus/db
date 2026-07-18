@@ -13,6 +13,20 @@ $fromMonth = cockpit_valid_month((string) ($_POST['from_month'] ?? $_GET['from_m
 $toMonth = cockpit_valid_month((string) ($_POST['to_month'] ?? $_GET['to_month'] ?? date('Y-m')));
 $message = '';
 $error = '';
+$backfillMonthLimit = (int) app_config('keycrm.sync_backfill_month_limit', 72);
+
+function history_sync_month_count(string $fromMonth, string $toMonth): int
+{
+    $from = DateTimeImmutable::createFromFormat('!Y-m', cockpit_valid_month($fromMonth));
+    $to = DateTimeImmutable::createFromFormat('!Y-m', cockpit_valid_month($toMonth));
+    if (!$from || !$to || $from > $to) {
+        return 0;
+    }
+
+    return (((int) $to->format('Y')) - ((int) $from->format('Y'))) * 12 + ((int) $to->format('m')) - ((int) $from->format('m')) + 1;
+}
+
+$selectedMonthCount = history_sync_month_count($fromMonth, $toMonth);
 
 if (is_post() && (string) ($_POST['action'] ?? '') === 'enqueue_orders_backfill') {
     if (!csrf_is_valid()) {
@@ -22,9 +36,9 @@ if (is_post() && (string) ($_POST['action'] ?? '') === 'enqueue_orders_backfill'
 
     try {
         $result = sync_enqueue_orders_backfill($fromMonth, $toMonth, (int) (current_user()['id'] ?? 0));
-        $message = 'Поставлено в чергу: ' . (string) $result['queued_count'] . ' місяців.';
+        $message = 'Поставлено в чергу: ' . (string) $result['queued_count'] . ' місяців із ' . (string) count($result['months']) . '.';
         if ((int) $result['queued_count'] === 0) {
-            $message = 'Нових місяців не додано: вони вже можуть бути в черзі або виконуються.';
+            $message = 'Нових місяців не додано: вони вже можуть бути в черзі, виконуються або вже запускались.';
         }
     } catch (Throwable $e) {
         $error = $e->getMessage();
@@ -72,7 +86,13 @@ try {
                 <p class="eyebrow">Backfill</p>
                 <h2>Дозавантажити замовлення за місяці</h2>
             </div>
-            <span class="status-badge">filter[created_between] → ordered_at</span>
+            <span class="status-badge">ліміт <?= e((string) $backfillMonthLimit) ?> міс.</span>
+        </div>
+        <div class="client-work-note">
+            <strong>Важливо:</strong>
+            <span>`Оновити все` на дашборді оновлює зміни, але не сканує всю стару історію.</span>
+            <span>Повна база .BRAND починається з 2022-07, тому історію треба ставити в чергу тут.</span>
+            <span>Якщо задачі довго `queued`, значить їх створено, але worker/cron ще не обробив.</span>
         </div>
         <form class="client-balance-toolbar" method="post" action="<?= e(base_path('/history_sync.php?month=' . urlencode($month))) ?>">
             <?= csrf_field() ?>
@@ -87,7 +107,8 @@ try {
             </label>
             <button type="submit">Дозавантажити</button>
         </form>
-        <p class="muted">Для повної історії постав: з <strong>2022-07</strong> по <strong><?= e(date('Y-m')) ?></strong>. Місяці створюються як окремі задачі `queued`; їх має поступово забрати cron/worker. Якщо все довго висить у `queued`, треба перевірити cron `cron/sync_worker.php`.</p>
+        <p class="muted">Обраний діапазон: <strong><?= e((string) $selectedMonthCount) ?></strong> міс. Для повної історії постав: з <strong>2022-07</strong> по <strong><?= e(date('Y-m')) ?></strong>. Місяці створюються як окремі задачі `queued`; їх має поступово забрати cron/worker.</p>
+        <p class="muted">Якщо production config має менший `keycrm.sync_backfill_month_limit`, діапазон може обрізатися або показати помилку. Для 2022-07 → <?= e(date('Y-m')) ?> потрібно щонайменше <?= e((string) history_sync_month_count('2022-07', date('Y-m'))) ?> міс.</p>
     </section>
 
     <section class="panel dashboard-section">

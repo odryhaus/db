@@ -252,10 +252,13 @@ Status: technical but necessary.
 Problems:
 
 - Should not be part of daily work.
+- `Оновити все` does not replace this page; it is for delta/recent updates, not full history from 2022-07.
 
 Recommendation:
 
 - Keep in Admin.
+- Use `2022-07` as the full .BRAND history start month.
+- If jobs stay `queued`, verify production cron/worker before adding more ranges.
 
 ### Клієнти Sync — `clients_sync.php`
 

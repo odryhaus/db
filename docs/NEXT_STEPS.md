@@ -121,6 +121,7 @@ Before that, verify Near Real-Time Sync v0.1 in production:
 - Compare “Оплачено” against several KeyCRM orders before trusting payment KPIs.
 - For full history from July 2022, use `Імпорт історії` with `from_month=2022-07` and current month as `to_month`.
 - If many jobs remain `queued`, check cron for `cron/sync_worker.php`; queued means the app created jobs, not that KeyCRM import has finished.
+- Do not use dashboard `Оновити все` for first full-history load. It is optimized for delta/recent updates after the base history already exists.
 
 The milestone should:
 
@@ -352,5 +353,5 @@ After deploy:
 - Complete filters on `cash.php`: company, account, payment method, current/old order, allocation status.
 - Complete filters on `receivables.php`: client search, aging, debt amount.
 - Validate `client_balances.php` against real companies and buyers, then decide whether it should get drill-down links to filtered sales/cash/receivables rows.
-- Run `history_sync.php` from `2026-01` to the current month once, then validate January through current month dashboards.
+- Run `history_sync.php` from `2022-07` to the current month once, then validate old and current months in dashboards.
 - Decide how legacy `db_expenses` should be migrated or mirrored into `db_financial_transactions` so expenses appear in `Операції`.
