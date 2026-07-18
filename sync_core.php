@@ -403,7 +403,7 @@ function sync_month_sequence(string $fromMonth, string $toMonth, int $maxMonths 
 
 function sync_enqueue_orders_backfill(string $fromMonth, string $toMonth, ?int $userId = null): array
 {
-    $months = sync_month_sequence($fromMonth, $toMonth, 24);
+    $months = sync_month_sequence($fromMonth, $toMonth, (int) app_config('keycrm.sync_backfill_month_limit', 72));
     $stmt = db()->prepare("
         INSERT INTO db_sync_jobs (parent_job_id, job_type, status, created_by_user_id)
         SELECT NULL, :job_type, 'queued', :created_by_user_id

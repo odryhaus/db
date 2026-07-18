@@ -1,5 +1,57 @@
 # Implementation Report
 
+## 2026-07-18 — Client Command Center Quarter View
+
+### Files Changed
+
+- `client_balances.php`
+- `sales.php`
+- `history_sync.php`
+- `sync_core.php`
+- `config/config.example.php`
+- `assets/app.css`
+- documentation files
+
+### What Changed
+
+- `Клієнти` now works as a client command center instead of a month-only table.
+- Removed the selected-month input from client search; search now applies across the cached client/order base.
+- Added quarter navigation in three-month blocks starting from January: Jan-Mar, Apr-Jun, Jul-Sep, Oct-Dec.
+- Company names are now clickable and open `sales.php` filtered to that client for the selected quarter.
+- Added manager filter to the client page.
+- Added client trend signals:
+  - `↑ росте`
+  - `↓ падає`
+  - `спить`
+  - `новий/повернувся`
+  - `стабільно`
+- `sales.php` now supports `from_month`, `to_month`, `client_key`, and `q` filters.
+- Historical backfill month limit changed from hardcoded 24 months to config value `keycrm.sync_backfill_month_limit`, default `72`.
+- `history_sync.php` now defaults to `2022-07` and explains that queued monthly jobs require cron/worker processing.
+
+### Product Rationale
+
+Modern client work should focus on leading indicators, not only past totals: growth, decline, dormancy, debt and responsible manager. This follows the same direction as current B2B retention/customer-success practices: customer health signals, proactive account management, and next-best-action workflows.
+
+References reviewed:
+
+- Gartner notes growing investment in AI/customer-service technology by 2028.
+- McKinsey describes AI-powered next-best-experience as a way to decide what a customer needs now.
+- Current B2B retention guidance emphasizes leading indicators and health scores to act before churn.
+
+### What Was Not Implemented
+
+- No database schema changes.
+- No local manager reassignment workflow yet.
+- No client profile page yet.
+- No automatic churn prediction model yet.
+
+### Risks / Open Questions
+
+- Manager reassignment should use local company/contact ownership fields, not overwrite KeyCRM manager data.
+- If many historical jobs stay `queued`, production cron/worker must be checked.
+- Client trend logic is a simple quarter-over-quarter signal; it should later become a real health score with notes and follow-up dates.
+
 ## 2026-07-17 — Professional Cockpit Layout Pass
 
 ### Files Changed

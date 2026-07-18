@@ -77,6 +77,26 @@ Product direction:
 - Continue removing technical labels from CEO pages: replace internal field names/statuses with business language.
 - Add pagination and filters to `Продажі`, `Клієнти`, and `Документи` before these lists grow too large.
 - Add a proper client drill-down instead of trying to fit all months, buyers, orders, and debts into one table row.
+- Build Client Profile v0.1:
+  - all orders for one company;
+  - buyers/contacts under the company;
+  - legal entities;
+  - debt and invoices;
+  - quarter trend;
+  - manager owner;
+  - next follow-up date and note.
+- Build local manager reassignment only after the local ownership fields are verified:
+  - company owner;
+  - contact owner override;
+  - inherit company manager;
+  - bulk reassign from manager A to manager B.
+- Turn current simple client trend badges into a real client health score:
+  - purchase trend;
+  - months since last order;
+  - unpaid debt;
+  - payment delays;
+  - last contact/follow-up;
+  - manager ownership.
 
 Planning file:
 
@@ -96,6 +116,8 @@ Before that, verify Near Real-Time Sync v0.1 in production:
 - Confirm `db_order_expenses` receives order expense rows.
 - Confirm `filter[updated_between]` is accepted by production KeyCRM.
 - Compare “Оплачено” against several KeyCRM orders before trusting payment KPIs.
+- For full history from July 2022, use `Імпорт історії` with `from_month=2022-07` and current month as `to_month`.
+- If many jobs remain `queued`, check cron for `cron/sync_worker.php`; queued means the app created jobs, not that KeyCRM import has finished.
 
 The milestone should:
 

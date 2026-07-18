@@ -39,13 +39,13 @@ Recommendation:
 
 Goal: show company/client value, buyers inside company, current debt, cash, and month behavior.
 
-Status: useful but still young.
+Status: improved into a first client command center.
 
 Problems:
 
-- Search was too SQL-column dependent and could silently return no rows.
 - It still depends on cached order data; companies with no orders will not show.
 - No client profile page yet.
+- Manager ownership can only be filtered now; reassignment needs local ownership fields and UI.
 
 Changes made:
 
@@ -53,10 +53,15 @@ Changes made:
 - Buyers shown inside company.
 - Search now uses a combined text haystack and token matching.
 - SQL errors are no longer hidden as "Даних немає".
+- Selected month search was removed; the page now uses quarter navigation.
+- Company name opens filtered sales/orders for that client.
+- Added manager filter.
+- Added simple client trend badges: growing, falling, sleeping, new/returned, stable.
 
 Recommendation:
 
 - Next step: create one client profile page with orders, invoices, payments, buyers, legal entities, debt and notes.
+- Add follow-up workflow and local manager reassignment after ownership fields are verified.
 
 ### Продажі — `sales.php`
 

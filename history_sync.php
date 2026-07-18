@@ -9,7 +9,7 @@ require_once __DIR__ . '/sync_core.php';
 require_role('ceo');
 
 $month = cockpit_valid_month((string) ($_GET['month'] ?? date('Y-m')));
-$fromMonth = cockpit_valid_month((string) ($_POST['from_month'] ?? $_GET['from_month'] ?? '2026-01'));
+$fromMonth = cockpit_valid_month((string) ($_POST['from_month'] ?? $_GET['from_month'] ?? '2022-07'));
 $toMonth = cockpit_valid_month((string) ($_POST['to_month'] ?? $_GET['to_month'] ?? date('Y-m')));
 $message = '';
 $error = '';
@@ -87,7 +87,7 @@ try {
             </label>
             <button type="submit">Дозавантажити</button>
         </form>
-        <p class="muted">Для січня 2026 постав: з <strong>2026-01</strong> по <strong><?= e(date('Y-m')) ?></strong>. Потім відкрий Cockpit і натисни/залиши “Оновлюється”, або дочекайся cron worker.</p>
+        <p class="muted">Для повної історії постав: з <strong>2022-07</strong> по <strong><?= e(date('Y-m')) ?></strong>. Місяці створюються як окремі задачі `queued`; їх має поступово забрати cron/worker. Якщо все довго висить у `queued`, треба перевірити cron `cron/sync_worker.php`.</p>
     </section>
 
     <section class="panel dashboard-section">

@@ -401,3 +401,16 @@ Decision:
 - Unmapped payments are not lost; they are marked `needs_review`.
 
 Reason: the first goal is reliable visibility and reconciliation before adding editing workflows.
+
+## Client Base Is A Retention Command Center
+
+Decision:
+
+- `client_balances.php` should be treated as the client command center, not only a balance table.
+- The page uses quarter navigation because client behavior is easier to read in 3-month blocks than in one isolated month.
+- Company names link to filtered sales/orders for that client.
+- Manager filtering is allowed from existing order manager data.
+- Trend badges are simple leading indicators: growing, falling, sleeping, new/returned, stable.
+- Manager reassignment must wait for local company/contact ownership fields and should not rewrite historical `db_orders.manager_name`.
+
+Reason: the CEO needs to notice falling or sleeping clients early and assign action before the client disappears.

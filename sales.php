@@ -8,12 +8,76 @@ require_once __DIR__ . '/cockpit_layout.php';
 require_login();
 
 $month = cockpit_valid_month((string) ($_GET['month'] ?? date('Y-m')));
+$fromMonth = isset($_GET['from_month']) ? cockpit_valid_month((string) $_GET['from_month']) : '';
+$toMonth = isset($_GET['to_month']) ? cockpit_valid_month((string) $_GET['to_month']) : '';
 $managerFilter = trim((string) ($_GET['manager'] ?? ''));
+$clientKeyFilter = trim((string) ($_GET['client_key'] ?? ''));
+$searchFilter = trim((string) ($_GET['q'] ?? ''));
 $notCanceled = cockpit_not_canceled_sql('o');
 $orders = [];
 $orderItems = [];
 $summary = cockpit_monthly_summary($month);
 $canSeeCosts = in_array(user_role(), ['ceo', 'accountant'], true);
+$rangeMode = $fromMonth !== '' && $toMonth !== '' && $fromMonth <= $toMonth;
+$pageTitle = $rangeMode ? $fromMonth . ' - ' . $toMonth : $month;
+$orderColumns = invoice_table_exists('db_orders') ? finance_columns('db_orders') : [];
+
+function sales_search_filter(string $search, array $orderColumns): array
+{
+    if ($search === '') {
+        return ['sql' => '', 'params' => []];
+    }
+    $normalized = function_exists('mb_strtolower') ? mb_strtolower(trim($search), 'UTF-8') : strtolower(trim($search));
+    $tokens = preg_split('/\s+/u', $normalized, -1, PREG_SPLIT_NO_EMPTY);
+    if (!$tokens) {
+        return ['sql' => '', 'params' => []];
+    }
+    $fields = [];
+    foreach (['order_number', 'company_name', 'buyer_name', 'client_name', 'manager_name'] as $column) {
+        if (in_array($column, $orderColumns, true)) {
+            $fields[] = $column === 'order_number'
+                ? "COALESCE(CAST(o.{$column} AS CHAR), '')"
+                : "COALESCE(o.{$column}, '')";
+        }
+    }
+    if (!$fields) {
+        return ['sql' => '', 'params' => []];
+    }
+    $haystack = "LOWER(CONCAT_WS(' ', " . implode(', ', $fields) . "))";
+    $parts = [];
+    $params = [];
+    foreach ($tokens as $idx => $token) {
+        $key = 'sales_q_' . $idx;
+        $parts[] = "{$haystack} LIKE :{$key}";
+        $params[$key] = '%' . $token . '%';
+    }
+    return ['sql' => ' AND (' . implode(' AND ', $parts) . ')', 'params' => $params];
+}
+
+function sales_client_key_filter(string $clientKey, array $orderColumns): array
+{
+    if ($clientKey === '') {
+        return ['sql' => '', 'params' => []];
+    }
+    if (preg_match('/^company:(\d+)$/', $clientKey, $m) && in_array('company_id', $orderColumns, true)) {
+        return ['sql' => ' AND o.company_id = :client_company_id', 'params' => ['client_company_id' => (int) $m[1]]];
+    }
+    if (preg_match('/^client:(\d+)$/', $clientKey, $m) && in_array('client_id', $orderColumns, true)) {
+        return ['sql' => ' AND o.client_id = :client_id', 'params' => ['client_id' => (int) $m[1]]];
+    }
+    if (substr($clientKey, 0, 13) === 'company-name:') {
+        $nameFields = [];
+        foreach (['company_name', 'client_name', 'buyer_name'] as $column) {
+            if (in_array($column, $orderColumns, true)) {
+                $nameFields[] = "NULLIF(o.{$column}, '')";
+            }
+        }
+        if ($nameFields) {
+            return ['sql' => ' AND COALESCE(' . implode(', ', $nameFields) . ') = :client_name', 'params' => ['client_name' => substr($clientKey, 13)]];
+        }
+    }
+    return ['sql' => '', 'params' => []];
+}
 
 try {
     if (invoice_table_exists('db_orders')) {
@@ -23,11 +87,30 @@ try {
         $itemSelect = invoice_table_exists('db_order_items')
             ? "COALESCE(i.item_count, 0) AS item_count, COALESCE(i.items_total, 0) AS items_total,"
             : "0 AS item_count, 0 AS items_total,";
-        $where = ["o.order_month = :month", $notCanceled];
-        $params = ['month' => $month];
+        $where = [$notCanceled];
+        $params = [];
+        if ($rangeMode) {
+            $where[] = "o.order_month >= :from_month";
+            $where[] = "o.order_month <= :to_month";
+            $params['from_month'] = $fromMonth;
+            $params['to_month'] = $toMonth;
+        } else {
+            $where[] = "o.order_month = :month";
+            $params['month'] = $month;
+        }
         if ($managerFilter !== '') {
             $where[] = "COALESCE(NULLIF(o.manager_name, ''), 'Без менеджера') = :manager";
             $params['manager'] = $managerFilter;
+        }
+        $clientFilter = sales_client_key_filter($clientKeyFilter, $orderColumns);
+        if ($clientFilter['sql'] !== '') {
+            $where[] = substr((string) $clientFilter['sql'], 5);
+            $params = array_merge($params, $clientFilter['params']);
+        }
+        $searchSql = sales_search_filter($searchFilter, $orderColumns);
+        if ($searchSql['sql'] !== '') {
+            $where[] = substr((string) $searchSql['sql'], 5);
+            $params = array_merge($params, $searchSql['params']);
         }
         $stmt = db()->prepare("
             SELECT o.order_number, o.ordered_at, o.company_name, o.buyer_name, o.manager_name,
@@ -66,6 +149,16 @@ try {
     $orders = [];
 }
 
+$visibleSalesTotal = array_sum(array_map(static fn($order) => (float) ($order['total_amount_uah'] ?? 0), $orders));
+$visiblePaidTotal = array_sum(array_map(static fn($order) => (float) ($order['paid_amount_uah'] ?? 0), $orders));
+$visibleUnpaidTotal = array_sum(array_map(static fn($order) => (float) ($order['unpaid_amount_uah'] ?? 0), $orders));
+$visibleMarginTotal = array_sum(array_map(static fn($order) => (float) ($order['margin_sum_uah'] ?? 0), $orders));
+$displaySalesTotal = ($rangeMode || $clientKeyFilter !== '' || $searchFilter !== '' || $managerFilter !== '') ? $visibleSalesTotal : (float) $summary['sales_fact'];
+$displayOrderCount = ($rangeMode || $clientKeyFilter !== '' || $searchFilter !== '' || $managerFilter !== '') ? count($orders) : (int) $summary['order_count'];
+$displayMargin = ($rangeMode || $clientKeyFilter !== '' || $searchFilter !== '' || $managerFilter !== '') ? $visibleMarginTotal : (float) $summary['gross_margin'];
+$displayUnpaid = ($rangeMode || $clientKeyFilter !== '' || $searchFilter !== '' || $managerFilter !== '') ? $visibleUnpaidTotal : (float) $summary['sales_unpaid_by_order'];
+$displayMarginPercent = $displaySalesTotal > 0 ? round(($displayMargin / $displaySalesTotal) * 100, 1) : 0;
+
 ?><!doctype html>
 <html lang="uk">
 <head>
@@ -76,18 +169,18 @@ try {
 </head>
 <body>
 <main class="app-shell cockpit-shell">
-    <?php cockpit_page_header('CEO Money Cockpit', 'Продажі', 'Замовлення, товари, оплата і борг за вибраний місяць.' . ($managerFilter !== '' ? ' Менеджер: ' . $managerFilter : ''), 'sales', $month); ?>
+    <?php cockpit_page_header('CEO Money Cockpit', 'Продажі', 'Замовлення, товари, оплата і борг: ' . $pageTitle . ($managerFilter !== '' ? ' · Менеджер: ' . $managerFilter : '') . ($clientKeyFilter !== '' ? ' · клієнт' : ''), 'sales', $month, !$rangeMode); ?>
 
     <section class="kpi-grid">
-        <div class="kpi-card"><span class="label">Факт</span><strong><?= e(finance_money($summary['sales_fact'])) ?></strong></div>
-        <div class="kpi-card"><span class="label">Замовлення</span><strong><?= e((string) $summary['order_count']) ?></strong></div>
-        <div class="kpi-card"><span class="label">Маржа</span><strong><?= e(finance_money($summary['gross_margin'])) ?></strong><small><?= e((string) $summary['gross_margin_percent']) ?>%</small></div>
-        <div class="kpi-card"><span class="label">Борг за місяць</span><strong><?= e(finance_money($summary['sales_unpaid_by_order'])) ?></strong></div>
+        <div class="kpi-card"><span class="label">Факт</span><strong><?= e(finance_money($displaySalesTotal)) ?></strong></div>
+        <div class="kpi-card"><span class="label">Замовлення</span><strong><?= e((string) $displayOrderCount) ?></strong></div>
+        <div class="kpi-card"><span class="label">Маржа</span><strong><?= e(finance_money($displayMargin)) ?></strong><small><?= e((string) $displayMarginPercent) ?>%</small></div>
+        <div class="kpi-card"><span class="label">Борг</span><strong><?= e(finance_money($displayUnpaid)) ?></strong></div>
     </section>
 
     <section class="panel dashboard-section sales-workstation">
         <div class="section-heading">
-            <div><p class="eyebrow">Деталізація</p><h2>Замовлення за <?= e($month) ?></h2></div>
+            <div><p class="eyebrow">Деталізація</p><h2>Замовлення за <?= e($pageTitle) ?></h2></div>
             <span class="status-badge">товари показані всередині замовлення</span>
         </div>
         <div class="order-feed">

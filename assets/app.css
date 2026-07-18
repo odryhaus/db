@@ -1721,6 +1721,10 @@ tr:last-child td {
     gap: 12px;
 }
 
+.client-balance-toolbar--clients {
+    grid-template-columns: minmax(320px, 1fr) minmax(220px, 280px) auto;
+}
+
 .client-balance-toolbar label {
     display: grid;
     gap: 6px;
@@ -1733,12 +1737,14 @@ tr:last-child td {
 }
 
 .client-balance-toolbar input,
+.client-balance-toolbar select,
 .client-balance-toolbar button {
     height: 42px;
     border-radius: var(--radius-sm);
 }
 
-.client-balance-toolbar input {
+.client-balance-toolbar input,
+.client-balance-toolbar select {
     width: 100%;
     border: 1px solid var(--line);
     background: #fff;
@@ -1756,6 +1762,169 @@ tr:last-child td {
 
 .client-balance-group-switch {
     margin-top: 12px;
+}
+
+.client-command-toolbar {
+    display: grid;
+    grid-template-columns: minmax(280px, auto) minmax(0, 1fr);
+    gap: 16px;
+    align-items: end;
+}
+
+.client-quarter-nav {
+    display: grid;
+    grid-template-columns: 42px minmax(170px, 1fr) 42px;
+    gap: 8px;
+    align-items: center;
+}
+
+.quarter-arrow {
+    display: inline-grid;
+    place-items: center;
+    height: 42px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    color: var(--text);
+    font-size: 28px;
+    font-weight: 800;
+    text-decoration: none;
+    line-height: 1;
+}
+
+.quarter-arrow:hover {
+    background: #111827;
+    color: #fff;
+}
+
+.client-command-list {
+    display: grid;
+    gap: 12px;
+}
+
+.client-command-card {
+    display: grid;
+    gap: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: #fff;
+    padding: 14px;
+}
+
+.client-command-card.down,
+.client-command-card.sleeping {
+    border-color: #fed7aa;
+    background: #fffaf3;
+}
+
+.client-command-card.up {
+    border-color: #bbf7d0;
+}
+
+.client-command-main {
+    display: grid;
+    grid-template-columns: minmax(280px, 1fr) auto minmax(150px, auto);
+    gap: 12px;
+    align-items: start;
+}
+
+.client-company-link {
+    color: var(--text);
+    text-decoration: none;
+}
+
+.client-company-link:hover {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+}
+
+.client-trend-badge,
+.client-manager-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    border-radius: 999px;
+    padding: 7px 11px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.client-trend-badge {
+    gap: 6px;
+    border: 1px solid var(--line);
+    background: #f3f4f6;
+}
+
+.client-trend-badge.up,
+.client-trend-badge.new {
+    border-color: #86efac;
+    background: #f0fdf4;
+    color: #166534;
+}
+
+.client-trend-badge.down,
+.client-trend-badge.sleeping {
+    border-color: #fbbf24;
+    background: #fffbeb;
+    color: #92400e;
+}
+
+.client-manager-pill {
+    border: 1px solid var(--line);
+    background: var(--surface-muted);
+    color: var(--muted);
+}
+
+.client-command-metrics {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    gap: 8px;
+}
+
+.client-command-metrics div {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted);
+    padding: 8px 10px;
+}
+
+.client-command-metrics span,
+.client-command-metrics small {
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.client-command-metrics strong {
+    display: block;
+    margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+}
+
+.client-quarter-strip {
+    grid-template-columns: repeat(3, minmax(140px, 1fr));
+    min-width: 0;
+}
+
+.client-work-note {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.client-work-note span {
+    border-radius: 999px;
+    background: var(--surface-muted);
+    padding: 5px 8px;
 }
 
 .client-balance-table {
@@ -2170,7 +2339,10 @@ tr:last-child td {
     .cockpit-card-grid,
     .order-card__main,
     .invoice-registry-card__head,
-    .invoice-registry-card__controls {
+    .invoice-registry-card__controls,
+    .client-command-toolbar,
+    .client-command-main,
+    .client-command-metrics {
         grid-template-columns: 1fr;
     }
 
@@ -2254,7 +2426,8 @@ tr:last-child td {
         width: 100%;
     }
 
-    .client-balance-toolbar {
+    .client-balance-toolbar,
+    .client-balance-toolbar--clients {
         grid-template-columns: 1fr;
     }
 
