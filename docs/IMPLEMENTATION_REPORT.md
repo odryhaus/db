@@ -1,5 +1,21 @@
 # Implementation Report
 
+## 2026-07-18 — Client List Lifetime Purchase Sorting
+
+### Files Changed
+
+- `client_balances.php`
+
+### What Changed
+
+- The main clients list now sorts companies by total purchases for all time, descending.
+- The card title now explicitly says companies are shown by lifetime purchase amount.
+- The first client metric is now `Закупки всього`; the selected period remains as secondary context only.
+
+### Reason
+
+CEO needs the client page to answer the first question immediately: who bought the most from .BRAND across the whole history.
+
 ## 2026-07-18 — Historical Import Range Buttons
 
 ### Files Changed

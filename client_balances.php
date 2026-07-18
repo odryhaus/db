@@ -730,15 +730,11 @@ if ($segmentFilter !== '') {
 }
 
 usort($filteredRows, static function (array $a, array $b): int {
-    $rankCompare = client_balances_trend_rank((string) $a['trend_class']) <=> client_balances_trend_rank((string) $b['trend_class']);
-    if ($rankCompare !== 0) {
-        return $rankCompare;
+    $lifetimeCompare = (float) $b['total_purchases'] <=> (float) $a['total_purchases'];
+    if ($lifetimeCompare !== 0) {
+        return $lifetimeCompare;
     }
-    $receivableCompare = (float) $b['receivable_total'] <=> (float) $a['receivable_total'];
-    if ($receivableCompare !== 0) {
-        return $receivableCompare;
-    }
-    return (float) $b['scope_purchases'] <=> (float) $a['scope_purchases'];
+    return (float) $b['receivable_total'] <=> (float) $a['receivable_total'];
 });
 $rows = array_slice($filteredRows, 0, 200);
 
@@ -833,9 +829,9 @@ $rows = array_slice($filteredRows, 0, 200);
         <div class="section-heading">
             <div>
                 <p class="eyebrow">Top clients</p>
-                <h2>Компанії за цінністю: <?= e(client_balances_scope_labels()[$valueScope] ?? 'період') ?></h2>
+                <h2>Компанії за сумою закупок за весь час</h2>
             </div>
-            <span class="status-badge">натисни назву, щоб відкрити замовлення</span>
+            <span class="status-badge">сортування: найбільші покупки → менші</span>
         </div>
         <div class="client-command-list">
             <?php if (!$rows && ($trendFilter !== '' || $segmentFilter !== '')): ?>
@@ -877,7 +873,7 @@ $rows = array_slice($filteredRows, 0, 200);
                         <span class="client-manager-tag"><?= e((string) ($row['manager_name'] ?: 'Без менеджера')) ?></span>
                     </div>
                     <div class="client-stat-row">
-                        <div class="client-stat"><span>Купив <?= e($scopeLabel) ?></span><strong><?= e(finance_money($row['scope_purchases'])) ?></strong><small>всього <?= e(finance_money($row['total_purchases'])) ?></small></div>
+                        <div class="client-stat"><span>Закупки всього</span><strong><?= e(finance_money($row['total_purchases'])) ?></strong><small><?= e($scopeLabel) ?> <?= e(finance_money($row['scope_purchases'])) ?></small></div>
                         <div class="client-stat"><span>Борг</span><strong class="<?= (float) $row['receivable_total'] > 0 ? 'danger-text' : '' ?>"><?= e(finance_money($row['receivable_total'])) ?></strong><small><?= (int) $row['receivable_count'] > 0 ? e((string) $row['receivable_count']) . ' борг.' : '&nbsp;' ?></small></div>
                         <div class="client-stat"><span>Оплатили</span><strong><?= e(finance_money($row['cash_received'])) ?></strong><small><?= (int) $row['cash_count'] > 0 ? e((string) $row['cash_count']) . ' пл.' : '&nbsp;' ?></small></div>
                         <div class="client-stat"><span>Місяць</span><strong><?= e(finance_money($currentMonthSales)) ?></strong><small>було <?= e(finance_money($previousMonthSales)) ?></small></div>
