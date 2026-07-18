@@ -1805,6 +1805,18 @@ tr:last-child td {
     text-transform: uppercase;
 }
 
+.quick-range-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 12px;
+}
+
+.quick-range-grid form {
+    margin: 0;
+}
+
 .client-quarter-nav,
 .client-month-nav {
     display: grid;

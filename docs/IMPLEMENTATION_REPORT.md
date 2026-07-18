@@ -1,5 +1,23 @@
 # Implementation Report
 
+## 2026-07-18 — Historical Import Range Buttons
+
+### Files Changed
+
+- `history_sync.php`
+- `assets/app.css`
+- documentation files
+
+### What Changed
+
+- Quick half-year ranges now submit POST actions and enqueue that range immediately.
+- Opening an old range URL now shows a clear message that the range is selected but still needs `Дозавантажити`.
+- Added `Обробити до 3 історичних місяців` for manual batch processing.
+
+### Problem Found
+
+The previous quick range links only changed `from_month` / `to_month` in the URL. They did not enqueue jobs by themselves, so it looked like `2025 H2` was launched when it was only selected.
+
 ## 2026-07-18 — Client Health Relationship Model
 
 ### Files Changed

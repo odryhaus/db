@@ -142,6 +142,7 @@ Known gaps:
 - Dashboard `Оновити все` is not a full history loader. Full .BRAND history from `2022-07` must be queued through `history_sync.php`.
 - `history_sync.php` has a manual one-job processor for diagnostics, but production still needs cron for a long historical import.
 - The manual history processor intentionally handles only one `orders_backfill_*` month per click to avoid browser/server timeouts.
+- The manual batch processor handles up to 3 historical months per click; large backfills should still run through cron.
 - Client Health currently cannot apply company-specific payment terms unless an invoice/order has `payment_due_date` or `expected_payment_date`.
 - Client Health cannot yet use manager follow-up discipline because next follow-up/contact fields are not implemented.
 - Seasonal/tender clients are not marked yet, so order-cycle penalties may need manual interpretation for those clients.
