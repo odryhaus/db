@@ -1698,19 +1698,20 @@ tr:last-child td {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    min-height: 34px;
+    min-height: 30px;
     border: 1px solid var(--line);
     border-radius: 999px;
-    background: #fff;
+    background: var(--panel);
     color: var(--muted);
-    padding: 7px 12px;
+    padding: 5px 11px;
+    font-size: 12px;
     font-weight: 700;
     text-decoration: none;
 }
 
 .segmented-scroll a.active {
-    border-color: #111827;
-    background: #111827;
+    border-color: var(--accent);
+    background: var(--accent);
     color: #fff;
 }
 
@@ -1744,8 +1745,8 @@ tr:last-child td {
 .client-balance-toolbar input,
 .client-balance-toolbar select,
 .client-balance-toolbar button {
-    height: 42px;
-    border-radius: var(--radius-sm);
+    height: 36px;
+    border-radius: 999px;
 }
 
 .client-balance-toolbar input,
@@ -1753,8 +1754,9 @@ tr:last-child td {
     width: 100%;
     border: 1px solid var(--line);
     background: var(--panel);
-    padding: 0 12px;
+    padding: 0 14px;
     font: inherit;
+    font-size: 13px;
 }
 
 .client-balance-toolbar button {
@@ -1776,19 +1778,26 @@ tr:last-child td {
 
 .client-command-toolbar {
     display: grid;
-    grid-template-columns: minmax(280px, auto) minmax(0, 1fr);
+    grid-template-columns: minmax(220px, auto) minmax(0, 1fr);
     gap: 16px;
-    align-items: end;
+    align-items: center;
+}
+
+.client-filter-groups {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 6px;
+    margin-top: 10px;
 }
 
 .client-trend-filter {
-    grid-column: 1 / -1;
-    margin-top: 4px;
+    margin: 0;
 }
 
 .client-filter-label {
     display: inline-flex;
     align-items: center;
+    min-width: 68px;
     color: var(--muted);
     font-size: 10px;
     font-weight: 800;
@@ -1799,7 +1808,7 @@ tr:last-child td {
 .client-quarter-nav,
 .client-month-nav {
     display: grid;
-    grid-template-columns: 42px minmax(170px, 1fr) 42px;
+    grid-template-columns: 36px minmax(150px, 1fr) 36px;
     gap: 8px;
     align-items: center;
 }
@@ -1807,12 +1816,12 @@ tr:last-child td {
 .quarter-arrow {
     display: inline-grid;
     place-items: center;
-    height: 42px;
+    height: 36px;
     border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
+    border-radius: 999px;
     background: var(--panel);
     color: var(--text);
-    font-size: 22px;
+    font-size: 18px;
     font-weight: 700;
     text-decoration: none;
     line-height: 1;

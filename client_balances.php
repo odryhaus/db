@@ -797,25 +797,27 @@ $rows = array_slice($filteredRows, 0, 200);
             </label>
             <button type="submit">Показати</button>
         </form>
-        <div class="segmented-scroll client-trend-filter">
-            <span class="client-filter-label">Цінність</span>
-            <?php foreach (client_balances_scope_labels() as $scopeKey => $scopeLabelText): ?>
-                <a class="<?= $valueScope === $scopeKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentFilter, 'scope' => $scopeKey]))) ?>"><?= e($scopeLabelText) ?></a>
-            <?php endforeach; ?>
-        </div>
-        <div class="segmented-scroll client-trend-filter">
-            <span class="client-filter-label">Здоровʼя</span>
-            <a class="<?= $trendFilter === '' ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'segment' => $segmentFilter, 'scope' => $valueScope]))) ?>">Всі <small><?= e((string) count($allRows)) ?></small></a>
-            <?php foreach (client_balances_trend_labels() as $trendKey => $trendLabelText): ?>
-                <a class="<?= $trendFilter === $trendKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendKey, 'segment' => $segmentFilter, 'scope' => $valueScope]))) ?>"><?= e($trendLabelText) ?> <small><?= e((string) ($trendCounts[$trendKey] ?? 0)) ?></small></a>
-            <?php endforeach; ?>
-        </div>
-        <div class="segmented-scroll client-trend-filter">
-            <span class="client-filter-label">Сегмент</span>
-            <a class="<?= $segmentFilter === '' ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'scope' => $valueScope]))) ?>">Всі <small><?= e((string) count($allRows)) ?></small></a>
-            <?php foreach (client_balances_segment_labels() as $segmentKey => $segmentLabelText): ?>
-                <a class="<?= $segmentFilter === $segmentKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentKey, 'scope' => $valueScope]))) ?>"><?= e($segmentLabelText) ?> <small><?= e((string) ($segmentCounts[$segmentKey] ?? 0)) ?></small></a>
-            <?php endforeach; ?>
+        <div class="client-filter-groups">
+            <div class="segmented-scroll client-trend-filter">
+                <span class="client-filter-label">Цінність</span>
+                <?php foreach (client_balances_scope_labels() as $scopeKey => $scopeLabelText): ?>
+                    <a class="<?= $valueScope === $scopeKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentFilter, 'scope' => $scopeKey]))) ?>"><?= e($scopeLabelText) ?></a>
+                <?php endforeach; ?>
+            </div>
+            <div class="segmented-scroll client-trend-filter">
+                <span class="client-filter-label">Здоровʼя</span>
+                <a class="<?= $trendFilter === '' ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'segment' => $segmentFilter, 'scope' => $valueScope]))) ?>">Всі <small><?= e((string) count($allRows)) ?></small></a>
+                <?php foreach (client_balances_trend_labels() as $trendKey => $trendLabelText): ?>
+                    <a class="<?= $trendFilter === $trendKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendKey, 'segment' => $segmentFilter, 'scope' => $valueScope]))) ?>"><?= e($trendLabelText) ?> <small><?= e((string) ($trendCounts[$trendKey] ?? 0)) ?></small></a>
+                <?php endforeach; ?>
+            </div>
+            <div class="segmented-scroll client-trend-filter">
+                <span class="client-filter-label">Сегмент</span>
+                <a class="<?= $segmentFilter === '' ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'scope' => $valueScope]))) ?>">Всі <small><?= e((string) count($allRows)) ?></small></a>
+                <?php foreach (client_balances_segment_labels() as $segmentKey => $segmentLabelText): ?>
+                    <a class="<?= $segmentFilter === $segmentKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentKey, 'scope' => $valueScope]))) ?>"><?= e($segmentLabelText) ?> <small><?= e((string) ($segmentCounts[$segmentKey] ?? 0)) ?></small></a>
+                <?php endforeach; ?>
+            </div>
         </div>
     </section>
 
