@@ -1,5 +1,30 @@
 # Implementation Report
 
+## 2026-07-18 — Client Health Guide And Backfill Queue Control
+
+### Files Changed
+
+- `client_balances.php`
+- `history_sync.php`
+- `assets/app.css`
+- documentation files
+
+### What Changed
+
+- Moved the client work guide from the bottom of `Клієнти` to the top.
+- Added a compact explanation of `Health`:
+  - `75-100`: healthy
+  - `50-74`: watch
+  - `30-49`: risk
+  - `0-29`: cold
+- `VIP / ключові / основні / стартові` now always use all-time purchases.
+- The `Цінність` switch still changes the displayed period revenue, but does not change the lifetime segment.
+- Added a CEO-only `Обробити 1 задачу зараз` button to `Імпорт історії` so queued jobs can be manually tested from the page.
+
+### Operational Note
+
+If history jobs remain `queued`, the import has not downloaded those months yet. Cron should process `cron/sync_worker.php`; the manual button is only a diagnostic/fallback for one job at a time.
+
 ## 2026-07-18 — Historical Backfill Clarification
 
 ### Files Changed
@@ -43,14 +68,14 @@ If months stay in `queued`, the data was not downloaded yet. It means jobs were 
   - `активний`: bought in the selected month but is not new/returned/growing.
   - `немає руху`: no useful movement in the available data.
 - Added a `Цінність` switch: all time, last 12 months, selected month.
-- Added segment filters based on purchases in the selected value period:
+- Added segment filters based on all-time purchases:
   - `VIP`: 2,000,000 UAH+
   - `ключовий`: 1,000,000-1,999,999 UAH
   - `основний`: 250,000-999,999 UAH
   - `стартовий`: under 250,000 UAH
 - Added a first transparent customer-health score:
   - recency of last order;
-  - active months in the selected value period;
+  - active months in the selected display period;
   - purchase value segment;
   - growth/return trend;
   - receivables penalty.

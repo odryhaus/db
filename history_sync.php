@@ -45,6 +45,34 @@ if (is_post() && (string) ($_POST['action'] ?? '') === 'enqueue_orders_backfill'
     }
 }
 
+if (is_post() && (string) ($_POST['action'] ?? '') === 'process_one_job') {
+    if (!csrf_is_valid()) {
+        http_response_code(400);
+        exit('Invalid CSRF token');
+    }
+
+    try {
+        if (function_exists('set_time_limit')) {
+            set_time_limit(80);
+        }
+        $result = sync_worker_run_once();
+        if ($result === null) {
+            $message = 'У черзі немає задач для обробки.';
+        } else {
+            $job = $result['job'] ?? [];
+            $counts = is_array($result['counts'] ?? null) ? $result['counts'] : [];
+            $message = 'Оброблено задачу #' . (string) ((int) ($job['id'] ?? 0))
+                . ' ' . (string) ($job['job_type'] ?? '')
+                . ': ' . (string) ($result['status'] ?? '')
+                . ', seen=' . (string) ((int) ($counts['seen'] ?? 0))
+                . ', inserted=' . (string) ((int) ($counts['inserted'] ?? 0))
+                . ', updated=' . (string) ((int) ($counts['updated'] ?? 0)) . '.';
+        }
+    } catch (Throwable $e) {
+        $error = 'Не вдалося обробити задачу: ' . $e->getMessage();
+    }
+}
+
 $jobs = [];
 try {
     if (invoice_table_exists('db_sync_jobs')) {
@@ -109,6 +137,12 @@ try {
         </form>
         <p class="muted">Обраний діапазон: <strong><?= e((string) $selectedMonthCount) ?></strong> міс. Для повної історії постав: з <strong>2022-07</strong> по <strong><?= e(date('Y-m')) ?></strong>. Місяці створюються як окремі задачі `queued`; їх має поступово забрати cron/worker.</p>
         <p class="muted">Якщо production config має менший `keycrm.sync_backfill_month_limit`, діапазон може обрізатися або показати помилку. Для 2022-07 → <?= e(date('Y-m')) ?> потрібно щонайменше <?= e((string) history_sync_month_count('2022-07', date('Y-m'))) ?> міс.</p>
+        <form class="inline-form" method="post" action="<?= e(base_path('/history_sync.php?month=' . urlencode($month))) ?>">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="process_one_job">
+            <button type="submit" class="button-secondary">Обробити 1 задачу зараз</button>
+            <span class="muted">Якщо все стоїть `queued`, натисни для перевірки. Для повного імпорту все одно потрібен cron.</span>
+        </form>
     </section>
 
     <section class="panel dashboard-section">

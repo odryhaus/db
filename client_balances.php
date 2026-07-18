@@ -685,10 +685,10 @@ foreach ($allRows as &$rowRef) {
         $rowRef['first_order_month'] !== '' ? (string) $rowRef['first_order_month'] : null,
         $rowRef['last_before_month'] !== '' ? (string) $rowRef['last_before_month'] : null
     );
-    $segmentInfo = client_balances_segment((float) $rowRef['scope_purchases']);
+    $segmentInfo = client_balances_segment((float) $rowRef['total_purchases']);
     $monthsSinceLast = client_balances_month_distance($selectedMonth, (string) $rowRef['last_order_month']);
     $healthInfo = client_balances_health(
-        (float) $rowRef['scope_purchases'],
+        (float) $rowRef['total_purchases'],
         (float) $rowRef['receivable_total'],
         (int) $rowRef['scope_active_month_count'],
         $monthsSinceLast,
@@ -768,6 +768,13 @@ $rows = array_slice($filteredRows, 0, 200);
     <?php endif; ?>
 
     <section class="panel dashboard-section client-command-toolbar">
+        <div class="client-work-note client-work-note--top">
+            <strong>Як читати клієнтів:</strong>
+            <span>Health 75-100 - здоровий клієнт; 50-74 - увага; 30-49 - ризик; 0-29 - холодний.</span>
+            <span>Наприклад, 49 / 100 ризик означає: є сигнал падіння, пауза, слабка активність або борг. Менеджеру треба контакт.</span>
+            <span>VIP / ключові / основні / стартові рахуються за всі покупки за весь час.</span>
+            <span>Цінність `12 міс.` або `місяць` показує оборот за період, але не змінює lifetime-сегмент.</span>
+        </div>
         <div class="client-month-nav">
             <a class="quarter-arrow" href="<?= e($prevMonthUrl) ?>" aria-label="Попередній місяць">‹</a>
             <div>
@@ -812,7 +819,7 @@ $rows = array_slice($filteredRows, 0, 200);
                 <?php endforeach; ?>
             </div>
             <div class="segmented-scroll client-trend-filter">
-                <span class="client-filter-label">Сегмент</span>
+                <span class="client-filter-label">Сегмент за весь час</span>
                 <a class="<?= $segmentFilter === '' ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'scope' => $valueScope]))) ?>">Всі <small><?= e((string) count($allRows)) ?></small></a>
                 <?php foreach (client_balances_segment_labels() as $segmentKey => $segmentLabelText): ?>
                     <a class="<?= $segmentFilter === $segmentKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentKey, 'scope' => $valueScope]))) ?>"><?= e($segmentLabelText) ?> <small><?= e((string) ($segmentCounts[$segmentKey] ?? 0)) ?></small></a>
@@ -883,15 +890,6 @@ $rows = array_slice($filteredRows, 0, 200);
                     </div>
                 </article>
             <?php endforeach; ?>
-        </div>
-        <div class="client-work-note">
-            <strong>Як працювати з базою:</strong>
-            <span>↑ росте - підтримати і запропонувати наступний проєкт.</span>
-            <span>повернувся - швидко закріпити контакт, щоб не втратити повторно.</span>
-            <span>↓ падає - менеджеру подзвонити до того, як клієнт зникне.</span>
-            <span>спить - перевірити останній контакт і причину паузи.</span>
-            <span>VIP - клієнт від 2 млн UAH за вибраний період цінності.</span>
-            <span>борг - узгодити оплату або дату нагадування.</span>
         </div>
     </section>
 </main>
