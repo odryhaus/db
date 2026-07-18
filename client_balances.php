@@ -514,7 +514,7 @@ $rows = array_slice($allRows, 0, 200);
 <main class="app-shell cockpit-shell">
     <?php cockpit_page_header('CEO Money Cockpit', 'Клієнти', 'Клієнтська база: хто росте, хто падає, хто спить і кому треба увага.', 'client_balances', $quarterStart, false); ?>
 
-    <section class="kpi-grid">
+    <section class="kpi-grid compact-kpis">
         <div class="kpi-card"><span class="label">Факт за квартал</span><strong><?= e(finance_money($quarterSalesTotal)) ?></strong><small><?= e(client_balances_month_label($months[0])) ?> - <?= e(client_balances_month_label($months[2])) ?></small></div>
         <div class="kpi-card"><span class="label">Оплачено в замовленнях</span><strong><?= e(finance_money($quarterPaidTotal)) ?></strong><small>за квартальними продажами</small></div>
         <div class="kpi-card"><span class="label">Гроші прийшли</span><strong><?= e(finance_money($quarterCashTotal)) ?></strong><small>за датою платежу у кварталі</small></div>
@@ -619,11 +619,11 @@ $rows = array_slice($allRows, 0, 200);
                         <div class="client-manager-pill"><?= e((string) ($row['manager_name'] ?: 'Без менеджера')) ?></div>
                     </div>
                     <div class="client-command-metrics">
-                        <div><span>Закупки всього</span><strong><?= e(finance_money($row['total_purchases'])) ?></strong></div>
+                        <div><span>Закупки всього</span><strong><?= e(finance_money($row['total_purchases'])) ?></strong><small>&nbsp;</small></div>
                         <div><span>Квартал</span><strong><?= e(finance_money($currentQuarterSales)) ?></strong><small>було <?= e(finance_money($previousQuarterSales)) ?></small></div>
-                        <div><span>Оплачено</span><strong><?= e(finance_money($row['paid_by_order'])) ?></strong></div>
-                        <div><span>Гроші</span><strong><?= e(finance_money($row['cash_received'])) ?></strong><small><?= (int) $row['cash_count'] > 0 ? e((string) $row['cash_count']) . ' пл.' : '' ?></small></div>
-                        <div><span>Борг</span><strong class="<?= (float) $row['receivable_total'] > 0 ? 'danger-text' : '' ?>"><?= e(finance_money($row['receivable_total'])) ?></strong><small><?= (int) $row['receivable_count'] > 0 ? e((string) $row['receivable_count']) . ' борг.' : '' ?></small></div>
+                        <div><span>Оплачено</span><strong><?= e(finance_money($row['paid_by_order'])) ?></strong><small>&nbsp;</small></div>
+                        <div><span>Гроші</span><strong><?= e(finance_money($row['cash_received'])) ?></strong><small><?= (int) $row['cash_count'] > 0 ? e((string) $row['cash_count']) . ' пл.' : '&nbsp;' ?></small></div>
+                        <div><span>Борг</span><strong class="<?= (float) $row['receivable_total'] > 0 ? 'danger-text' : '' ?>"><?= e(finance_money($row['receivable_total'])) ?></strong><small><?= (int) $row['receivable_count'] > 0 ? e((string) $row['receivable_count']) . ' борг.' : '&nbsp;' ?></small></div>
                     </div>
                     <div class="client-month-strip client-quarter-strip">
                         <?php foreach ($months as $trendMonth): ?>

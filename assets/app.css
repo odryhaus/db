@@ -1747,17 +1747,22 @@ tr:last-child td {
 .client-balance-toolbar select {
     width: 100%;
     border: 1px solid var(--line);
-    background: #fff;
+    background: var(--panel);
     padding: 0 12px;
     font: inherit;
 }
 
 .client-balance-toolbar button {
-    border: 0;
-    background: #111827;
+    border: 1px solid var(--accent);
+    background: var(--accent);
     color: #fff;
     padding: 0 18px;
-    font-weight: 800;
+    font-weight: 700;
+}
+
+.client-balance-toolbar button:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
 }
 
 .client-balance-group-switch {
@@ -1784,16 +1789,17 @@ tr:last-child td {
     height: 42px;
     border: 1px solid var(--line);
     border-radius: var(--radius-sm);
-    background: #fff;
+    background: var(--panel);
     color: var(--text);
-    font-size: 28px;
-    font-weight: 800;
+    font-size: 22px;
+    font-weight: 700;
     text-decoration: none;
     line-height: 1;
 }
 
 .quarter-arrow:hover {
-    background: #111827;
+    background: var(--accent);
+    border-color: var(--accent);
     color: #fff;
 }
 
@@ -1839,32 +1845,41 @@ tr:last-child td {
     min-height: 28px;
     border-radius: 999px;
     padding: 4px 9px;
-    font-size: 13px;
-    font-weight: 800;
+    font-size: 12px;
+    font-weight: 700;
     white-space: nowrap;
 }
 
 .client-trend-badge {
     gap: 6px;
-    border: 0;
-    background: transparent;
+    border: 1px solid var(--line);
+    background: var(--surface-muted);
     color: var(--muted);
 }
 
 .client-trend-badge.up,
 .client-trend-badge.new {
-    background: #111827;
-    color: #ffbc0d;
+    border-color: var(--success-border);
+    background: var(--success-soft);
+    color: var(--success);
 }
 
-.client-trend-badge.down,
+.client-trend-badge.down {
+    border-color: var(--danger-border);
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
 .client-trend-badge.sleeping {
-    background: #ffbc0d;
-    color: #111827;
+    border-color: var(--warning-border);
+    background: var(--warning-soft);
+    color: var(--warning);
 }
 
 .client-trend-badge.idle,
 .client-trend-badge.steady {
+    border-color: var(--line);
+    background: var(--surface-muted);
     color: var(--muted);
 }
 
@@ -1973,28 +1988,28 @@ tr:last-child td {
 }
 
 .client-month-cell.has-sales {
-    border-color: #d8dce4;
-    background: #fff;
+    border-color: var(--line-strong);
+    background: var(--panel);
 }
 
 .client-month-cell small {
     margin: 0;
     color: var(--muted);
     font-size: 10px;
-    font-weight: 800;
+    font-weight: 700;
 }
 
 .client-month-cell strong {
     color: var(--text);
     font-size: 11px;
-    font-weight: 800;
+    font-weight: 700;
 }
 
 .client-month-cell em {
     color: var(--danger);
     font-size: 10px;
     font-style: normal;
-    font-weight: 800;
+    font-weight: 700;
 }
 
 .data-table td .dual-progress {
