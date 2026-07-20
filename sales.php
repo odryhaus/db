@@ -24,6 +24,7 @@ $canSeeCosts = in_array(user_role(), ['ceo', 'accountant'], true);
 $rangeMode = $fromMonth !== '' && $toMonth !== '' && $fromMonth <= $toMonth;
 $pageTitle = $rangeMode ? $fromMonth . ' - ' . $toMonth : $month;
 $orderColumns = invoice_table_exists('db_orders') ? finance_columns('db_orders') : [];
+$hasClientFilter = $clientKeyFilter !== '';
 $periodFromMonth = $rangeMode ? $fromMonth : $month;
 $periodToMonth = $rangeMode ? $toMonth : $month;
 $periodStart = $periodFromMonth . '-01 00:00:00';
@@ -339,14 +340,18 @@ foreach ($monthlyChart as $chartRow) {
     <section class="panel dashboard-section sales-filter-panel">
         <div class="section-heading">
             <div>
-                <p class="eyebrow">Client drilldown</p>
-                <h2><?= e($clientKeyFilter !== '' ? ($clientTitle !== '' ? $clientTitle : 'Клієнт') : 'Всі продажі') ?></h2>
+                <p class="eyebrow">Період</p>
+                <h2><?= e($hasClientFilter ? ($clientTitle !== '' ? $clientTitle : 'Клієнт') : 'Всі продажі') ?></h2>
             </div>
-            <span class="status-badge">період <?= e($periodFromMonth) ?> → <?= e($periodToMonth) ?></span>
+            <span class="status-badge"><?= $hasClientFilter ? 'обрана компанія' : 'загальний режим' ?> · <?= e($periodFromMonth) ?> → <?= e($periodToMonth) ?></span>
         </div>
+        <?php if (!$hasClientFilter): ?>
+            <p class="muted">Це загальний графік. Щоб побачити одну компанію, відкрий `Клієнти` і натисни на назву компанії.</p>
+        <?php endif; ?>
         <form class="sales-period-toolbar" method="get" action="<?= e(base_path('/sales.php')) ?>">
             <input type="hidden" name="month" value="<?= e($periodToMonth) ?>">
-            <?php if ($clientKeyFilter !== ''): ?><input type="hidden" name="client_key" value="<?= e($clientKeyFilter) ?>"><?php endif; ?>
+            <input type="hidden" name="view" value="client_drilldown">
+            <?php if ($hasClientFilter): ?><input type="hidden" name="client_key" value="<?= e($clientKeyFilter) ?>"><?php endif; ?>
             <label>
                 <span>З місяця</span>
                 <input type="month" name="from_month" value="<?= e($periodFromMonth) ?>">
@@ -379,7 +384,7 @@ foreach ($monthlyChart as $chartRow) {
 
     <section class="panel dashboard-section sales-chart-panel">
         <div class="section-heading">
-            <div><p class="eyebrow">Year view</p><h2><?= e($chartYear) ?>: продажі і гроші по місяцях</h2></div>
+            <div><p class="eyebrow"><?= $hasClientFilter ? 'Графік компанії' : 'Загальний графік' ?></p><h2><?= e($chartYear) ?>: січень-грудень по місяцях<?= $hasClientFilter && $clientTitle !== '' ? ' · ' . e($clientTitle) : '' ?></h2></div>
             <span class="status-badge">чорне — продажі · жовте — гроші прийшли</span>
         </div>
         <div class="sales-year-chart">

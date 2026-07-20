@@ -12,6 +12,8 @@
 
 - Clicking a company on `Клієнти` now opens `Продажі` filtered by that company from January through the selected month.
 - `Продажі` now has a period selector, year selector, and client drilldown header.
+- The page now explicitly labels whether the chart is for a selected company or for all sales.
+- If no company is selected, the page shows a hint to open `Клієнти` and click a company name.
 - Added separate KPIs for:
   - sales/orders created in the selected period
   - paid amount inside those orders
