@@ -852,6 +852,9 @@ $rows = array_slice($filteredRows, 0, 200);
                 $extraBuyers = (int) $row['buyers_count'] - count($row['buyers']);
                 $salesLink = base_path('/sales.php?' . client_balances_query([
                     'month' => $selectedMonth,
+                    'from_month' => substr($selectedMonth, 0, 4) . '-01',
+                    'to_month' => $selectedMonth,
+                    'year' => substr($selectedMonth, 0, 4),
                     'client_key' => $clientKey,
                 ]));
                 ?>

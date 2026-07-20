@@ -138,6 +138,7 @@ Before that, verify Near Real-Time Sync v0.1 in production:
 - If historical jobs remain `queued`, use `Імпорт історії → Обробити 1 історичний місяць` as a diagnostic, then configure cron for continuous processing.
 - If the history queue is too large, use `Очистити queued історію`, then enqueue half-year ranges one by one with the range buttons.
 - If cron is still not processing history, use `Обробити до 3 історичних місяців` as a temporary manual fallback.
+- Review the new client drilldown in `Продажі`: confirm that sales by order month and cash by payment date match the CEO's expected interpretation for old-order payments.
 
 The milestone should:
 

@@ -2130,6 +2130,118 @@ tr:last-child td {
     padding: var(--space-4);
 }
 
+.sales-filter-panel,
+.sales-chart-panel {
+    padding: var(--space-4);
+}
+
+.sales-period-toolbar {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(120px, 180px)) minmax(220px, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+}
+
+.sales-period-toolbar label {
+    display: grid;
+    gap: 6px;
+}
+
+.sales-period-toolbar label span {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.sales-period-toolbar input,
+.sales-period-toolbar button {
+    min-height: 38px;
+    border-radius: 999px;
+    font: inherit;
+}
+
+.sales-period-toolbar input {
+    width: 100%;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    padding: 0 14px;
+}
+
+.sales-period-toolbar button {
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    padding: 0 18px;
+    font-weight: 800;
+}
+
+.sales-year-chart {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 10px;
+    align-items: end;
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+}
+
+.sales-month-bar {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
+.sales-month-bar__plot {
+    display: flex;
+    align-items: end;
+    justify-content: center;
+    gap: 3px;
+    height: 120px;
+    border-bottom: 1px solid var(--line);
+}
+
+.sales-month-bar__plot i {
+    display: block;
+    width: 12px;
+    min-height: 0;
+    border-radius: 999px 999px 0 0;
+}
+
+.sales-bar-sales {
+    background: var(--text);
+}
+
+.sales-bar-cash {
+    background: var(--accent-yellow);
+}
+
+.sales-month-bar strong,
+.sales-month-bar span,
+.sales-month-bar small {
+    display: block;
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sales-month-bar strong {
+    color: var(--text);
+    font-size: 11px;
+}
+
+.sales-month-bar span,
+.sales-month-bar small {
+    color: var(--muted);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+}
+
+.sales-month-bar small {
+    color: var(--text);
+}
+
 .order-feed {
     display: grid;
     gap: 0;
@@ -2485,8 +2597,13 @@ tr:last-child td {
     .order-card__main,
     .invoice-registry-card__head,
     .invoice-registry-card__controls,
+    .sales-period-toolbar,
     .client-command-toolbar {
         grid-template-columns: 1fr;
+    }
+
+    .sales-year-chart {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
     }
 
     .order-card__money {
@@ -2585,6 +2702,10 @@ tr:last-child td {
     .order-product,
     .order-card__money {
         grid-template-columns: 1fr;
+    }
+
+    .sales-year-chart {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     .plan-list {

@@ -1,5 +1,31 @@
 # Implementation Report
 
+## 2026-07-20 — Client Sales Drilldown
+
+### Files Changed
+
+- `sales.php`
+- `client_balances.php`
+- `assets/app.css`
+
+### What Changed
+
+- Clicking a company on `Клієнти` now opens `Продажі` filtered by that company from January through the selected month.
+- `Продажі` now has a period selector, year selector, and client drilldown header.
+- Added separate KPIs for:
+  - sales/orders created in the selected period
+  - paid amount inside those orders
+  - cash payments received during the selected period, including payments for older orders
+  - current unpaid debt for the filtered orders
+- Added a January-December year chart for the selected client/filter:
+  - black bars = sales by order month
+  - yellow bars = cash received by payment date
+- Added a payment table for cash received in the selected period.
+
+### Business Decision
+
+Sales fact and cash received are intentionally separate. A client can pay old orders in the current period, so cash control must show payment-date cash in addition to order-date sales.
+
 ## 2026-07-18 — Client List Lifetime Purchase Sorting
 
 ### Files Changed
