@@ -27,11 +27,15 @@ $orders = [];
 $orderItems = [];
 $cashPayments = [];
 $monthlyChart = [];
+$managerOptions = [];
 $summary = cockpit_monthly_summary($month);
 $canSeeCosts = in_array(user_role(), ['ceo', 'accountant'], true);
 $rangeMode = $fromMonth !== '' && $toMonth !== '' && $fromMonth <= $toMonth;
 $pageTitle = $rangeMode ? $fromMonth . ' - ' . $toMonth : $month;
 $orderColumns = invoice_table_exists('db_orders') ? finance_columns('db_orders') : [];
+if (!in_array('manager_name', $orderColumns, true)) {
+    $managerFilter = '';
+}
 $hasClientFilter = $clientKeyFilter !== '';
 $periodFromMonth = $rangeMode ? $fromMonth : $month;
 $periodToMonth = $rangeMode ? $toMonth : $month;
@@ -165,6 +169,54 @@ function sales_download_debt_summary(array $orders, string $clientTitle, string 
     exit;
 }
 
+function sales_render_order_card(array $order, array $orderItems, bool $canSeeCosts): void
+{
+    $items = $orderItems[(int) ($order['keycrm_id'] ?? 0)] ?? [];
+    $clientName = (string) (($order['company_name'] ?? '') ?: ($order['buyer_name'] ?? '—'));
+    $buyerName = trim((string) ($order['buyer_name'] ?? ''));
+    $unpaid = (float) ($order['unpaid_amount_uah'] ?? 0);
+    ?>
+    <article class="order-card <?= $unpaid > 0 ? 'has-debt' : '' ?>">
+        <div class="order-card__main">
+            <div class="order-card__identity">
+                <span class="order-number">№ <?= e((string) $order['order_number']) ?></span>
+                <strong><?= e($clientName) ?></strong>
+                <?php if ($buyerName !== '' && $buyerName !== $clientName): ?><small><?= e($buyerName) ?></small><?php endif; ?>
+                <small><?= e((string) $order['ordered_at']) ?> · <?= e((string) ($order['manager_name'] ?: 'Без менеджера')) ?></small>
+            </div>
+            <div class="order-card__status">
+                <span class="status-badge"><?= e((string) ($order['status_name'] ?: '—')) ?></span>
+                <small><?= e((string) $order['item_count']) ?> поз.</small>
+            </div>
+            <div class="order-card__money">
+                <div><span>Сума</span><strong><?= e(finance_money($order['total_amount_uah'])) ?></strong></div>
+                <div><span>Оплачено</span><strong><?= e(finance_money($order['paid_amount_uah'])) ?></strong></div>
+                <div><span>Борг</span><strong class="<?= $unpaid > 0 ? 'danger-text' : '' ?>"><?= e(finance_money($order['unpaid_amount_uah'])) ?></strong></div>
+                <div><span>Маржа</span><strong><?= e(finance_money($order['margin_sum_uah'])) ?></strong></div>
+            </div>
+        </div>
+        <?php if ($items): ?>
+            <div class="order-products">
+                <div class="order-products__caption">Позиції замовлення</div>
+                <?php foreach ($items as $item): ?>
+                    <div class="order-product">
+                        <div>
+                            <strong><?= e((string) ($item['name'] ?: 'Позиція')) ?></strong>
+                            <?php if (!empty($item['properties_text'])): ?><small><?= e((string) $item['properties_text']) ?></small><?php endif; ?>
+                            <?php if (!empty($item['comment'])): ?><small><?= e((string) $item['comment']) ?></small><?php endif; ?>
+                        </div>
+                        <span><?= e((string) ($item['quantity'] ?? '0')) ?> <?= e((string) (($item['unit'] ?? '') ?: 'шт')) ?></span>
+                        <span><?= e(finance_money($item['sale_price'] ?? $item['product_price'] ?? 0)) ?></span>
+                        <?php if ($canSeeCosts): ?><span class="muted">с/в <?= e(finance_money($item['purchase_price'] ?? 0)) ?></span><?php endif; ?>
+                        <strong><?= e(finance_money($item['total_amount'] ?? 0)) ?></strong>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </article>
+    <?php
+}
+
 function sales_search_filter(string $search, array $orderColumns): array
 {
     if ($search === '') {
@@ -224,6 +276,17 @@ function sales_client_key_filter(string $clientKey, array $orderColumns): array
 
 try {
     if (invoice_table_exists('db_orders')) {
+        if (in_array('manager_name', $orderColumns, true)) {
+            $managerStmt = db()->query("
+                SELECT COALESCE(NULLIF(manager_name, ''), 'Без менеджера') AS manager_name, COUNT(*) AS order_count
+                FROM db_orders o
+                WHERE {$notCanceled}
+                GROUP BY COALESCE(NULLIF(manager_name, ''), 'Без менеджера')
+                ORDER BY manager_name ASC
+            ");
+            $managerOptions = $managerStmt->fetchAll();
+        }
+
         $itemJoin = invoice_table_exists('db_order_items')
             ? "LEFT JOIN (SELECT keycrm_order_id, COUNT(*) AS item_count, COALESCE(SUM(total_amount), 0) AS items_total FROM db_order_items WHERE COALESCE(is_deleted, 0) = 0 GROUP BY keycrm_order_id) i ON i.keycrm_order_id = o.keycrm_id"
             : "";
@@ -446,6 +509,9 @@ $chartMax = 0.0;
 foreach ($monthlyChart as $chartRow) {
     $chartMax = max($chartMax, (float) $chartRow['sales'], (float) $chartRow['cash_received']);
 }
+$orderPreviewLimit = 10;
+$previewOrders = array_slice($orders, 0, $orderPreviewLimit);
+$hiddenOrders = array_slice($orders, $orderPreviewLimit);
 
 if (isset($_GET['debt_pdf'])) {
     sales_download_debt_summary($debtOrders, $clientTitle, $periodFromMonth, $periodToMonth);
@@ -496,7 +562,16 @@ if (isset($_GET['debt_pdf'])) {
                 <span>Пошук</span>
                 <input type="search" name="q" value="<?= e($searchFilter) ?>" placeholder="номер, товар, клієнт">
             </label>
-            <?php if ($managerFilter !== ''): ?><input type="hidden" name="manager" value="<?= e($managerFilter) ?>"><?php endif; ?>
+            <label>
+                <span>Менеджер</span>
+                <select name="manager">
+                    <option value="">Всі</option>
+                    <?php foreach ($managerOptions as $managerOption): ?>
+                        <?php $managerName = (string) ($managerOption['manager_name'] ?? ''); ?>
+                        <option value="<?= e($managerName) ?>" <?= $managerFilter === $managerName ? 'selected' : '' ?>><?= e($managerName) ?> · <?= e((string) ($managerOption['order_count'] ?? 0)) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
             <button type="submit">Показати</button>
         </form>
         <div class="sales-filter-actions">
@@ -541,62 +616,6 @@ if (isset($_GET['debt_pdf'])) {
         </div>
     </section>
 
-    <section class="panel dashboard-section sales-workstation">
-        <div class="section-heading">
-            <div><p class="eyebrow">Деталізація</p><h2>Замовлення за <?= e($pageTitle) ?></h2></div>
-            <span class="status-badge"><?= $statusFilter === 'debt' ? 'тільки неоплачені / частково оплачені' : 'товари показані всередині замовлення' ?></span>
-        </div>
-        <div class="order-feed">
-            <?php if (!$orders): ?><div class="empty-state">Немає даних.</div><?php endif; ?>
-            <?php foreach ($orders as $order): ?>
-                <?php
-                $items = $orderItems[(int) ($order['keycrm_id'] ?? 0)] ?? [];
-                $clientName = (string) (($order['company_name'] ?? '') ?: ($order['buyer_name'] ?? '—'));
-                $buyerName = trim((string) ($order['buyer_name'] ?? ''));
-                $unpaid = (float) ($order['unpaid_amount_uah'] ?? 0);
-                ?>
-                <article class="order-card <?= $unpaid > 0 ? 'has-debt' : '' ?>">
-                    <div class="order-card__main">
-                        <div class="order-card__identity">
-                            <span class="order-number">№ <?= e((string) $order['order_number']) ?></span>
-                            <strong><?= e($clientName) ?></strong>
-                            <?php if ($buyerName !== '' && $buyerName !== $clientName): ?><small><?= e($buyerName) ?></small><?php endif; ?>
-                            <small><?= e((string) $order['ordered_at']) ?> · <?= e((string) ($order['manager_name'] ?: 'Без менеджера')) ?></small>
-                        </div>
-                        <div class="order-card__status">
-                            <span class="status-badge"><?= e((string) ($order['status_name'] ?: '—')) ?></span>
-                            <small><?= e((string) $order['item_count']) ?> поз.</small>
-                        </div>
-                        <div class="order-card__money">
-                            <div><span>Сума</span><strong><?= e(finance_money($order['total_amount_uah'])) ?></strong></div>
-                            <div><span>Оплачено</span><strong><?= e(finance_money($order['paid_amount_uah'])) ?></strong></div>
-                            <div><span>Борг</span><strong class="<?= $unpaid > 0 ? 'danger-text' : '' ?>"><?= e(finance_money($order['unpaid_amount_uah'])) ?></strong></div>
-                            <div><span>Маржа</span><strong><?= e(finance_money($order['margin_sum_uah'])) ?></strong></div>
-                        </div>
-                    </div>
-                    <?php if ($items): ?>
-                        <div class="order-products">
-                            <div class="order-products__caption">Позиції замовлення</div>
-                            <?php foreach ($items as $item): ?>
-                                <div class="order-product">
-                                    <div>
-                                        <strong><?= e((string) ($item['name'] ?: 'Позиція')) ?></strong>
-                                        <?php if (!empty($item['properties_text'])): ?><small><?= e((string) $item['properties_text']) ?></small><?php endif; ?>
-                                        <?php if (!empty($item['comment'])): ?><small><?= e((string) $item['comment']) ?></small><?php endif; ?>
-                                    </div>
-                                    <span><?= e((string) ($item['quantity'] ?? '0')) ?> <?= e((string) (($item['unit'] ?? '') ?: 'шт')) ?></span>
-                                    <span><?= e(finance_money($item['sale_price'] ?? $item['product_price'] ?? 0)) ?></span>
-                                    <?php if ($canSeeCosts): ?><span class="muted">с/в <?= e(finance_money($item['purchase_price'] ?? 0)) ?></span><?php endif; ?>
-                                    <strong><?= e(finance_money($item['total_amount'] ?? 0)) ?></strong>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php endif; ?>
-                </article>
-            <?php endforeach; ?>
-        </div>
-    </section>
-
     <?php if ($cashPayments): ?>
         <section class="panel dashboard-section sales-workstation">
             <div class="section-heading">
@@ -631,6 +650,29 @@ if (isset($_GET['debt_pdf'])) {
             </div>
         </section>
     <?php endif; ?>
+
+    <section class="panel dashboard-section sales-workstation">
+        <div class="section-heading">
+            <div><p class="eyebrow">Деталізація</p><h2>Замовлення за <?= e($pageTitle) ?></h2></div>
+            <span class="status-badge"><?= $statusFilter === 'debt' ? 'тільки неоплачені / частково оплачені' : 'останні ' . e((string) min($orderPreviewLimit, count($orders))) . ' із ' . e((string) count($orders)) ?></span>
+        </div>
+        <div class="order-feed">
+            <?php if (!$orders): ?><div class="empty-state">Немає даних.</div><?php endif; ?>
+            <?php foreach ($previewOrders as $order): ?>
+                <?php sales_render_order_card($order, $orderItems, $canSeeCosts); ?>
+            <?php endforeach; ?>
+            <?php if ($hiddenOrders): ?>
+                <details class="orders-more">
+                    <summary>+ ще <?= e((string) count($hiddenOrders)) ?> замовлень</summary>
+                    <div class="order-feed orders-more__feed">
+                        <?php foreach ($hiddenOrders as $order): ?>
+                            <?php sales_render_order_card($order, $orderItems, $canSeeCosts); ?>
+                        <?php endforeach; ?>
+                    </div>
+                </details>
+            <?php endif; ?>
+        </div>
+    </section>
 </main>
 <?= app_version_badge() ?>
 </body>

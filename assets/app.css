@@ -2137,7 +2137,7 @@ tr:last-child td {
 
 .sales-period-toolbar {
     display: grid;
-    grid-template-columns: repeat(2, minmax(120px, 180px)) minmax(220px, 1fr) auto;
+    grid-template-columns: repeat(2, minmax(120px, 160px)) minmax(220px, 1fr) minmax(170px, 220px) auto;
     gap: 10px;
     align-items: end;
 }
@@ -2156,13 +2156,15 @@ tr:last-child td {
 }
 
 .sales-period-toolbar input,
+.sales-period-toolbar select,
 .sales-period-toolbar button {
     min-height: 38px;
     border-radius: 999px;
     font: inherit;
 }
 
-.sales-period-toolbar input {
+.sales-period-toolbar input,
+.sales-period-toolbar select {
     width: 100%;
     border: 1px solid var(--line);
     background: var(--panel);
@@ -2276,6 +2278,42 @@ tr:last-child td {
     gap: 12px;
     border-top: 1px solid var(--line);
     padding-top: 12px;
+}
+
+.orders-more {
+    display: grid;
+    gap: 12px;
+}
+
+.orders-more summary {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--text);
+    padding: 0 16px;
+    font-size: 13px;
+    font-weight: 800;
+    list-style: none;
+}
+
+.orders-more summary::-webkit-details-marker {
+    display: none;
+}
+
+.orders-more[open] summary {
+    background: var(--text);
+    border-color: var(--text);
+    color: #fff;
+}
+
+.orders-more__feed {
+    border-top: 0;
+    padding-top: 0;
 }
 
 .order-card {

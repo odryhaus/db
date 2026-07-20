@@ -25,6 +25,9 @@
 - Added `Всі замовлення / Дебіторка` switch. `Дебіторка` uses `unpaid_amount_uah > 0`, so it includes unpaid and partially paid orders.
 - Added `PDF боргу` for a compact client debt reconciliation file.
 - Redesigned order cards so each order has a clear boundary and product rows are visually subordinate to the order header.
+- Moved the payments table above order detail so cash received is visible before long order lists.
+- Order detail now shows the first 10 newest orders and hides the rest behind `+ ще`.
+- Added a manager filter on `Продажі`; options are built from all historical `db_orders.manager_name` values that had orders at least once.
 - Added separate KPIs for:
   - sales/orders created in the selected period
   - paid amount inside those orders
