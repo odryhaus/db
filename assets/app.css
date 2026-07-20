@@ -2137,7 +2137,7 @@ tr:last-child td {
 
 .sales-period-toolbar {
     display: grid;
-    grid-template-columns: repeat(3, minmax(120px, 180px)) minmax(220px, 1fr) auto;
+    grid-template-columns: repeat(2, minmax(120px, 180px)) minmax(220px, 1fr) auto;
     gap: 10px;
     align-items: end;
 }
@@ -2177,9 +2177,38 @@ tr:last-child td {
     font-weight: 800;
 }
 
+.sales-money-legend,
+.sales-filter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    align-items: center;
+    margin-top: 12px;
+}
+
+.sales-money-legend {
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.sales-money-legend strong {
+    color: var(--text);
+}
+
+.sales-filter-actions {
+    justify-content: space-between;
+}
+
+.sales-filter-actions .segmented-scroll {
+    margin: 0;
+}
+
 .sales-year-chart {
     display: grid;
-    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
     gap: 10px;
     align-items: end;
     border-top: 1px solid var(--line);
@@ -2244,20 +2273,23 @@ tr:last-child td {
 
 .order-feed {
     display: grid;
-    gap: 0;
+    gap: 12px;
     border-top: 1px solid var(--line);
+    padding-top: 12px;
 }
 
 .order-card {
-    border: 0;
-    border-bottom: 1px solid var(--line);
-    border-radius: 0;
-    background: transparent;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--text);
+    border-radius: var(--radius-md);
+    background: #fff;
     overflow: hidden;
 }
 
 .order-card.has-debt {
-    border-color: var(--line);
+    border-color: #fecaca;
+    border-left-color: var(--danger);
+    background: #fffafa;
 }
 
 .order-card__main {
@@ -2265,7 +2297,7 @@ tr:last-child td {
     grid-template-columns: minmax(260px, 1.1fr) minmax(110px, .35fr) minmax(520px, 1.4fr);
     gap: 18px;
     align-items: center;
-    padding: 14px 0;
+    padding: 14px 16px;
 }
 
 .order-card__identity,
@@ -2348,8 +2380,17 @@ tr:last-child td {
     display: grid;
     gap: 0;
     border-top: 1px solid var(--line);
-    background: transparent;
-    padding: 6px 0 10px;
+    background: #f8f9fb;
+    padding: 8px 16px 10px;
+}
+
+.order-products__caption {
+    margin-bottom: 3px;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
 }
 
 .order-product {
@@ -2358,10 +2399,10 @@ tr:last-child td {
     gap: 10px;
     align-items: start;
     border: 0;
-    border-bottom: 1px solid #eef0f3;
+    border-bottom: 1px solid #e6e8ec;
     border-radius: 0;
     background: transparent;
-    padding: 8px 0;
+    padding: 7px 0;
 }
 
 .order-product:last-child {
@@ -2372,6 +2413,17 @@ tr:last-child td {
 .order-product small {
     display: block;
     overflow-wrap: anywhere;
+}
+
+.order-product > div > strong {
+    font-size: 13px;
+    line-height: 1.25;
+}
+
+.order-product > span,
+.order-product > strong {
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
 }
 
 .order-product small {

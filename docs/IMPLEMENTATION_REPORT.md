@@ -14,6 +14,17 @@
 - `Продажі` now has a period selector, year selector, and client drilldown header.
 - The page now explicitly labels whether the chart is for a selected company or for all sales.
 - If no company is selected, the page shows a hint to open `Клієнти` and click a company name.
+- Removed the separate chart year input. The chart now follows the selected `З місяця` → `По місяць` period.
+- Renamed the top money KPIs to match business language:
+  - `Замовили`
+  - `Оплатили з цих`
+  - `Прийшло за старі`
+  - `Борг`
+  - `Маржа`
+- Added a short on-page explanation of what the main money KPIs mean.
+- Added `Всі замовлення / Дебіторка` switch. `Дебіторка` uses `unpaid_amount_uah > 0`, so it includes unpaid and partially paid orders.
+- Added `PDF боргу` for a compact client debt reconciliation file.
+- Redesigned order cards so each order has a clear boundary and product rows are visually subordinate to the order header.
 - Added separate KPIs for:
   - sales/orders created in the selected period
   - paid amount inside those orders
