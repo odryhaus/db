@@ -28,6 +28,71 @@ function cockpit_not_canceled_sql(string $alias = ''): string
     ";
 }
 
+function cockpit_has_column(string $table, string $column): bool
+{
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (!array_key_exists($key, $cache)) {
+        if (!function_exists('finance_columns')) {
+            require_once __DIR__ . '/financial.php';
+        }
+        $cache[$key] = invoice_table_exists($table) && in_array($column, finance_columns($table), true);
+    }
+
+    return (bool) $cache[$key];
+}
+
+function cockpit_order_not_excluded_sql(string $alias = ''): string
+{
+    if (!cockpit_has_column('db_orders', 'analytics_excluded')) {
+        return '1=1';
+    }
+    $prefix = $alias !== '' ? rtrim($alias, '.') . '.' : '';
+    return "COALESCE({$prefix}analytics_excluded, 0) = 0";
+}
+
+function cockpit_order_client_not_excluded_sql(string $alias = ''): string
+{
+    if (
+        !cockpit_has_column('db_orders', 'company_id')
+        || !cockpit_has_column('db_client_companies', 'keycrm_company_id')
+        || !cockpit_has_column('db_client_companies', 'analytics_excluded')
+    ) {
+        return '1=1';
+    }
+    $prefix = $alias !== '' ? rtrim($alias, '.') . '.' : '';
+    return "NOT EXISTS (
+        SELECT 1
+        FROM db_client_companies analytics_cc
+        WHERE analytics_cc.keycrm_company_id = {$prefix}company_id
+          AND COALESCE(analytics_cc.analytics_excluded, 0) = 1
+        LIMIT 1
+    )";
+}
+
+function cockpit_order_excluded_sql(string $alias = ''): string
+{
+    if (!cockpit_has_column('db_orders', 'analytics_excluded')) {
+        return '1=0';
+    }
+    $prefix = $alias !== '' ? rtrim($alias, '.') . '.' : '';
+    return "COALESCE({$prefix}analytics_excluded, 0) = 1";
+}
+
+function cockpit_active_order_sql(string $alias = ''): string
+{
+    return '(' . cockpit_not_canceled_sql($alias) . ') AND ' . cockpit_order_not_excluded_sql($alias) . ' AND ' . cockpit_order_client_not_excluded_sql($alias);
+}
+
+function cockpit_client_company_not_excluded_sql(string $alias = ''): string
+{
+    if (!cockpit_has_column('db_client_companies', 'analytics_excluded')) {
+        return '1=1';
+    }
+    $prefix = $alias !== '' ? rtrim($alias, '.') . '.' : '';
+    return "COALESCE({$prefix}analytics_excluded, 0) = 0";
+}
+
 function cockpit_active_payment_sql(string $alias = ''): string
 {
     $prefix = $alias !== '' ? rtrim($alias, '.') . '.' : '';
@@ -70,12 +135,16 @@ function cockpit_zero_summary(string $month): array
 
 function cockpit_monthly_summary(string $month): array
 {
+    if (function_exists('ensure_analytics_exclusion_columns')) {
+        ensure_analytics_exclusion_columns();
+    }
+
     $month = cockpit_valid_month($month);
     $bounds = cockpit_month_bounds($month);
     $summary = cockpit_zero_summary($month);
     $target = active_company_target(db(), $month);
     $summary['target'] = (float) ($target['amount_uah'] ?? 4000000);
-    $notCanceled = cockpit_not_canceled_sql('o');
+    $notCanceled = cockpit_active_order_sql('o');
 
     if (invoice_table_exists('db_orders')) {
         $stmt = db()->prepare("
@@ -124,6 +193,7 @@ function cockpit_monthly_summary(string $month): array
 
     if (invoice_table_exists('db_order_payments')) {
         $activePayment = cockpit_active_payment_sql('p');
+        $activePaymentOrder = cockpit_active_order_sql('o');
         $payments = db()->prepare("
             SELECT
                 COALESCE(SUM(p.amount), 0) AS cash_received,
@@ -135,6 +205,7 @@ function cockpit_monthly_summary(string $month): array
             WHERE p.payment_date >= :month_start
               AND p.payment_date <= :month_end
               AND {$activePayment}
+              AND {$activePaymentOrder}
         ");
         $payments->execute([
             'month_match' => $month,
@@ -246,12 +317,16 @@ function cockpit_add_obligation_summary(array &$summary, array $bounds): void
 
 function cockpit_manager_summary(string $month): array
 {
+    if (function_exists('ensure_analytics_exclusion_columns')) {
+        ensure_analytics_exclusion_columns();
+    }
+
     if (!invoice_table_exists('db_orders')) {
         return [];
     }
 
     $month = cockpit_valid_month($month);
-    $notCanceled = cockpit_not_canceled_sql('o');
+    $notCanceled = cockpit_active_order_sql('o');
     $stmt = db()->prepare("
         SELECT
             COALESCE(NULLIF(o.manager_name, ''), 'Без менеджера') AS manager_name,
@@ -314,7 +389,7 @@ function cockpit_action_queue(string $month): array
 {
     $month = cockpit_valid_month($month);
     $actions = [];
-    $notCanceled = cockpit_not_canceled_sql('o');
+    $notCanceled = cockpit_active_order_sql('o');
 
     if (invoice_table_exists('db_orders')) {
         $stmt = db()->query("
@@ -333,8 +408,8 @@ function cockpit_action_queue(string $month): array
                 'title' => 'Нагадати оплату',
                 'meta' => '#' . (string) $row['order_number'] . ' · ' . $client . ' · ' . (string) max(0, (int) ($row['debt_age'] ?? 0)) . ' дн.',
                 'value' => money_uah_compact($row['unpaid_amount_uah'] ?? 0),
-                'href' => '/receivables.php?month=' . urlencode($month),
-                'cta' => 'Дебіторка',
+                'href' => '/sales.php?' . http_build_query(['month' => $month, 'status' => 'debt']),
+                'cta' => 'Продажі',
             ];
         }
     }

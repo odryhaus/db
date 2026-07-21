@@ -6,6 +6,9 @@ require_once __DIR__ . '/financial.php';
 require_once __DIR__ . '/cockpit_layout.php';
 
 require_login();
+if (function_exists('ensure_analytics_exclusion_columns')) {
+    ensure_analytics_exclusion_columns();
+}
 
 $autoloadPath = __DIR__ . '/vendor/autoload.php';
 if (is_file($autoloadPath)) {
@@ -19,10 +22,12 @@ $managerFilter = trim((string) ($_GET['manager'] ?? ''));
 $clientKeyFilter = trim((string) ($_GET['client_key'] ?? ''));
 $searchFilter = trim((string) ($_GET['q'] ?? ''));
 $statusFilter = trim((string) ($_GET['status'] ?? 'all'));
-if (!in_array($statusFilter, ['all', 'debt'], true)) {
+if (!in_array($statusFilter, ['all', 'debt', 'inactive'], true)) {
     $statusFilter = 'all';
 }
-$notCanceled = cockpit_not_canceled_sql('o');
+$notCanceled = cockpit_active_order_sql('o');
+$notCanceledOnly = cockpit_not_canceled_sql('o');
+$inactiveOrders = '(' . cockpit_order_excluded_sql('o') . ' OR NOT (' . cockpit_order_client_not_excluded_sql('o') . '))';
 $orders = [];
 $orderItems = [];
 $cashPayments = [];
@@ -30,12 +35,16 @@ $monthlyChart = [];
 $managerOptions = [];
 $summary = cockpit_monthly_summary($month);
 $canSeeCosts = in_array(user_role(), ['ceo', 'accountant'], true);
+$canManageAnalytics = user_role() === 'ceo';
 $rangeMode = $fromMonth !== '' && $toMonth !== '' && $fromMonth <= $toMonth;
 $pageTitle = $rangeMode ? $fromMonth . ' - ' . $toMonth : $month;
 $orderColumns = invoice_table_exists('db_orders') ? finance_columns('db_orders') : [];
 if (!in_array('manager_name', $orderColumns, true)) {
     $managerFilter = '';
 }
+$clientExcludedSelect = cockpit_order_client_not_excluded_sql('o') !== '1=1'
+    ? "CASE WHEN NOT (" . cockpit_order_client_not_excluded_sql('o') . ") THEN 1 ELSE 0 END AS analytics_client_excluded"
+    : "0 AS analytics_client_excluded";
 $hasClientFilter = $clientKeyFilter !== '';
 $periodFromMonth = $rangeMode ? $fromMonth : $month;
 $periodToMonth = $rangeMode ? $toMonth : $month;
@@ -87,6 +96,16 @@ function sales_current_query(array $overrides = []): string
 {
     $params = array_merge($_GET, $overrides);
     return http_build_query(array_filter($params, static fn($value) => $value !== null && $value !== ''));
+}
+
+function sales_redirect_back(): void
+{
+    $returnTo = (string) ($_POST['return_to'] ?? '');
+    if ($returnTo === '' || $returnTo[0] !== '/' || str_starts_with($returnTo, '//') || str_contains($returnTo, "\n") || str_contains($returnTo, "\r")) {
+        $returnTo = '/sales.php';
+    }
+    header('Location: ' . $returnTo);
+    exit;
 }
 
 function sales_debt_summary_html(array $orders, string $clientTitle, string $fromMonth, string $toMonth): string
@@ -169,14 +188,16 @@ function sales_download_debt_summary(array $orders, string $clientTitle, string 
     exit;
 }
 
-function sales_render_order_card(array $order, array $orderItems, bool $canSeeCosts): void
+function sales_render_order_card(array $order, array $orderItems, bool $canSeeCosts, bool $canManageAnalytics): void
 {
     $items = $orderItems[(int) ($order['keycrm_id'] ?? 0)] ?? [];
     $clientName = (string) (($order['company_name'] ?? '') ?: ($order['buyer_name'] ?? '—'));
     $buyerName = trim((string) ($order['buyer_name'] ?? ''));
     $unpaid = (float) ($order['unpaid_amount_uah'] ?? 0);
+    $isExcluded = (int) ($order['analytics_excluded'] ?? 0) === 1;
+    $isClientExcluded = (int) ($order['analytics_client_excluded'] ?? 0) === 1;
     ?>
-    <article class="order-card <?= $unpaid > 0 ? 'has-debt' : '' ?>">
+    <article class="order-card <?= $unpaid > 0 ? 'has-debt' : '' ?> <?= $isExcluded ? 'is-inactive' : '' ?>">
         <div class="order-card__main">
             <div class="order-card__identity">
                 <span class="order-number">№ <?= e((string) $order['order_number']) ?></span>
@@ -187,6 +208,18 @@ function sales_render_order_card(array $order, array $orderItems, bool $canSeeCo
             <div class="order-card__status">
                 <span class="status-badge"><?= e((string) ($order['status_name'] ?: '—')) ?></span>
                 <small><?= e((string) $order['item_count']) ?> поз.</small>
+                <?php if ($isClientExcluded && !$isExcluded): ?>
+                    <span class="status-badge">клієнт виключено</span>
+                <?php elseif ($canManageAnalytics): ?>
+                    <form class="inline-form" method="post" action="<?= e(base_path('/sales.php?' . sales_current_query())) ?>">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="toggle_order_analytics">
+                        <input type="hidden" name="keycrm_id" value="<?= e((string) ($order['keycrm_id'] ?? 0)) ?>">
+                        <input type="hidden" name="excluded" value="<?= $isExcluded ? '0' : '1' ?>">
+                        <input type="hidden" name="return_to" value="<?= e((string) ($_SERVER['REQUEST_URI'] ?? '/sales.php')) ?>">
+                        <button class="text-action <?= $isExcluded ? 'success' : 'danger' ?>" type="submit"><?= $isExcluded ? 'Повернути' : 'Не рахувати' ?></button>
+                    </form>
+                <?php endif; ?>
             </div>
             <div class="order-card__money">
                 <div><span>Сума</span><strong><?= e(finance_money($order['total_amount_uah'])) ?></strong></div>
@@ -276,6 +309,33 @@ function sales_client_key_filter(string $clientKey, array $orderColumns): array
 
 try {
     if (invoice_table_exists('db_orders')) {
+        if (is_post() && post_string('action') === 'toggle_order_analytics' && $canManageAnalytics) {
+            if (!csrf_is_valid()) {
+                http_response_code(400);
+                exit('Invalid CSRF token');
+            }
+            $keycrmId = max(0, (int) post_string('keycrm_id'));
+            $excluded = post_string('excluded') === '1' ? 1 : 0;
+            if ($keycrmId > 0) {
+                $stmt = db()->prepare("
+                    UPDATE db_orders
+                    SET analytics_excluded = :excluded,
+                        analytics_excluded_at = CASE WHEN :excluded_at = 1 THEN NOW() ELSE NULL END,
+                        analytics_excluded_by_user_id = CASE WHEN :excluded_user = 1 THEN :user_id ELSE NULL END
+                    WHERE keycrm_id = :keycrm_id
+                    LIMIT 1
+                ");
+                $stmt->execute([
+                    'excluded' => $excluded,
+                    'excluded_at' => $excluded,
+                    'excluded_user' => $excluded,
+                    'user_id' => (int) (current_user()['id'] ?? 0),
+                    'keycrm_id' => $keycrmId,
+                ]);
+            }
+            sales_redirect_back();
+        }
+
         if (in_array('manager_name', $orderColumns, true)) {
             $managerStmt = db()->query("
                 SELECT COALESCE(NULLIF(manager_name, ''), 'Без менеджера') AS manager_name, COUNT(*) AS order_count
@@ -293,7 +353,7 @@ try {
         $itemSelect = invoice_table_exists('db_order_items')
             ? "COALESCE(i.item_count, 0) AS item_count, COALESCE(i.items_total, 0) AS items_total,"
             : "0 AS item_count, 0 AS items_total,";
-        $where = [$notCanceled];
+        $where = [$statusFilter === 'inactive' ? $notCanceledOnly . ' AND ' . $inactiveOrders : $notCanceled];
         $params = [];
         if ($rangeMode) {
             $where[] = "o.order_month >= :from_month";
@@ -325,7 +385,8 @@ try {
             SELECT o.order_number, o.ordered_at, o.company_name, o.buyer_name, o.manager_name,
                    o.status_name, o.total_amount_uah, o.paid_amount_uah, o.unpaid_amount_uah,
                    o.expenses_sum_uah, o.margin_sum_uah, {$itemSelect}
-                   o.keycrm_id
+                   o.keycrm_id" . (in_array('analytics_excluded', $orderColumns, true) ? ", o.analytics_excluded" : ", 0 AS analytics_excluded") . ",
+                   {$clientExcludedSelect}
             FROM db_orders o
             {$itemJoin}
             WHERE " . implode(' AND ', $where) . "
@@ -360,7 +421,7 @@ try {
 
         if (invoice_table_exists('db_order_payments')) {
             $activePayment = cockpit_active_payment_sql('p');
-            $paymentWhere = [$notCanceled, $activePayment, 'p.payment_date >= :payment_period_start', 'p.payment_date <= :payment_period_end'];
+            $paymentWhere = [$statusFilter === 'inactive' ? $notCanceledOnly . ' AND ' . $inactiveOrders : $notCanceled, $activePayment, 'p.payment_date >= :payment_period_start', 'p.payment_date <= :payment_period_end'];
             $paymentParams = [
                 'payment_period_start' => $periodStart,
                 'payment_period_end' => $periodEnd,
@@ -403,7 +464,7 @@ try {
             ];
         }
         $monthlyChart = $chartTemplate;
-        $chartWhere = [$notCanceled, 'o.order_month >= :chart_period_start', 'o.order_month <= :chart_period_end'];
+        $chartWhere = [$statusFilter === 'inactive' ? $notCanceledOnly . ' AND ' . $inactiveOrders : $notCanceled, 'o.order_month >= :chart_period_start', 'o.order_month <= :chart_period_end'];
         $chartParams = [
             'chart_period_start' => $periodFromMonth,
             'chart_period_end' => $periodToMonth,
@@ -446,7 +507,7 @@ try {
 
         if (invoice_table_exists('db_order_payments')) {
             $activePayment = cockpit_active_payment_sql('p');
-            $chartPaymentWhere = [$notCanceled, $activePayment, 'p.payment_date >= :chart_payment_start', 'p.payment_date <= :chart_payment_end'];
+            $chartPaymentWhere = [$statusFilter === 'inactive' ? $notCanceledOnly . ' AND ' . $inactiveOrders : $notCanceled, $activePayment, 'p.payment_date >= :chart_payment_start', 'p.payment_date <= :chart_payment_end'];
             $chartPaymentParams = [
                 'chart_payment_start' => $periodStart,
                 'chart_payment_end' => $periodEnd,
@@ -497,7 +558,7 @@ $visibleCashForPeriodOrders = array_sum(array_map(static function ($payment) use
 }, $cashPayments));
 $visibleCashForOtherOrders = max($visibleCashTotal - $visibleCashForPeriodOrders, 0);
 $debtOrders = array_values(array_filter($orders, static fn($order) => (float) ($order['unpaid_amount_uah'] ?? 0) > 0));
-$isFilteredView = $rangeMode || $clientKeyFilter !== '' || $searchFilter !== '' || $managerFilter !== '';
+$isFilteredView = $rangeMode || $clientKeyFilter !== '' || $searchFilter !== '' || $managerFilter !== '' || $statusFilter !== 'all';
 $displaySalesTotal = $isFilteredView ? $visibleSalesTotal : (float) $summary['sales_fact'];
 $displayOrderCount = $isFilteredView ? count($orders) : (int) $summary['order_count'];
 $displayPaid = $isFilteredView ? $visiblePaidTotal : (float) $summary['sales_paid_by_order'];
@@ -578,6 +639,9 @@ if (isset($_GET['debt_pdf'])) {
             <div class="segmented-scroll client-trend-filter">
                 <a class="<?= $statusFilter === 'all' ? 'active' : '' ?>" href="<?= e(base_path('/sales.php?' . sales_current_query(['status' => 'all', 'debt_pdf' => null]))) ?>">Всі замовлення</a>
                 <a class="<?= $statusFilter === 'debt' ? 'active' : '' ?>" href="<?= e(base_path('/sales.php?' . sales_current_query(['status' => 'debt', 'debt_pdf' => null]))) ?>">Дебіторка</a>
+                <?php if ($canManageAnalytics): ?>
+                    <a class="<?= $statusFilter === 'inactive' ? 'active' : '' ?>" href="<?= e(base_path('/sales.php?' . sales_current_query(['status' => 'inactive', 'debt_pdf' => null]))) ?>">Виключені</a>
+                <?php endif; ?>
             </div>
             <a class="button-secondary" href="<?= e(base_path('/sales.php?' . sales_current_query(['status' => 'debt', 'debt_pdf' => '1']))) ?>">PDF боргу</a>
         </div>
@@ -659,14 +723,14 @@ if (isset($_GET['debt_pdf'])) {
         <div class="order-feed">
             <?php if (!$orders): ?><div class="empty-state">Немає даних.</div><?php endif; ?>
             <?php foreach ($previewOrders as $order): ?>
-                <?php sales_render_order_card($order, $orderItems, $canSeeCosts); ?>
+                <?php sales_render_order_card($order, $orderItems, $canSeeCosts, $canManageAnalytics); ?>
             <?php endforeach; ?>
             <?php if ($hiddenOrders): ?>
                 <details class="orders-more">
                     <summary>+ ще <?= e((string) count($hiddenOrders)) ?> замовлень</summary>
                     <div class="order-feed orders-more__feed">
                         <?php foreach ($hiddenOrders as $order): ?>
-                            <?php sales_render_order_card($order, $orderItems, $canSeeCosts); ?>
+                            <?php sales_render_order_card($order, $orderItems, $canSeeCosts, $canManageAnalytics); ?>
                         <?php endforeach; ?>
                     </div>
                 </details>

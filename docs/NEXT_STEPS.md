@@ -365,10 +365,22 @@ After deploy:
 
 - Validate Cockpit v3 navigation with CEO: daily pages should be enough without opening `Адмін`.
 - Turn `Потрібна дія` into a real workflow later: owner, due date, follow-up status, note, done/snooze.
-- Add pagination to `sales.php`, `cash.php`, `receivables.php`, `payments.php`.
-- Complete filters on `sales.php`: manager, client, payment status, order status.
+- Add pagination to `sales.php`, `cash.php`, and `payments.php`.
+- Complete filters on `sales.php`: manager, client, payment status, order status, receivables aging, and debt amount.
 - Complete filters on `cash.php`: company, account, payment method, current/old order, allocation status.
-- Complete filters on `receivables.php`: client search, aging, debt amount.
-- Validate `client_balances.php` against real companies and buyers, then decide whether it should get drill-down links to filtered sales/cash/receivables rows.
+- Validate `client_balances.php` against real companies and buyers, then decide whether it should get drill-down links to filtered sales/cash rows.
 - Run `history_sync.php` from `2022-07` to the current month once, then validate old and current months in dashboards.
 - Decide how legacy `db_expenses` should be migrated or mirrored into `db_financial_transactions` so expenses appear in `Операції`.
+
+## Analytics Exclusion Follow-up
+
+After deploy:
+
+- Verify that excluded client companies no longer affect Cockpit sales, total receivables, client health, manager summaries, and cash KPIs.
+- Verify that excluded individual orders no longer affect the same totals.
+- Decide whether exclusion notes are needed in the UI; the columns exist but the first UI keeps the action one-click.
+- Decide whether non-CEO roles should be allowed to request exclusion without applying it.
+- Continue reducing duplicate pages:
+  - keep `Cockpit`, `Клієнти`, `Продажі`, `Гроші`, and `Документи` as daily pages;
+  - keep `Менеджери`, `Плани`, `Витрати`, `Операції`, `Реквізити`, `Наші компанії`, sync pages, and users under Admin/direct links;
+  - leave `receivables.php` only as a compatibility redirect to `sales.php?status=debt`.

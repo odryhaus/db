@@ -130,16 +130,18 @@ Recommendation:
 
 Goal: all unpaid orders across all months.
 
-Status: useful but should be a drill-down, not daily nav.
+Status: compatibility redirect only.
 
 Problems:
 
-- Needs aging filters, search, responsible manager/follow-up workflow.
-- It shows debt but not enough action state.
+- Separate debt page duplicated `Продажі`, where order details, payments, products, manager filter, and debt filter now live together.
+- Duplicate entry points made the product harder to understand.
 
 Recommendation:
 
-- Add follow-up fields later: next contact date, promise date, status, note.
+- Keep `receivables.php` as a redirect to `sales.php?status=debt`.
+- Do not show it in daily navigation.
+- Add future debt follow-up controls to `Продажі`, not to a second debt page.
 
 ### Менеджери — `managers.php`
 

@@ -36,6 +36,37 @@ KeyCRM is the source for operational CRM data:
 
 The dashboard must read from the local database only. The browser must not call KeyCRM directly. KeyCRM API calls must stay server-side, with the token stored only in `config/config.php`.
 
+## Local Analytics Exclusions
+
+Purpose:
+
+- Allow CEO to exclude a client company or a single order from turnover, receivables, manager performance, client health, and cash KPI calculations without deleting CRM data.
+
+Safe additive fields:
+
+`db_orders`:
+
+- `analytics_excluded TINYINT(1) NOT NULL DEFAULT 0`
+- `analytics_excluded_at DATETIME NULL`
+- `analytics_excluded_by_user_id INT UNSIGNED NULL`
+- `analytics_exclusion_note TEXT NULL`
+
+`db_client_companies`:
+
+- `analytics_excluded TINYINT(1) NOT NULL DEFAULT 0`
+- `analytics_excluded_at DATETIME NULL`
+- `analytics_excluded_by_user_id INT UNSIGNED NULL`
+- `analytics_exclusion_note TEXT NULL`
+
+Rules:
+
+- Do not delete orders.
+- Do not write exclusions to KeyCRM.
+- Do not overwrite exclusions during sync.
+- Excluding a company should automatically remove all its orders from analytics through query filters.
+- Excluding one order affects only that order.
+- Restore actions must be possible from an excluded/inactive view.
+
 ## Near Real-Time Sync Tables
 
 The sync foundation uses additive local cache/control tables:
@@ -1635,7 +1666,7 @@ Read-only Cockpit v2 drill-down pages:
 
 - `sales.php` reads `db_orders` and `db_order_items`.
 - `cash.php` reads `db_order_payments` and allocation data.
-- `receivables.php` reads all unpaid `db_orders` across all months.
+- `receivables.php` is a compatibility redirect to `sales.php?status=debt`.
 - `managers.php` reads `db_orders` plus `db_sales_targets`.
 - `payments.php` reads `db_financial_transactions`.
 - `accounts.php` reads `db_financial_accounts` and transaction balances.

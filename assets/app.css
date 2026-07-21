@@ -2016,6 +2016,41 @@ tr:last-child td {
     white-space: nowrap;
 }
 
+.inline-form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.text-action {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    padding: 6px 9px;
+    white-space: nowrap;
+}
+
+.text-action:hover {
+    border-color: var(--text);
+}
+
+.text-action.danger {
+    color: var(--danger);
+}
+
+.text-action.success {
+    color: var(--success);
+}
+
+.client-row-action {
+    margin-left: 0;
+}
+
 .client-stat-row {
     display: flex;
     flex-wrap: wrap;
@@ -2330,6 +2365,13 @@ tr:last-child td {
     background: #fffafa;
 }
 
+.order-card.is-inactive {
+    border-color: var(--line);
+    border-left-color: var(--muted);
+    background: #f8f9fb;
+    opacity: .86;
+}
+
 .order-card__main {
     display: grid;
     grid-template-columns: minmax(260px, 1.1fr) minmax(110px, .35fr) minmax(520px, 1.4fr);
@@ -2379,6 +2421,67 @@ tr:last-child td {
     display: grid;
     gap: 6px;
     justify-items: start;
+}
+
+.manager-chart-list {
+    display: grid;
+    gap: 14px;
+}
+
+.manager-chart-row {
+    display: grid;
+    grid-template-columns: minmax(160px, 220px) 1fr;
+    gap: 16px;
+    align-items: end;
+    border-bottom: 1px solid var(--line);
+    padding: 8px 0 12px;
+}
+
+.manager-chart-row > strong {
+    font-size: 13px;
+}
+
+.manager-chart-bars {
+    display: flex;
+    min-height: 92px;
+    align-items: end;
+    gap: 8px;
+    overflow-x: auto;
+}
+
+.manager-month-bar {
+    position: relative;
+    display: inline-flex;
+    width: 34px;
+    min-width: 34px;
+    height: 74px;
+    align-items: end;
+    justify-content: center;
+    border-bottom: 1px solid var(--line);
+}
+
+.manager-month-bar i {
+    position: absolute;
+    bottom: 16px;
+    width: 12px;
+    border-radius: 999px 999px 0 0;
+}
+
+.manager-month-bar .sales-bar-sales {
+    left: 6px;
+    background: var(--text);
+}
+
+.manager-month-bar .sales-bar-cash {
+    right: 6px;
+    background: var(--accent-yellow);
+}
+
+.manager-month-bar em {
+    color: var(--muted);
+    font-size: 10px;
+    font-style: normal;
+    line-height: 1;
 }
 
 .order-card__money {

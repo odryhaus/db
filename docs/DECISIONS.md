@@ -420,3 +420,16 @@ Decision:
 - Manager reassignment must wait for local company/contact ownership fields and should not rewrite historical `db_orders.manager_name`.
 
 Reason: the CEO needs to notice falling or sleeping clients early and assign action before the client disappears.
+
+## Local Analytics Exclusions
+
+Decision:
+
+- CEO can mark a client company as excluded from analytics.
+- CEO can mark an individual order as excluded from analytics.
+- Excluded records stay in the database and can be restored.
+- Exclusions are local `.BRAND DB` control data and must not be written back to KeyCRM.
+- Active sales, receivables, cash KPIs, client health, and manager summaries must ignore excluded orders and excluded client companies.
+- `Дебіторка` is no longer a separate daily page; receivables work belongs inside `Продажі` with the `Дебіторка` filter.
+
+Reason: some rows are real CRM records but should not affect CEO turnover, debt, or manager performance. The system needs a reversible business-control flag, not deletion.

@@ -11,7 +11,6 @@ function cockpit_nav(string $active, string $month): void
         'invoices' => ['Документи', '/invoices.php'],
     ];
     $adminItems = [
-        'receivables' => ['Дебіторка', '/receivables.php' . $monthQuery],
         'managers' => ['Менеджери', '/managers.php' . $monthQuery],
         'targets' => ['Плани', '/targets.php' . $monthQuery],
         'payments' => ['Операції', '/payments.php' . $monthQuery],
@@ -37,9 +36,7 @@ function cockpit_nav(string $active, string $month): void
                 <?php if (user_role() === 'ceo'): ?>
                     <a class="<?= $active === 'history_sync' ? 'active' : '' ?>" href="<?= e(base_path('/history_sync.php' . $monthQuery)) ?>">Імпорт історії</a>
                     <a href="<?= e(base_path('/clients_sync.php')) ?>">Клієнти Sync</a>
-                    <a href="<?= e(base_path('/payment_sync_check.php')) ?>">Payment Check</a>
                     <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
-                    <a href="<?= e(base_path('/index.php' . $monthQuery)) ?>">Старий Dashboard</a>
                 <?php endif; ?>
             </div>
         </div>

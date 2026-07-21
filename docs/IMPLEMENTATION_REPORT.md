@@ -975,7 +975,7 @@ Do not delete duplicates blindly. First verify which row is used by existing inv
 
 ### What Changed
 
-- `receivables.php` now has compact segmented filters for payment status and manager.
+- Receivables work now belongs in `sales.php?status=debt`; the old `receivables.php` URL is retained only as a redirect.
 - Cockpit v2 manager progress now shows a black/yellow bar:
   - black = sales fact progress toward plan
   - yellow = paid share inside that fact
@@ -1000,7 +1000,6 @@ Reason: old payments already saved in `db_order_payments` need one more sync pas
   - `dashboard_v2.php`
   - `sales.php`
   - `cash.php`
-  - `receivables.php`
   - `managers.php`
   - `payments.php`
   - `accounts.php`
@@ -1026,7 +1025,7 @@ Reason: old payments already saved in `db_order_payments` need one more sync pas
 - Full pagination for all large detail pages is still not implemented.
 - `sales.php` has partial filters; full manager/client/payment-status/order-status filter set is not complete.
 - `cash.php` does not yet have all requested filters.
-- `receivables.php` has status and manager filters, but not all aging/sum/search filters yet.
+- Receivables-specific aging/sum/search filters should be added to `sales.php?status=debt`, not to a separate debt page.
 - `payments.php` is a read-only journal; manual expense transaction editing is not implemented.
 - Expenses remain on `expenses.php`; they are not yet fully migrated into `db_financial_transactions`.
 
@@ -1126,3 +1125,41 @@ Reason: old payments already saved in `db_order_payments` need one more sync pas
 - The system should guide CEO attention instead of exposing every table in the main menu.
 - Technical sync pages remain available but are not part of the daily workflow.
 - This is the first step toward CEO Money Cockpit v3: fewer entry points, more decision support.
+
+## 2026-07-20 — Analytics Exclusions And Page Cleanup
+
+### What Changed
+
+- Added safe additive analytics exclusion fields to `db_orders`.
+- Added safe additive analytics exclusion fields to `db_client_companies`.
+- Added central Cockpit SQL helpers so excluded orders and excluded client companies are ignored by sales, receivables, manager summaries, and cash KPIs.
+- Added CEO-only `Не рахувати` / `Повернути` actions in `Продажі` for individual orders.
+- Added CEO-only `Активні` / `Виключені` mode and `Не рахувати` / `Повернути` actions in `Клієнти` for client companies.
+- Replaced the standalone `Дебіторка` page with a redirect to `Продажі` filtered by `status=debt`.
+- Removed `Дебіторка`, `Payment Check`, and old dashboard links from daily navigation.
+- Rebuilt `Менеджери` with a selected period and compact monthly sales charts.
+
+### Data Rule
+
+An active order now means:
+
+- not canceled/deleted by existing status rules;
+- `db_orders.analytics_excluded = 0`;
+- its `db_client_companies` row is not marked `analytics_excluded = 1`.
+
+No records are deleted. Exclusions are local `.BRAND DB` control flags only.
+
+### What Was Not Implemented
+
+- No KeyCRM writes.
+- No CRM sync changes.
+- No destructive database changes.
+- No full client profile page yet.
+- No migration from old pages into one universal page yet.
+
+### Manual Review
+
+- Open `Клієнти`, mark a test company as `Не рахувати`, then confirm it disappears from active client totals and appears in `Виключені`.
+- Open `Продажі`, confirm that this client’s orders do not affect sales/debt totals.
+- Mark one test order as `Не рахувати`, then confirm it appears in `Продажі → Виключені` and can be restored.
+- Open `Менеджери` and verify the period chart against known monthly totals.

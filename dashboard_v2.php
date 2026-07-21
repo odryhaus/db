@@ -298,7 +298,7 @@ $syncQueued = isset($_GET['sync_queued']);
                         <td class="num"><?= $manager['target_amount_uah'] > 0 ? e(money_uah_compact($manager['target_amount_uah'])) : '—' ?></td>
                         <td class="num"><a class="metric-link" href="<?= e(base_path('/sales.php?' . http_build_query(['month' => $selectedMonth, 'manager' => (string) $manager['manager_name']]))) ?>"><?= e(money_uah_compact($manager['sales_fact'] ?? 0)) ?></a></td>
                         <td class="num"><?= e(money_uah_compact($manager['paid_by_order'] ?? 0)) ?></td>
-                        <td class="num"><a class="metric-link" href="<?= e(base_path('/receivables.php?' . http_build_query(['month' => $selectedMonth, 'manager' => (string) $manager['manager_name']]))) ?>"><?= e(money_uah_compact($manager['unpaid_by_order'] ?? 0)) ?></a></td>
+                        <td class="num"><a class="metric-link" href="<?= e(base_path('/sales.php?' . http_build_query(['month' => $selectedMonth, 'manager' => (string) $manager['manager_name'], 'status' => 'debt']))) ?>"><?= e(money_uah_compact($manager['unpaid_by_order'] ?? 0)) ?></a></td>
                         <td>
                             <?php
                             $managerPlanPercent = $manager['progress_percent'] !== null ? (float) $manager['progress_percent'] : 0.0;
