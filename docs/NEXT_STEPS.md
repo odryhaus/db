@@ -385,6 +385,7 @@ After deploy:
 - Decide whether target history needs delete/cancel controls or whether new effective-dated rows are enough.
 - After the client manager source fix, run `Клієнти Sync` for companies and buyers, then review `Клієнти → Менеджер → Без менеджера`.
 - In `Продажі → Дебіторка`, validate several real paid/part-paid/unpaid orders after clicking `Оновити все`; debt mode should show unpaid orders first and no payments table.
+- Confirm with accounting whether the current 100 UAH receivables threshold is correct or should be changed.
 - In `Клієнти`, test search for companies that have no orders in the final selected month but do have historical orders in earlier months.
 - Continue reducing duplicate pages:
   - keep `Cockpit`, `Клієнти`, `Продажі`, `Гроші`, and `Документи` as daily pages;

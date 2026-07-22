@@ -464,7 +464,8 @@ Decision:
 
 - `Продажі → Дебіторка` is a receivables workspace, not a payment journal.
 - In debt mode, hide incoming payments and prioritize unpaid orders, manager debt totals, and largest debts.
-- Use `db_orders.unpaid_amount_uah > 0` as the debt rule.
+- Use `db_orders.unpaid_amount_uah > 100` as the debt workspace rule.
+- Ignore unpaid differences up to 100 UAH because small rounding/payment discrepancies are not actionable receivables.
 - Product lines are collapsed by default so the CEO can scan debt before opening details.
 
 Reason: receivables work starts with who owes money and who must act. Payments belong to normal sales/cash views, not the first screen of debt control.

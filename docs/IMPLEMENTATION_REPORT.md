@@ -548,6 +548,23 @@ The clients page was centered on one selected month. When the CEO searched for a
 - Health and trend logic still use the final month of the selected period as the reference month.
 - Client links to `sales.php` now preserve the selected period.
 
+## 2026-07-22 — Sales Client Label And Debt Threshold
+
+### Files Changed
+
+- `sales.php`
+- documentation files
+
+### What Changed
+
+- Sales order cards now show client as `company / buyer` when both values exist.
+- Debt summary PDF uses the same `company / buyer` display.
+- `Продажі → Дебіторка` ignores tiny unpaid differences up to 100 UAH, so rounding/kopeck mismatches do not appear as actionable receivables.
+
+### Open Check
+
+Validate the 100 UAH threshold with accounting after a few real cases. The threshold only affects the debt workspace and debt PDF, not the raw order amounts.
+
 ## 2026-07-17 — Sync Debt Refresh Fix
 
 ### Files Changed

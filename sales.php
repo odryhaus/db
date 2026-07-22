@@ -37,6 +37,7 @@ $managerOptions = [];
 $summary = cockpit_monthly_summary($month);
 $canSeeCosts = in_array(user_role(), ['ceo', 'accountant'], true);
 $canManageAnalytics = user_role() === 'ceo';
+$debtThresholdUah = 100.0;
 $rangeMode = $fromMonth !== '' && $toMonth !== '' && $fromMonth <= $toMonth;
 $pageTitle = $rangeMode ? $fromMonth . ' - ' . $toMonth : $month;
 $orderColumns = invoice_table_exists('db_orders') ? finance_columns('db_orders') : [];
@@ -148,10 +149,17 @@ function sales_debt_summary_html(array $orders, string $clientTitle, string $fro
         </thead>
         <tbody>
         <?php foreach ($orders as $order): ?>
+            <?php
+            $companyName = trim((string) ($order['company_name'] ?? ''));
+            $buyerName = trim((string) ($order['buyer_name'] ?? ''));
+            $clientName = $companyName !== '' && $buyerName !== '' && $buyerName !== $companyName
+                ? $companyName . ' / ' . $buyerName
+                : ($companyName !== '' ? $companyName : ($buyerName !== '' ? $buyerName : ''));
+            ?>
             <tr>
                 <td><?= e((string) $order['order_number']) ?></td>
                 <td><?= e(substr((string) $order['ordered_at'], 0, 10)) ?></td>
-                <td><?= e((string) (($order['buyer_name'] ?? '') ?: ($order['company_name'] ?? ''))) ?></td>
+                <td><?= e($clientName) ?></td>
                 <td class="num"><?= e(finance_money($order['total_amount_uah'])) ?></td>
                 <td class="num"><?= e(finance_money($order['paid_amount_uah'])) ?></td>
                 <td class="num danger"><?= e(finance_money($order['unpaid_amount_uah'])) ?></td>
@@ -193,8 +201,11 @@ function sales_download_debt_summary(array $orders, string $clientTitle, string 
 function sales_render_order_card(array $order, array $orderItems, bool $canSeeCosts, bool $canManageAnalytics): void
 {
     $items = $orderItems[(int) ($order['keycrm_id'] ?? 0)] ?? [];
-    $clientName = (string) (($order['company_name'] ?? '') ?: ($order['buyer_name'] ?? '—'));
+    $companyName = trim((string) ($order['company_name'] ?? ''));
     $buyerName = trim((string) ($order['buyer_name'] ?? ''));
+    $clientName = $companyName !== '' && $buyerName !== '' && $buyerName !== $companyName
+        ? $companyName . ' / ' . $buyerName
+        : ($companyName !== '' ? $companyName : ($buyerName !== '' ? $buyerName : '—'));
     $unpaid = (float) ($order['unpaid_amount_uah'] ?? 0);
     $isExcluded = (int) ($order['analytics_excluded'] ?? 0) === 1;
     $isClientExcluded = (int) ($order['analytics_client_excluded'] ?? 0) === 1;
@@ -204,7 +215,6 @@ function sales_render_order_card(array $order, array $orderItems, bool $canSeeCo
             <div class="order-card__identity">
                 <span class="order-number">№ <?= e((string) $order['order_number']) ?></span>
                 <strong><?= e($clientName) ?></strong>
-                <?php if ($buyerName !== '' && $buyerName !== $clientName): ?><small><?= e($buyerName) ?></small><?php endif; ?>
                 <small><?= e((string) $order['ordered_at']) ?> · <?= e((string) ($order['manager_name'] ?: 'Без менеджера')) ?></small>
             </div>
             <div class="order-card__status">
@@ -381,7 +391,8 @@ try {
             $params = array_merge($params, $searchSql['params']);
         }
         if ($statusFilter === 'debt') {
-            $where[] = 'o.unpaid_amount_uah > 0';
+            $where[] = 'o.unpaid_amount_uah > :debt_threshold';
+            $params['debt_threshold'] = $debtThresholdUah;
         }
         $orderSortSql = $isDebtMode
             ? "o.unpaid_amount_uah DESC, o.ordered_at ASC, o.id DESC"
@@ -487,7 +498,8 @@ try {
             $chartParams = array_merge($chartParams, $searchSql['params']);
         }
         if ($statusFilter === 'debt') {
-            $chartWhere[] = 'o.unpaid_amount_uah > 0';
+            $chartWhere[] = 'o.unpaid_amount_uah > :chart_debt_threshold';
+            $chartParams['chart_debt_threshold'] = $debtThresholdUah;
         }
         $chartStmt = db()->prepare("
             SELECT o.order_month,
@@ -579,7 +591,7 @@ $visibleCashForPeriodOrders = array_sum(array_map(static function ($payment) use
     return $orderMonth >= $periodFromMonth && $orderMonth <= $periodToMonth ? (float) ($payment['amount'] ?? 0) : 0.0;
 }, $cashPayments));
 $visibleCashForOtherOrders = max($visibleCashTotal - $visibleCashForPeriodOrders, 0);
-$debtOrders = array_values(array_filter($orders, static fn($order) => (float) ($order['unpaid_amount_uah'] ?? 0) > 0));
+$debtOrders = array_values(array_filter($orders, fn($order) => (float) ($order['unpaid_amount_uah'] ?? 0) > $debtThresholdUah));
 $largestDebt = $debtOrders ? max(array_map(static fn($order) => (float) ($order['unpaid_amount_uah'] ?? 0), $debtOrders)) : 0.0;
 $isFilteredView = $rangeMode || $clientKeyFilter !== '' || $searchFilter !== '' || $managerFilter !== '' || $statusFilter !== 'all';
 $displaySalesTotal = $isFilteredView ? $visibleSalesTotal : (float) $summary['sales_fact'];
@@ -627,8 +639,8 @@ if (isset($_GET['debt_pdf'])) {
         <div class="sales-money-legend">
             <?php if ($isDebtMode): ?>
                 <span><strong>Борг</strong> — тільки неоплачені або частково оплачені замовлення.</span>
+                <span><strong>Поріг</strong> — розбіжності до <?= e(finance_money($debtThresholdUah)) ?> не показуються як борг.</span>
                 <span><strong>Період</strong> — місяць створення замовлення, не дата оплати.</span>
-                <span><strong>Сортування</strong> — від найбільшого боргу до меншого.</span>
             <?php else: ?>
                 <span><strong>Замовили</strong> — сума замовлень, створених у вибраному періоді.</span>
                 <span><strong>Оплатили з цих</strong> — скільки вже оплачено саме з цих замовлень.</span>
