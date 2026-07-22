@@ -1369,3 +1369,19 @@ After deploy, run `Клієнти Sync` for companies and buyers so the new mana
 - Mark a buyer/contact as excluded, then open `Продажі → Дебіторка`; their unpaid orders should not appear in active debt.
 - Open `CEO Money Cockpit`; receivables and cash KPIs should ignore excluded company/contact orders.
 - Open `Клієнти → Виключені` to verify excluded records are visible for review.
+
+## 2026-07-22 — Clients Period Control And Stability Fix
+
+### What Changed
+
+- Removed the duplicated `попередній період / наступний період` controls from `Клієнти`.
+- Kept `Від` and `До` as the only source of truth for the clients period.
+- Added a column-cache refresh after safe `ALTER TABLE` operations so newly added columns are visible during the same request.
+- Made client exclusion SQL use only columns that exist on the current production database.
+- Made the unassigned contacts block resilient when optional manager columns are missing.
+
+### Manual Review
+
+- Open `Клієнти`; the page should render client rows again.
+- Change `Від` / `До` and click `Показати`; the page should use exactly that selected period.
+- Confirm the old period arrow links are gone.

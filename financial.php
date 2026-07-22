@@ -2,13 +2,15 @@
 
 function finance_columns(string $table): array
 {
-    static $cache = [];
-    if (isset($cache[$table])) {
-        return $cache[$table];
+    if (!isset($GLOBALS['__finance_columns_cache']) || !is_array($GLOBALS['__finance_columns_cache'])) {
+        $GLOBALS['__finance_columns_cache'] = [];
+    }
+    if (isset($GLOBALS['__finance_columns_cache'][$table])) {
+        return $GLOBALS['__finance_columns_cache'][$table];
     }
 
     if (!invoice_table_exists($table)) {
-        $cache[$table] = [];
+        $GLOBALS['__finance_columns_cache'][$table] = [];
         return [];
     }
 
@@ -19,8 +21,15 @@ function finance_columns(string $table): array
           AND TABLE_NAME = :table_name
     ");
     $stmt->execute(['table_name' => $table]);
-    $cache[$table] = array_map('strval', array_column($stmt->fetchAll(), 'COLUMN_NAME'));
-    return $cache[$table];
+    $GLOBALS['__finance_columns_cache'][$table] = array_map('strval', array_column($stmt->fetchAll(), 'COLUMN_NAME'));
+    return $GLOBALS['__finance_columns_cache'][$table];
+}
+
+function finance_refresh_columns(string $table): void
+{
+    if (isset($GLOBALS['__finance_columns_cache']) && is_array($GLOBALS['__finance_columns_cache'])) {
+        unset($GLOBALS['__finance_columns_cache'][$table]);
+    }
 }
 
 function finance_has_column(string $table, string $column): bool

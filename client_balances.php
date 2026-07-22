@@ -7,6 +7,7 @@ require_once __DIR__ . '/cockpit_layout.php';
 require_once __DIR__ . '/client_health.php';
 
 require_login();
+ensure_finance_tables();
 if (function_exists('ensure_analytics_exclusion_columns')) {
     ensure_analytics_exclusion_columns();
 }
@@ -92,10 +93,16 @@ function client_balances_client_inactive_sql(string $orderAlias = 'o', string $c
                 $parts[] = "NULLIF({$orderPrefix}{$column}, '')";
             }
         }
-        $companyName = "COALESCE(NULLIF(inactive_cc.display_name, ''), NULLIF(inactive_cc.keycrm_name, ''), NULLIF(inactive_cc.name, ''), NULLIF(inactive_cc.keycrm_title, ''), NULLIF(inactive_cc.title, ''))";
+        $companyNameParts = [];
+        foreach (['display_name', 'keycrm_name', 'name', 'keycrm_title', 'title'] as $column) {
+            if (cockpit_has_column('db_client_companies', $column)) {
+                $companyNameParts[] = "NULLIF(inactive_cc.{$column}, '')";
+            }
+        }
         $companyChecks = ["COALESCE({$companyPrefix}analytics_excluded, 0) = 1"];
-        if ($parts) {
+        if ($parts && $companyNameParts) {
             $orderName = 'COALESCE(' . implode(', ', $parts) . ')';
+            $companyName = 'COALESCE(' . implode(', ', $companyNameParts) . ')';
             $companyChecks[] = "EXISTS (
                 SELECT 1
                 FROM db_client_companies inactive_cc
@@ -574,26 +581,6 @@ $periodStartDate = DateTimeImmutable::createFromFormat('!Y-m', $periodFromMonth)
 $periodEndDate = DateTimeImmutable::createFromFormat('!Y-m', $periodToMonth) ?: $monthDate;
 $boundsStart = $periodStartDate->format('Y-m-01 00:00:00');
 $boundsEnd = $periodEndDate->modify('last day of this month')->format('Y-m-d 23:59:59');
-$prevMonthUrl = base_path('/client_balances.php?' . client_balances_query([
-    'from_month' => $periodStartDate->modify('-1 month')->format('Y-m'),
-    'to_month' => $periodEndDate->modify('-1 month')->format('Y-m'),
-    'q' => $search,
-    'manager' => $managerFilter,
-    'trend' => $trendFilter,
-    'segment' => $segmentFilter,
-    'scope' => $valueScope,
-    'inactive' => $inactiveMode ? '1' : '',
-]));
-$nextMonthUrl = base_path('/client_balances.php?' . client_balances_query([
-    'from_month' => $periodStartDate->modify('+1 month')->format('Y-m'),
-    'to_month' => $periodEndDate->modify('+1 month')->format('Y-m'),
-    'q' => $search,
-    'manager' => $managerFilter,
-    'trend' => $trendFilter,
-    'segment' => $segmentFilter,
-    'scope' => $valueScope,
-    'inactive' => $inactiveMode ? '1' : '',
-]));
 
 try {
     if ($hasOrders) {
@@ -1038,10 +1025,34 @@ try {
         }
 
         if ($hasClientContacts) {
-            $companyNameExpr = $hasClientCompanies
-                ? "COALESCE(NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_name, ''), NULLIF(cc.name, ''), NULLIF(cc.keycrm_title, ''), NULLIF(cc.title, ''))"
-                : "NULL";
+            $companyNameParts = [];
+            if ($hasClientCompanies) {
+                foreach (['display_name', 'keycrm_name', 'name', 'keycrm_title', 'title'] as $column) {
+                    if (in_array($column, $clientCompanyColumns, true)) {
+                        $companyNameParts[] = "NULLIF(cc.{$column}, '')";
+                    }
+                }
+            }
+            $companyNameExpr = $companyNameParts ? 'COALESCE(' . implode(', ', $companyNameParts) . ')' : 'NULL';
             $contactCompanyJoin = $hasClientCompanies ? "LEFT JOIN db_client_companies cc ON cc.id = ct.client_company_id" : "";
+            $contactManagerChecks = [];
+            foreach (['assigned_manager_name', 'keycrm_manager_name'] as $column) {
+                if (in_array($column, $clientContactColumns, true)) {
+                    $contactManagerChecks[] = "NULLIF(ct.{$column}, '')";
+                }
+            }
+            $contactManagerIdChecks = [];
+            foreach (['assigned_manager_keycrm_id', 'keycrm_manager_id'] as $column) {
+                if (in_array($column, $clientContactColumns, true)) {
+                    $contactManagerIdChecks[] = "ct.{$column} IS NULL";
+                }
+            }
+            $contactManagerWhere = $contactManagerChecks
+                ? 'COALESCE(' . implode(', ', $contactManagerChecks) . ') IS NULL'
+                : '1=1';
+            if ($contactManagerIdChecks) {
+                $contactManagerWhere .= ' AND ' . implode(' AND ', $contactManagerIdChecks);
+            }
             $unassignedContacts = db()->query("
                 SELECT
                     ct.full_name,
@@ -1050,9 +1061,7 @@ try {
                     {$companyNameExpr} AS company_name
                 FROM db_client_contacts ct
                 {$contactCompanyJoin}
-                WHERE COALESCE(NULLIF(ct.assigned_manager_name, ''), NULLIF(ct.keycrm_manager_name, '')) IS NULL
-                  AND ct.assigned_manager_keycrm_id IS NULL
-                  AND ct.keycrm_manager_id IS NULL
+                WHERE {$contactManagerWhere}
                 ORDER BY COALESCE(NULLIF(ct.full_name, ''), NULLIF(ct.email, ''), NULLIF(ct.phone, '')) ASC
                 LIMIT 80
             ")->fetchAll();
@@ -1218,11 +1227,6 @@ $rows = array_slice($filteredRows, 0, 200);
             </label>
             <button type="submit">Показати</button>
         </form>
-        <div class="client-period-shift">
-            <a href="<?= e($prevMonthUrl) ?>">← попередній період</a>
-            <span><?= e($periodFromMonth) ?> → <?= e($periodToMonth) ?></span>
-            <a href="<?= e($nextMonthUrl) ?>">наступний період →</a>
-        </div>
         <div class="client-filter-groups">
             <?php if ($canManageAnalytics): ?>
                 <div class="segmented-scroll client-trend-filter">

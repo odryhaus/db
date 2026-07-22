@@ -1845,27 +1845,6 @@ tr:last-child td {
     color: #fff;
 }
 
-.client-period-shift {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-items: center;
-    justify-content: flex-end;
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 700;
-}
-
-.client-period-shift a {
-    color: var(--text);
-    text-decoration: none;
-}
-
-.client-period-shift a:hover {
-    text-decoration: underline;
-    text-underline-offset: 3px;
-}
-
 .client-command-list {
     display: grid;
     gap: 0;

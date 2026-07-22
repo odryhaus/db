@@ -660,6 +660,9 @@ function invoice_add_column_if_missing(string $table, string $column, string $de
 
     if ((int) $stmt->fetchColumn() === 0) {
         db()->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
+        if (function_exists('finance_refresh_columns')) {
+            finance_refresh_columns($table);
+        }
     }
 }
 
@@ -693,6 +696,9 @@ function invoice_modify_column_if_exists(string $table, string $column, string $
     if ((int) $stmt->fetchColumn() > 0) {
         try {
             db()->exec("ALTER TABLE {$table} MODIFY COLUMN {$column} {$definition}");
+            if (function_exists('finance_refresh_columns')) {
+                finance_refresh_columns($table);
+            }
         } catch (PDOException $e) {
             error_log("Could not modify column {$column} on {$table}: " . $e->getMessage());
         }
