@@ -111,37 +111,70 @@ function sales_redirect_back(): void
     exit;
 }
 
-function sales_debt_summary_html(array $orders, string $clientTitle, string $fromMonth, string $toMonth): string
+function sales_debt_summary_html(array $orders, string $clientTitle, string $managerTitle, string $fromMonth, string $toMonth): string
 {
     $total = array_sum(array_map(static fn($order) => (float) ($order['unpaid_amount_uah'] ?? 0), $orders));
-    $client = $clientTitle !== '' ? $clientTitle : 'Клієнт';
+    $paid = array_sum(array_map(static fn($order) => (float) ($order['paid_amount_uah'] ?? 0), $orders));
+    $ordered = array_sum(array_map(static fn($order) => (float) ($order['total_amount_uah'] ?? 0), $orders));
+    $largest = $orders ? max(array_map(static fn($order) => (float) ($order['unpaid_amount_uah'] ?? 0), $orders)) : 0.0;
+    $scopeLabel = $managerTitle !== ''
+        ? 'Менеджер: ' . $managerTitle
+        : ($clientTitle !== '' ? 'Клієнт: ' . $clientTitle : 'Усі клієнти');
     ob_start();
     ?><!doctype html>
 <html lang="uk">
 <head>
     <meta charset="utf-8">
     <style>
-        body { font-family: DejaVu Sans, Arial, sans-serif; color: #111; font-size: 12px; }
-        h1 { font-size: 22px; margin: 0 0 4px; }
-        .meta { color: #666; margin-bottom: 22px; }
-        .total { border: 1px solid #111; padding: 12px; margin-bottom: 18px; font-size: 16px; }
+        @page { margin: 22mm 16mm; }
+        body { font-family: DejaVu Sans, Arial, sans-serif; color: #111; font-size: 11px; line-height: 1.35; }
+        h1 { font-size: 24px; margin: 0; letter-spacing: 0; }
+        .top { display: table; width: 100%; margin-bottom: 22px; }
+        .top-left, .top-right { display: table-cell; vertical-align: top; }
+        .top-right { text-align: right; color: #6b7280; font-size: 10px; }
+        .scope { margin-top: 7px; color: #374151; font-size: 13px; font-weight: 700; }
+        .meta { margin-top: 3px; color: #6b7280; }
+        .summary { display: table; width: 100%; margin: 0 0 18px; border-top: 2px solid #111; border-bottom: 1px solid #d1d5db; }
+        .metric { display: table-cell; padding: 11px 10px 10px 0; }
+        .metric span { display: block; color: #6b7280; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+        .metric strong { display: block; margin-top: 3px; font-size: 16px; }
         table { width: 100%; border-collapse: collapse; }
-        th, td { border-bottom: 1px solid #ddd; padding: 8px 6px; text-align: left; vertical-align: top; }
-        th { color: #666; font-size: 10px; text-transform: uppercase; }
+        th, td { border-bottom: 1px solid #e5e7eb; padding: 8px 6px; text-align: left; vertical-align: top; }
+        th { color: #6b7280; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+        td:first-child, th:first-child { padding-left: 0; }
+        td:last-child, th:last-child { padding-right: 0; }
         .num { text-align: right; white-space: nowrap; }
-        .danger { color: #d92d20; font-weight: 700; }
+        .danger { color: #d92d20; font-weight: 800; }
+        .muted { color: #6b7280; }
+        .client { font-weight: 700; }
     </style>
 </head>
 <body>
-    <h1>Звірка боргу</h1>
-    <div class="meta"><?= e($client) ?> · <?= e($fromMonth) ?> → <?= e($toMonth) ?> · сформовано <?= e(date('d.m.Y H:i')) ?></div>
-    <div class="total"><strong>Загальний борг:</strong> <?= e(finance_money($total)) ?> · <?= e((string) count($orders)) ?> замовлень</div>
+    <div class="top">
+        <div class="top-left">
+            <h1>Звірка боргу</h1>
+            <div class="scope"><?= e($scopeLabel) ?></div>
+            <div class="meta">Період замовлень: <?= e($fromMonth) ?> → <?= e($toMonth) ?></div>
+        </div>
+        <div class="top-right">
+            .BRAND DB<br>
+            сформовано <?= e(date('d.m.Y H:i')) ?>
+        </div>
+    </div>
+    <div class="summary">
+        <div class="metric"><span>Борг</span><strong class="danger"><?= e(finance_money($total)) ?></strong></div>
+        <div class="metric"><span>Замовлень</span><strong><?= e((string) count($orders)) ?></strong></div>
+        <div class="metric"><span>Сума</span><strong><?= e(finance_money($ordered)) ?></strong></div>
+        <div class="metric"><span>Оплачено</span><strong><?= e(finance_money($paid)) ?></strong></div>
+        <div class="metric"><span>Найбільший</span><strong><?= e(finance_money($largest)) ?></strong></div>
+    </div>
     <table>
         <thead>
         <tr>
             <th>№</th>
             <th>Дата</th>
-            <th>Покупець</th>
+            <th>Клієнт / покупець</th>
+            <th>Менеджер</th>
             <th class="num">Сума</th>
             <th class="num">Оплачено</th>
             <th class="num">Борг</th>
@@ -159,7 +192,8 @@ function sales_debt_summary_html(array $orders, string $clientTitle, string $fro
             <tr>
                 <td><?= e((string) $order['order_number']) ?></td>
                 <td><?= e(substr((string) $order['ordered_at'], 0, 10)) ?></td>
-                <td><?= e($clientName) ?></td>
+                <td class="client"><?= e($clientName) ?></td>
+                <td class="muted"><?= e((string) (($order['manager_name'] ?? '') ?: 'Без менеджера')) ?></td>
                 <td class="num"><?= e(finance_money($order['total_amount_uah'])) ?></td>
                 <td class="num"><?= e(finance_money($order['paid_amount_uah'])) ?></td>
                 <td class="num danger"><?= e(finance_money($order['unpaid_amount_uah'])) ?></td>
@@ -172,11 +206,12 @@ function sales_debt_summary_html(array $orders, string $clientTitle, string $fro
     return (string) ob_get_clean();
 }
 
-function sales_download_debt_summary(array $orders, string $clientTitle, string $fromMonth, string $toMonth): void
+function sales_download_debt_summary(array $orders, string $clientTitle, string $managerTitle, string $fromMonth, string $toMonth): void
 {
-    $html = sales_debt_summary_html($orders, $clientTitle, $fromMonth, $toMonth);
-    $safeClient = preg_replace('/[^A-Za-z0-9А-Яа-яЇїІіЄєҐґ_-]+/u', '_', $clientTitle !== '' ? $clientTitle : 'client');
-    $fileName = 'DEBT_' . trim((string) $safeClient, '_') . '_' . $fromMonth . '_' . $toMonth . '.pdf';
+    $html = sales_debt_summary_html($orders, $clientTitle, $managerTitle, $fromMonth, $toMonth);
+    $scopeForName = $managerTitle !== '' ? 'manager_' . $managerTitle : ($clientTitle !== '' ? $clientTitle : 'all');
+    $safeScope = preg_replace('/[^A-Za-z0-9А-Яа-яЇїІіЄєҐґ_-]+/u', '_', $scopeForName);
+    $fileName = 'DEBT_' . trim((string) $safeScope, '_') . '_' . $fromMonth . '_' . $toMonth . '.pdf';
 
     if (class_exists('\\Dompdf\\Dompdf')) {
         $options = new \Dompdf\Options();
@@ -610,7 +645,7 @@ $previewOrders = array_slice($orders, 0, $orderPreviewLimit);
 $hiddenOrders = array_slice($orders, $orderPreviewLimit);
 
 if (isset($_GET['debt_pdf'])) {
-    sales_download_debt_summary($debtOrders, $clientTitle, $periodFromMonth, $periodToMonth);
+    sales_download_debt_summary($debtOrders, $clientTitle, $managerFilter, $periodFromMonth, $periodToMonth);
 }
 
 ?><!doctype html>

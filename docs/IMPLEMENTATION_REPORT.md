@@ -590,6 +590,20 @@ The clients search still depended too much on `db_orders`. If a company name exi
 
 Test search with company names that exist only in synced client data or have different spelling between KeyCRM company and order buyer fields.
 
+## 2026-07-22 — Debt PDF Scope And Design
+
+### Files Changed
+
+- `sales.php`
+- documentation files
+
+### What Changed
+
+- Debt PDF now shows the correct scope: `Менеджер: ...`, `Клієнт: ...`, or `Усі клієнти`.
+- When a manager filter is active, the PDF filename is based on the manager instead of the first client in the list.
+- Added manager column to the debt table.
+- Reworked PDF layout into a cleaner finance-style summary: header, period, generated time, KPI strip, compact table.
+
 ## 2026-07-17 — Sync Debt Refresh Fix
 
 ### Files Changed
