@@ -149,3 +149,4 @@ Known gaps:
 - Client Health cannot yet use manager follow-up discipline because next follow-up/contact fields are not implemented.
 - Seasonal/tender clients are not marked yet, so order-cycle penalties may need manual interpretation for those clients.
 - `Потрібна дія` is currently generated from existing data and is not yet a task workflow. It has no owner override, snooze, completion, comments, or reminder history.
+- Buyer/contact analytics exclusions now use the central active-order rule, but the UI still needs a clearer dedicated control for excluding one buyer under an otherwise active company.

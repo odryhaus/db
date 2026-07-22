@@ -83,21 +83,60 @@ function client_balances_client_inactive_sql(string $orderAlias = 'o', string $c
 {
     $orderPrefix = rtrim($orderAlias, '.') . '.';
     $companyPrefix = rtrim($companyAlias, '.') . '.';
-    $parts = [];
-    foreach (['company_name', 'client_name', 'buyer_name'] as $column) {
-        $parts[] = "NULLIF({$orderPrefix}{$column}, '')";
-    }
-    $orderName = 'COALESCE(' . implode(', ', $parts) . ')';
-    $companyName = "COALESCE(NULLIF(inactive_cc.display_name, ''), NULLIF(inactive_cc.keycrm_name, ''), NULLIF(inactive_cc.name, ''), NULLIF(inactive_cc.keycrm_title, ''), NULLIF(inactive_cc.title, ''))";
+    $clauses = [];
 
-    return "(COALESCE({$companyPrefix}analytics_excluded, 0) = 1 OR EXISTS (
-        SELECT 1
-        FROM db_client_companies inactive_cc
-        WHERE inactive_cc.keycrm_company_id IS NULL
-          AND COALESCE(inactive_cc.analytics_excluded, 0) = 1
-          AND {$companyName} = {$orderName}
-        LIMIT 1
-    ))";
+    if (cockpit_has_column('db_client_companies', 'analytics_excluded')) {
+        $parts = [];
+        foreach (['company_name', 'client_name', 'buyer_name'] as $column) {
+            if (cockpit_has_column('db_orders', $column)) {
+                $parts[] = "NULLIF({$orderPrefix}{$column}, '')";
+            }
+        }
+        $companyName = "COALESCE(NULLIF(inactive_cc.display_name, ''), NULLIF(inactive_cc.keycrm_name, ''), NULLIF(inactive_cc.name, ''), NULLIF(inactive_cc.keycrm_title, ''), NULLIF(inactive_cc.title, ''))";
+        $companyChecks = ["COALESCE({$companyPrefix}analytics_excluded, 0) = 1"];
+        if ($parts) {
+            $orderName = 'COALESCE(' . implode(', ', $parts) . ')';
+            $companyChecks[] = "EXISTS (
+                SELECT 1
+                FROM db_client_companies inactive_cc
+                WHERE inactive_cc.keycrm_company_id IS NULL
+                  AND COALESCE(inactive_cc.analytics_excluded, 0) = 1
+                  AND {$companyName} = {$orderName}
+                LIMIT 1
+            )";
+        }
+        $clauses[] = '(' . implode(' OR ', $companyChecks) . ')';
+    }
+
+    if (cockpit_has_column('db_client_contacts', 'analytics_excluded')) {
+        $contactChecks = [];
+        if (cockpit_has_column('db_orders', 'buyer_id') && cockpit_has_column('db_client_contacts', 'keycrm_buyer_id')) {
+            $contactChecks[] = "inactive_ct.keycrm_buyer_id = {$orderPrefix}buyer_id";
+        }
+        if (cockpit_has_column('db_orders', 'buyer_name') && cockpit_has_column('db_client_contacts', 'full_name')) {
+            $contactChecks[] = "NULLIF(inactive_ct.full_name, '') = NULLIF({$orderPrefix}buyer_name, '')";
+        }
+        if (cockpit_has_column('db_orders', 'client_name') && cockpit_has_column('db_client_contacts', 'full_name')) {
+            $contactChecks[] = "NULLIF(inactive_ct.full_name, '') = NULLIF({$orderPrefix}client_name, '')";
+        }
+        if (cockpit_has_column('db_orders', 'buyer_email') && cockpit_has_column('db_client_contacts', 'email')) {
+            $contactChecks[] = "NULLIF(inactive_ct.email, '') = NULLIF({$orderPrefix}buyer_email, '')";
+        }
+        if (cockpit_has_column('db_orders', 'buyer_phone') && cockpit_has_column('db_client_contacts', 'phone')) {
+            $contactChecks[] = "NULLIF(inactive_ct.phone, '') = NULLIF({$orderPrefix}buyer_phone, '')";
+        }
+        if ($contactChecks) {
+            $clauses[] = "EXISTS (
+                SELECT 1
+                FROM db_client_contacts inactive_ct
+                WHERE COALESCE(inactive_ct.analytics_excluded, 0) = 1
+                  AND (" . implode(' OR ', $contactChecks) . ")
+                LIMIT 1
+            )";
+        }
+    }
+
+    return $clauses ? '(' . implode(' OR ', $clauses) . ')' : '1=0';
 }
 
 function client_balances_coalesce(array $expressions, string $fallback): string

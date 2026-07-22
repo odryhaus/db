@@ -634,6 +634,14 @@ function ensure_analytics_exclusion_columns(): void
         invoice_add_column_if_missing('db_client_companies', 'analytics_exclusion_note', 'TEXT NULL');
         invoice_add_index_if_missing('db_client_companies', 'idx_client_analytics_excluded', 'analytics_excluded');
     }
+
+    if (invoice_table_exists('db_client_contacts')) {
+        invoice_add_column_if_missing('db_client_contacts', 'analytics_excluded', 'TINYINT(1) NOT NULL DEFAULT 0');
+        invoice_add_column_if_missing('db_client_contacts', 'analytics_excluded_at', 'DATETIME NULL');
+        invoice_add_column_if_missing('db_client_contacts', 'analytics_excluded_by_user_id', 'INT UNSIGNED NULL');
+        invoice_add_column_if_missing('db_client_contacts', 'analytics_exclusion_note', 'TEXT NULL');
+        invoice_add_index_if_missing('db_client_contacts', 'idx_contact_analytics_excluded', 'analytics_excluded');
+    }
 }
 
 function invoice_add_column_if_missing(string $table, string $column, string $definition): void

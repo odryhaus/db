@@ -14,6 +14,7 @@ try {
     $rows = [];
     if (invoice_table_exists('db_order_payments')) {
         $active = cockpit_active_payment_sql('p');
+        $activeOrder = cockpit_active_order_sql('o');
         $stmt = db()->prepare("
             SELECT COALESCE(o.order_month, 'без місяця') AS order_month,
                    COALESCE(SUM(p.amount), 0) AS cash_received,
@@ -23,6 +24,7 @@ try {
             WHERE p.payment_date >= :month_start
               AND p.payment_date <= :month_end
               AND {$active}
+              AND {$activeOrder}
             GROUP BY COALESCE(o.order_month, 'без місяця')
             ORDER BY order_month DESC
         ");

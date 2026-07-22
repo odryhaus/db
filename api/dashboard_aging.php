@@ -10,7 +10,7 @@ header('Content-Type: application/json; charset=utf-8');
 try {
     $rows = [];
     if (invoice_table_exists('db_orders')) {
-        $notCanceled = cockpit_not_canceled_sql('o');
+        $notCanceled = cockpit_active_order_sql('o');
         $rows = db()->query("
             SELECT
                 COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), o.ordered_at) <= 7 THEN o.unpaid_amount_uah ELSE 0 END), 0) AS fresh_0_7,

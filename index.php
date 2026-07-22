@@ -1,9 +1,13 @@
 <?php
 
 require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/cockpit.php';
 require_once __DIR__ . '/sync_core.php';
 require_login();
 ensure_finance_tables();
+if (function_exists('ensure_analytics_exclusion_columns')) {
+    ensure_analytics_exclusion_columns();
+}
 
 $user = current_user();
 $selectedMonth = (string) ($_GET['month'] ?? date('Y-m'));
@@ -525,14 +529,8 @@ function render_client_statement(int $clientKey, string $notCanceledSql): void
     <?php
 }
 
-$notCanceledSql = "
-    LOWER(COALESCE(status_name, '')) NOT LIKE '%cancel%'
-    AND LOWER(COALESCE(status_name, '')) NOT LIKE '%deleted%'
-    AND LOWER(COALESCE(status_name, '')) NOT LIKE '%скас%'
-    AND LOWER(COALESCE(payment_status, '')) NOT LIKE '%cancel%'
-    AND LOWER(COALESCE(payment_status, '')) NOT LIKE '%deleted%'
-    AND LOWER(COALESCE(payment_status, '')) NOT LIKE '%скас%'
-";
+$notCanceledSql = cockpit_active_order_sql();
+$notCanceledOrderSql = cockpit_active_order_sql('o');
 
 if (isset($_GET['client_statement'])) {
     render_client_statement((int) $_GET['client_statement'], $notCanceledSql);
@@ -581,14 +579,15 @@ try {
     $monthlyUnpaid = (float) ($row['unpaid'] ?? 0);
 
     if (invoice_table_exists('db_order_payments')) {
+        $activePaymentSql = cockpit_active_payment_sql('p');
         $paymentsStmt = db()->prepare("
-            SELECT COALESCE(SUM(amount), 0)
-            FROM db_order_payments
-            WHERE payment_date >= :month_start
-              AND payment_date <= :month_end
-              AND LOWER(COALESCE(status, '')) NOT LIKE '%cancel%'
-              AND LOWER(COALESCE(status, '')) NOT LIKE '%deleted%'
-              AND LOWER(COALESCE(status, '')) NOT LIKE '%скас%'
+            SELECT COALESCE(SUM(p.amount), 0)
+            FROM db_order_payments p
+            LEFT JOIN db_orders o ON o.keycrm_id = p.keycrm_order_id
+            WHERE p.payment_date >= :month_start
+              AND p.payment_date <= :month_end
+              AND {$activePaymentSql}
+              AND {$notCanceledOrderSql}
         ");
         $paymentsStmt->execute([
             'month_start' => $monthStart->format('Y-m-d H:i:s'),
@@ -696,7 +695,7 @@ try {
         LEFT JOIN db_client_companies cc ON cc.keycrm_company_id = o.company_id
         LEFT JOIN db_client_contacts ct ON ct.keycrm_buyer_id = o.buyer_id
         WHERE o.unpaid_amount_uah > 0
-          AND {$notCanceledSql}
+          AND {$notCanceledOrderSql}
         ORDER BY o.unpaid_amount_uah DESC, o.ordered_at ASC
         LIMIT 1000
     ");
@@ -754,9 +753,11 @@ try {
     $clientDebt = array_slice($clientDebt, 0, 50);
 
     $debtWhere = "unpaid_amount_uah > 0 AND {$notCanceledSql}";
+    $debtOrderWhere = "o.unpaid_amount_uah > 0 AND {$notCanceledOrderSql}";
     $debtParams = [];
     if ($debtManager !== '') {
         $debtWhere .= " AND COALESCE(NULLIF(manager_name, ''), 'No manager') = :debt_manager";
+        $debtOrderWhere .= " AND COALESCE(NULLIF(o.manager_name, ''), 'No manager') = :debt_manager";
         $debtParams['debt_manager'] = $debtManager;
     }
 
@@ -804,7 +805,7 @@ try {
         FROM db_orders o
         LEFT JOIN db_client_companies cc ON cc.keycrm_company_id = o.company_id
         LEFT JOIN db_client_contacts ct ON ct.keycrm_buyer_id = o.buyer_id
-        WHERE {$debtWhere}
+        WHERE {$debtOrderWhere}
         ORDER BY o.unpaid_amount_uah DESC, o.ordered_at DESC
         LIMIT :limit OFFSET :offset
     ");
@@ -842,7 +843,7 @@ try {
         LEFT JOIN db_client_contacts ct ON ct.keycrm_buyer_id = o.buyer_id
         WHERE o.order_month = :month
           AND o.unpaid_amount_uah > 0
-          AND {$notCanceledSql}
+          AND {$notCanceledOrderSql}
         ORDER BY o.unpaid_amount_uah DESC, o.ordered_at DESC
         LIMIT 10
     ");

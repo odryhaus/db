@@ -378,6 +378,7 @@ After deploy:
 After deploy:
 
 - Verify that excluded client companies no longer affect Cockpit sales, total receivables, client health, manager summaries, and cash KPIs.
+- Verify that excluded buyers/contacts no longer affect Cockpit sales, total receivables, client health, manager summaries, and cash KPIs.
 - Verify that excluded individual orders no longer affect the same totals.
 - Decide whether exclusion notes are needed in the UI; the columns exist but the first UI keeps the action one-click.
 - Decide whether non-CEO roles should be allowed to request exclusion without applying it.

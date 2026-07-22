@@ -427,10 +427,11 @@ Reason: the CEO needs to notice falling or sleeping clients early and assign act
 Decision:
 
 - CEO can mark a client company as excluded from analytics.
+- CEO can mark a buyer/contact as excluded from analytics.
 - CEO can mark an individual order as excluded from analytics.
 - Excluded records stay in the database and can be restored.
 - Exclusions are local `.BRAND DB` control data and must not be written back to KeyCRM.
-- Active sales, receivables, cash KPIs, client health, and manager summaries must ignore excluded orders and excluded client companies.
+- Active sales, receivables, cash KPIs, client health, and manager summaries must ignore excluded orders, excluded client companies, and excluded buyers/contacts.
 - `Дебіторка` is no longer a separate daily page; receivables work belongs inside `Продажі` with the `Дебіторка` filter.
 
 Reason: some rows are real CRM records but should not affect CEO turnover, debt, or manager performance. The system needs a reversible business-control flag, not deletion.

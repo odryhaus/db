@@ -1336,3 +1336,36 @@ Name-only client exclusions are weaker than id-based exclusions because they dep
 ### Manual Setup / Test
 
 After deploy, run `Клієнти Sync` for companies and buyers so the new manager fields are filled from KeyCRM. Then open `Клієнти` and use the manager filter `Без менеджера`.
+
+## 2026-07-22 — Buyer Exclusions Fixed For Receivables
+
+### What Changed
+
+- Added safe additive analytics exclusion fields to `db_client_contacts`.
+- Updated the central Cockpit active-order rule so an order is ignored when the order itself, its client company, or its buyer/contact is marked `Не рахувати`.
+- Updated debt aging and payment cohort API endpoints to use the same active-order rule as the main Cockpit pages.
+- Updated legacy `index.php` money/debt queries to use the same active-order rule.
+- Updated `Клієнти → Виключені` logic so buyer/contact exclusions can be audited together with company exclusions.
+
+### Data Rule
+
+`Не рахувати` means CRM data stays stored, but it is excluded from active management analytics:
+
+- sales and turnover;
+- paid/cash KPIs;
+- unpaid receivables/debt;
+- manager performance;
+- client health and client balances.
+
+### What Was Not Implemented
+
+- No KeyCRM write-back.
+- No destructive database changes.
+- No deletion of orders, companies, contacts, or payments.
+- No dedicated buyer/contact exclusion UI redesign in this change; the central data rule is now ready for it.
+
+### Manual Review
+
+- Mark a buyer/contact as excluded, then open `Продажі → Дебіторка`; their unpaid orders should not appear in active debt.
+- Open `CEO Money Cockpit`; receivables and cash KPIs should ignore excluded company/contact orders.
+- Open `Клієнти → Виключені` to verify excluded records are visible for review.
