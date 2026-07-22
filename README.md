@@ -266,6 +266,7 @@ https://bph.com.ua/db/login.php
 ## Near Real-Time Sync
 
 CEO can start a global refresh from the dashboard with `Оновити все`.
+This refresh queues changed orders, unpaid orders, payments, companies, buyers, order expenses, and statuses. Full historical order loading still belongs to `history_sync.php`.
 
 Production cron should run:
 

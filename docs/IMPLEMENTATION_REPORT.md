@@ -479,6 +479,31 @@ The dashboard button became disabled whenever any sync job stayed `queued` or `r
 - Stale running sync jobs are auto-recovered after `keycrm.sync_job_timeout_minutes` minutes.
 - Stuck parent `global_refresh` jobs are closed as `partial` if child jobs are no longer active.
 
+## 2026-07-22 — Global Refresh Requeue Fix
+
+### Files Changed
+
+- `sync_core.php`
+- documentation files
+
+### Problem Found
+
+`Оновити все` reused an active `global_refresh` parent job. If one part of that parent had already finished, for example `orders`, and another part was still queued/running, a second click did not add a fresh `orders` job. This made the button look like the single refresh control, but some new order/payment/client changes still required opening technical sync pages.
+
+### What Changed
+
+- Explicit CEO clicks on `Оновити все` now enqueue all refresh job types that are not currently queued/running under the active global refresh.
+- Finished child jobs can be queued again by the button, so orders, payments, companies, buyers, order expenses, unpaid orders, and statuses all get a new refresh pass.
+- Passive status polling still only repairs missing child jobs and does not endlessly requeue finished work.
+- The unpaid-orders refresh now resets the seen payment ids per order before recalculating local paid/unpaid totals.
+
+### How To Test
+
+1. Open `index.php` as CEO.
+2. Click `Оновити все`.
+3. Check `db_sync_jobs`: the active `global_refresh` should have queued/running child jobs for `orders`, `unpaid_orders`, `payments`, `companies`, `buyers`, `order_expenses`, and `statuses`.
+4. Click `Оновити все` again while some jobs are still active. Finished job types should be queued again; already queued/running types should not duplicate.
+
 ## 2026-07-17 — Sync Debt Refresh Fix
 
 ### Files Changed
@@ -1184,3 +1209,30 @@ Plans are effective-dated. Saving a new plan does not overwrite history. For any
 ### Open Risk
 
 Name-only client exclusions are weaker than id-based exclusions because they depend on exact client/company name matching. Prefer KeyCRM company id when available.
+
+## 2026-07-22 — Client Manager Source Fix
+
+### Problem Found
+
+`client_balances.php` showed manager from `db_orders.manager_name`. That is the manager of an order, not necessarily the manager assigned to a KeyCRM company or buyer/contact. Because of this, a client could show a manager even when KeyCRM company/buyer manager was not set.
+
+### What Changed
+
+- Added source manager fields for local client cache:
+  - `db_client_companies.keycrm_manager_id`
+  - `db_client_companies.keycrm_manager_name`
+  - `db_client_contacts.keycrm_manager_id`
+  - `db_client_contacts.keycrm_manager_name`
+- Updated `clients_sync.php` and `sync_core.php` to save KeyCRM company/buyer manager data when KeyCRM returns it.
+- Updated `client_balances.php` to display client manager from:
+  - local assigned manager first;
+  - KeyCRM company/contact manager second;
+  - `Без менеджера` if neither exists.
+- Stopped using `db_orders.manager_name` as client manager on the clients page.
+- Added a compact `Без менеджера` block with:
+  - companies without manager;
+  - buyers/contacts without manager.
+
+### Manual Setup / Test
+
+After deploy, run `Клієнти Sync` for companies and buyers so the new manager fields are filled from KeyCRM. Then open `Клієнти` and use the manager filter `Без менеджера`.

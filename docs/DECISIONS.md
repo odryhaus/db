@@ -215,6 +215,7 @@ Decision:
 
 - Use background sync jobs instead of long browser requests.
 - CEO dashboard has one global button: `Оновити все`.
+- A CEO click on `Оновити все` is the daily refresh control for changed orders, currently unpaid orders, payments, companies, buyers, order expenses, and statuses.
 - Old manual sync pages are technical/admin fallback pages and should not appear in daily navigation.
 - Jobs are stored in `db_sync_jobs` and processed by `cron/sync_worker.php`.
 - Use KeyCRM `filter[updated_between]` with a 120 second overlap for delta sync.
@@ -445,3 +446,14 @@ Decision:
 - Managers on the `Плани` page come from all-time orders and target history, not only from the selected month.
 
 Reason: `.BRAND` needs to set historical plans from 2022, change plans in future months, and still understand what plan was active at any point in time.
+
+## Client Manager Source
+
+Decision:
+
+- `db_orders.manager_name` is the manager of a specific order.
+- The clients page must not use order manager as client manager.
+- Client manager display uses local assigned manager first, then KeyCRM company/contact manager source fields, then `Без менеджера`.
+- If KeyCRM company or buyer has no manager, `.BRAND DB` must show `Без менеджера` until CEO assigns a local manager.
+
+Reason: order ownership and client ownership are different business concepts. Mixing them makes the client base look assigned when it is not.

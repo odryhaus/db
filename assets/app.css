@@ -2016,6 +2016,36 @@ tr:last-child td {
     white-space: nowrap;
 }
 
+.compact-title {
+    margin: 0 0 8px;
+    font-size: 13px;
+}
+
+.mini-list {
+    display: grid;
+    gap: 0;
+    border-top: 1px solid var(--line);
+}
+
+.mini-list-row {
+    display: grid;
+    gap: 2px;
+    border-bottom: 1px solid var(--line);
+    color: var(--text);
+    padding: 8px 0;
+    text-decoration: none;
+}
+
+.mini-list-row strong {
+    font-size: 12px;
+}
+
+.mini-list-row span {
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.35;
+}
+
 .inline-form {
     display: inline-flex;
     margin: 0;

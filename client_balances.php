@@ -30,12 +30,10 @@ $inactiveMode = (string) ($_GET['inactive'] ?? '') === '1';
 $rowsByKey = [];
 $trend = [];
 $pageError = '';
+$unassignedContacts = [];
 $hasOrders = invoice_table_exists('db_orders');
 $hasPayments = invoice_table_exists('db_order_payments');
 $orderColumns = $hasOrders ? finance_columns('db_orders') : [];
-if (!in_array('manager_name', $orderColumns, true)) {
-    $managerFilter = '';
-}
 $hasClientCompanies = invoice_table_exists('db_client_companies');
 $hasClientContacts = invoice_table_exists('db_client_contacts');
 $hasInvoices = invoice_table_exists('db_invoices');
@@ -119,7 +117,6 @@ function client_balances_exprs(array $orderColumns, bool $hasClientCompanies, bo
     $hasBuyerEmail = in_array('buyer_email', $orderColumns, true);
     $hasBuyerPhone = in_array('buyer_phone', $orderColumns, true);
     $hasOrderNumber = in_array('order_number', $orderColumns, true);
-    $hasManagerName = in_array('manager_name', $orderColumns, true);
 
     $companyJoin = $hasClientCompanies && $hasCompanyId ? "LEFT JOIN db_client_companies cc ON cc.keycrm_company_id = o.company_id" : "";
     $contactJoin = $hasClientContacts && $hasBuyerId ? "LEFT JOIN db_client_contacts ct ON ct.keycrm_buyer_id = o.buyer_id" : "";
@@ -176,7 +173,6 @@ function client_balances_exprs(array $orderColumns, bool $hasClientCompanies, bo
         $hasClientName ? "o.client_name" : null,
         $hasBuyerEmail ? "o.buyer_email" : null,
         $hasBuyerPhone ? "o.buyer_phone" : null,
-        $hasManagerName ? "o.manager_name" : null,
     ] as $field) {
         if ($field !== null) {
             $searchFields[] = $field;
@@ -203,11 +199,38 @@ function client_balances_exprs(array $orderColumns, bool $hasClientCompanies, bo
     }
     $searchHaystack = "LOWER(CONCAT_WS(' ', " . implode(', ', array_map(static fn($field) => "COALESCE(CAST({$field} AS CHAR), '')", $searchFields)) . "))";
 
+    $managerExpressions = [];
+    if ($hasClientCompanies && $hasCompanyId) {
+        foreach (['assigned_manager_name', 'keycrm_manager_name'] as $column) {
+            if (in_array($column, $clientCompanyColumns, true)) {
+                $managerExpressions[] = "NULLIF(MAX(cc.{$column}), '')";
+            }
+        }
+        foreach (['assigned_manager_keycrm_id', 'keycrm_manager_id'] as $column) {
+            if (in_array($column, $clientCompanyColumns, true)) {
+                $managerExpressions[] = "NULLIF(CONCAT('KeyCRM #', MAX(cc.{$column})), 'KeyCRM #')";
+            }
+        }
+    }
+    if ($hasClientContacts && $hasBuyerId) {
+        foreach (['assigned_manager_name', 'keycrm_manager_name'] as $column) {
+            if (in_array($column, $clientContactColumns, true)) {
+                $managerExpressions[] = "NULLIF(MAX(ct.{$column}), '')";
+            }
+        }
+        foreach (['assigned_manager_keycrm_id', 'keycrm_manager_id'] as $column) {
+            if (in_array($column, $clientContactColumns, true)) {
+                $managerExpressions[] = "NULLIF(CONCAT('KeyCRM #', MAX(ct.{$column})), 'KeyCRM #')";
+            }
+        }
+    }
+    $managerName = $managerExpressions ? "COALESCE(" . implode(', ', $managerExpressions) . ", 'Без менеджера')" : "'Без менеджера'";
+
     return [
         'key' => $key,
         'company_name' => $companyName,
         'buyer_name' => $buyerName,
-        'manager_name' => $hasManagerName ? "COALESCE(NULLIF(MAX(o.manager_name), ''), 'Без менеджера')" : "'Без менеджера'",
+        'manager_name' => $managerName,
         'joins' => trim($companyJoin . "\n" . $contactJoin),
         'search_haystack' => $searchHaystack,
     ];
@@ -234,18 +257,6 @@ function client_balances_search_filter(string $search, string $haystack): array
     return [
         'sql' => ' AND (' . implode(' AND ', $parts) . ')',
         'params' => $params,
-    ];
-}
-
-function client_balances_manager_filter(string $manager): array
-{
-    if ($manager === '') {
-        return ['sql' => '', 'params' => []];
-    }
-
-    return [
-        'sql' => " AND COALESCE(NULLIF(o.manager_name, ''), 'Без менеджера') = :manager_filter",
-        'params' => ['manager_filter' => $manager],
     ];
 }
 
@@ -551,9 +562,8 @@ try {
         }
         $searchFilter = client_balances_search_filter($search, (string) $expr['search_haystack']);
         $searchSql = (string) $searchFilter['sql'];
-        $managerFilterSql = client_balances_manager_filter($managerFilter);
-        $managerSql = (string) $managerFilterSql['sql'];
-        $searchParams = array_merge($searchFilter['params'], $managerFilterSql['params']);
+        $managerSql = '';
+        $searchParams = $searchFilter['params'];
         $orderDateExpr = in_array('ordered_at', $orderColumns, true) ? 'DATE(o.ordered_at)' : "CONCAT(o.order_month, '-01')";
         $hasOrderKeycrmId = in_array('keycrm_id', $orderColumns, true);
         $canJoinInvoiceDue = $hasInvoices
@@ -577,17 +587,6 @@ try {
             ) inv ON inv.keycrm_order_id = o.keycrm_id"
             : '';
         $clientPaymentDueExpr = $canJoinInvoiceDue ? 'inv.invoice_payment_due_date' : 'NULL';
-
-        if (in_array('manager_name', $orderColumns, true)) {
-            $managerStmt = db()->query("
-                SELECT COALESCE(NULLIF(manager_name, ''), 'Без менеджера') AS manager_name, COUNT(*) AS order_count
-                FROM db_orders o
-                WHERE " . cockpit_active_order_sql('o') . "
-                GROUP BY COALESCE(NULLIF(manager_name, ''), 'Без менеджера')
-                ORDER BY manager_name ASC
-            ");
-            $managerOptions = $managerStmt->fetchAll();
-        }
 
         $stmt = db()->prepare("
             SELECT
@@ -793,6 +792,27 @@ try {
                 $rowsByKey[$key]['cash_received'] = (float) ($row['cash_received'] ?? 0);
             }
         }
+
+        if ($hasClientContacts) {
+            $companyNameExpr = $hasClientCompanies
+                ? "COALESCE(NULLIF(cc.display_name, ''), NULLIF(cc.keycrm_name, ''), NULLIF(cc.name, ''), NULLIF(cc.keycrm_title, ''), NULLIF(cc.title, ''))"
+                : "NULL";
+            $contactCompanyJoin = $hasClientCompanies ? "LEFT JOIN db_client_companies cc ON cc.id = ct.client_company_id" : "";
+            $unassignedContacts = db()->query("
+                SELECT
+                    ct.full_name,
+                    ct.email,
+                    ct.phone,
+                    {$companyNameExpr} AS company_name
+                FROM db_client_contacts ct
+                {$contactCompanyJoin}
+                WHERE COALESCE(NULLIF(ct.assigned_manager_name, ''), NULLIF(ct.keycrm_manager_name, '')) IS NULL
+                  AND ct.assigned_manager_keycrm_id IS NULL
+                  AND ct.keycrm_manager_id IS NULL
+                ORDER BY COALESCE(NULLIF(ct.full_name, ''), NULLIF(ct.email, ''), NULLIF(ct.phone, '')) ASC
+                LIMIT 80
+            ")->fetchAll();
+        }
     }
 } catch (Throwable $e) {
     error_log('client_balances failed: ' . $e->getMessage());
@@ -845,21 +865,37 @@ foreach ($allRows as &$rowRef) {
 }
 unset($rowRef);
 
-$monthSalesTotal = array_sum(array_map(static fn($row) => (float) $row['sales_month'], $allRows));
-$monthPaidTotal = array_sum(array_map(static fn($row) => (float) $row['paid_by_order'], $allRows));
-$monthCashTotal = array_sum(array_map(static fn($row) => (float) $row['cash_received'], $allRows));
-$activeClientCount = count(array_filter($allRows, static fn($row) => (float) $row['sales_month'] > 0));
+$managerCounts = [];
+foreach ($allRows as $row) {
+    $managerName = (string) ($row['manager_name'] ?: 'Без менеджера');
+    $managerCounts[$managerName] = ($managerCounts[$managerName] ?? 0) + 1;
+}
+ksort($managerCounts);
+$managerOptions = [];
+foreach ($managerCounts as $managerName => $countRows) {
+    $managerOptions[] = ['manager_name' => $managerName, 'order_count' => $countRows];
+}
+
+$managerRows = $managerFilter !== ''
+    ? array_values(array_filter($allRows, static fn($row) => (string) ($row['manager_name'] ?: 'Без менеджера') === $managerFilter))
+    : $allRows;
+$unassignedCompanyRows = array_values(array_filter($allRows, static fn($row) => (string) ($row['manager_name'] ?: 'Без менеджера') === 'Без менеджера'));
+
+$monthSalesTotal = array_sum(array_map(static fn($row) => (float) $row['sales_month'], $managerRows));
+$monthPaidTotal = array_sum(array_map(static fn($row) => (float) $row['paid_by_order'], $managerRows));
+$monthCashTotal = array_sum(array_map(static fn($row) => (float) $row['cash_received'], $managerRows));
+$activeClientCount = count(array_filter($managerRows, static fn($row) => (float) $row['sales_month'] > 0));
 
 $trendCounts = ['down' => 0, 'sleeping' => 0, 'new' => 0, 'returned' => 0, 'up' => 0, 'active' => 0, 'idle' => 0];
 $segmentCounts = ['vip' => 0, 'large' => 0, 'medium' => 0, 'small' => 0];
-foreach ($allRows as $row) {
+foreach ($managerRows as $row) {
     $trendCounts[$row['trend_class']] = ($trendCounts[$row['trend_class']] ?? 0) + 1;
     if (isset($segmentCounts[$row['segment_class']])) {
         $segmentCounts[$row['segment_class']]++;
     }
 }
 
-$filteredRows = $allRows;
+$filteredRows = $managerRows;
 if ($trendFilter !== '') {
     $filteredRows = array_values(array_filter($filteredRows, static fn($row) => $row['trend_class'] === $trendFilter));
 }
@@ -967,6 +1003,43 @@ $rows = array_slice($filteredRows, 0, 200);
                 <?php foreach (client_balances_segment_labels() as $segmentKey => $segmentLabelText): ?>
                     <a class="<?= $segmentFilter === $segmentKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentKey, 'scope' => $valueScope, 'inactive' => $inactiveMode ? '1' : '']))) ?>"><?= e($segmentLabelText) ?> <small><?= e((string) ($segmentCounts[$segmentKey] ?? 0)) ?></small></a>
                 <?php endforeach; ?>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel dashboard-section">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Контроль менеджерів</p>
+                <h2>Без менеджера</h2>
+                <p class="muted">Це компанії та покупці, де не знайдено локального або KeyCRM менеджера. Менеджер із замовлення тут більше не підставляється.</p>
+            </div>
+            <span class="status-badge"><?= e((string) count($unassignedCompanyRows)) ?> компаній · <?= e((string) count($unassignedContacts)) ?> покупців</span>
+        </div>
+        <div class="split-grid">
+            <div>
+                <h3 class="compact-title">Компанії</h3>
+                <div class="mini-list">
+                    <?php if (!$unassignedCompanyRows): ?><div class="empty-state">Компаній без менеджера не знайдено.</div><?php endif; ?>
+                    <?php foreach (array_slice($unassignedCompanyRows, 0, 20) as $row): ?>
+                        <a class="mini-list-row" href="<?= e(base_path('/sales.php?' . client_balances_query(['month' => $selectedMonth, 'from_month' => substr($selectedMonth, 0, 4) . '-01', 'to_month' => $selectedMonth, 'client_key' => (string) $row['client_key']]))) ?>">
+                            <strong><?= e((string) $row['client_name']) ?></strong>
+                            <span><?= e(finance_money($row['total_purchases'])) ?> · борг <?= e(finance_money($row['receivable_total'])) ?></span>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <div>
+                <h3 class="compact-title">Покупці / контакти</h3>
+                <div class="mini-list">
+                    <?php if (!$unassignedContacts): ?><div class="empty-state">Покупців без менеджера не знайдено.</div><?php endif; ?>
+                    <?php foreach (array_slice($unassignedContacts, 0, 20) as $contact): ?>
+                        <div class="mini-list-row">
+                            <strong><?= e((string) (($contact['full_name'] ?? '') ?: (($contact['email'] ?? '') ?: 'Без імені'))) ?></strong>
+                            <span><?= e((string) (($contact['company_name'] ?? '') ?: 'Без компанії')) ?><?= !empty($contact['email']) ? ' · ' . e((string) $contact['email']) : '' ?><?= !empty($contact['phone']) ? ' · ' . e((string) $contact['phone']) : '' ?></span>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
             </div>
         </div>
     </section>

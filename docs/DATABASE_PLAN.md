@@ -67,6 +67,33 @@ Rules:
 - Excluding one order affects only that order.
 - Restore actions must be possible from an excluded/inactive view.
 
+## Client Manager Ownership
+
+Important distinction:
+
+- `db_orders.manager_name` is order manager.
+- `db_client_companies` / `db_client_contacts` manager fields are client ownership.
+
+Client source manager fields:
+
+`db_client_companies`:
+
+- `keycrm_manager_id INT UNSIGNED NULL`
+- `keycrm_manager_name VARCHAR(150) NULL`
+
+`db_client_contacts`:
+
+- `keycrm_manager_id INT UNSIGNED NULL`
+- `keycrm_manager_name VARCHAR(150) NULL`
+
+Rules:
+
+- Do not display order manager as client manager.
+- Display local assigned manager first.
+- Display KeyCRM company/contact manager second.
+- If neither exists, display `Без менеджера`.
+- Local assigned manager fields must not be overwritten by KeyCRM sync.
+
 ## Near Real-Time Sync Tables
 
 The sync foundation uses additive local cache/control tables:

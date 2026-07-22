@@ -127,6 +127,7 @@ Before that, verify Near Real-Time Sync v0.1 in production:
 - Add cron commands from `docs/CRON_SETUP.md`.
 - Click `Оновити все` as CEO.
 - Confirm `db_sync_jobs` child jobs finish successfully.
+- Confirm repeated clicks on `Оновити все` queue a fresh pass for already-finished parts such as `orders` and `payments`, without duplicating parts that are already `queued` or `running`.
 - Confirm the `unpaid_orders` job clears orders that were paid after they first appeared in receivables.
 - Confirm `db_order_payments` receives payment rows.
 - Confirm `db_order_expenses` receives order expense rows.
@@ -382,6 +383,7 @@ After deploy:
 - Decide whether non-CEO roles should be allowed to request exclusion without applying it.
 - Review name-only excluded clients after full company sync; replace them with KeyCRM company-id exclusions when possible.
 - Decide whether target history needs delete/cancel controls or whether new effective-dated rows are enough.
+- After the client manager source fix, run `Клієнти Sync` for companies and buyers, then review `Клієнти → Менеджер → Без менеджера`.
 - Continue reducing duplicate pages:
   - keep `Cockpit`, `Клієнти`, `Продажі`, `Гроші`, and `Документи` as daily pages;
   - keep `Менеджери`, `Плани`, `Витрати`, `Операції`, `Реквізити`, `Наші компанії`, sync pages, and users under Admin/direct links;

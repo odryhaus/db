@@ -44,6 +44,7 @@ Known limitations:
 - New background sync orchestration exists, but production cron must still be configured.
 - Dashboard has a CEO-only web tick fallback for queued jobs, but cron is still the preferred reliable sync runner.
 - Without cron, refresh can still take longer because the browser processes queued jobs in small batches while the page is open.
+- `Оновити все` is the daily all-changes refresh, but it is still bounded delta/recent sync; old history before the current cache must be loaded through `history_sync.php`.
 - Sync jobs have auto-timeout recovery, but repeated failures should still be inspected in `db_sync_jobs.error_message`.
 - Sync scans bounded delta/recent pages only; it does not scan all history.
 - KeyCRM `filter[updated_between]` is confirmed from OpenAPI, but production runtime behavior still needs verification.

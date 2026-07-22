@@ -295,7 +295,7 @@ function sync_enqueue_global_refresh(int $userId): int
         LIMIT 1
     ")->fetchColumn();
     if ($active) {
-        sync_ensure_parent_jobs((int) $active, $userId);
+        sync_enqueue_parent_refresh_jobs((int) $active, $userId);
         return (int) $active;
     }
 
@@ -320,6 +320,33 @@ function sync_enqueue_global_refresh(int $userId): int
     $pdo->commit();
 
     return $parentId;
+}
+
+function sync_enqueue_parent_refresh_jobs(int $parentId, ?int $userId = null): void
+{
+    if ($parentId <= 0) {
+        return;
+    }
+
+    $stmt = db()->prepare("
+        INSERT INTO db_sync_jobs (parent_job_id, job_type, status, created_by_user_id)
+        SELECT :parent_job_id, :job_type, 'queued', :created_by_user_id
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM db_sync_jobs
+            WHERE job_type = :job_type_check
+              AND status IN ('queued','running')
+            LIMIT 1
+        )
+    ");
+    foreach (sync_job_types() as $jobType) {
+        $stmt->execute([
+            'parent_job_id' => $parentId,
+            'job_type' => $jobType,
+            'created_by_user_id' => $userId,
+            'job_type_check' => $jobType,
+        ]);
+    }
 }
 
 function sync_ensure_parent_jobs(int $parentId, ?int $userId = null): void
@@ -1362,6 +1389,7 @@ function sync_run_unpaid_orders_refresh(string $apiKey): array
         }
         $counts[sync_upsert_order_from_keycrm($order)]++;
 
+        $seenPaymentIds = [];
         foreach ((array) ($order['payments'] ?? []) as $payment) {
             if (is_array($payment)) {
                 $orderNumber = (string) (($order['number'] ?? '') ?: (($order['source_uuid'] ?? '') ?: $orderId));
@@ -1369,7 +1397,7 @@ function sync_run_unpaid_orders_refresh(string $apiKey): array
                 $counts[sync_upsert_payment($payment, $orderId, $orderNumber)]++;
             }
         }
-        sync_mark_missing_order_payments_deleted($orderId, $seenPaymentIds ?? []);
+        sync_mark_missing_order_payments_deleted($orderId, $seenPaymentIds);
         sync_recalculate_order_payment_totals($orderId);
 
         $seenItemIds = [];
@@ -1428,6 +1456,24 @@ function sync_company_label(array $company, array $keys): ?string
     return null;
 }
 
+function sync_source_manager_id(array $data): ?int
+{
+    if (isset($data['manager']) && is_array($data['manager']) && !empty($data['manager']['id'])) {
+        return (int) $data['manager']['id'];
+    }
+    if (!empty($data['manager_id'])) {
+        return (int) $data['manager_id'];
+    }
+
+    return null;
+}
+
+function sync_source_manager_name(array $data): ?string
+{
+    $manager = isset($data['manager']) && is_array($data['manager']) ? $data['manager'] : [];
+    return sync_company_label($manager, ['full_name', 'name', 'username']);
+}
+
 function sync_upsert_company(array $company): string
 {
     $id = (int) ($company['id'] ?? 0);
@@ -1444,6 +1490,21 @@ function sync_upsert_company(array $company): string
     $localId = (int) ($existing['id'] ?? 0);
     $oldRaw = (string) ($existing['raw_json'] ?? '');
     if ($oldRaw !== '' && hash('sha256', $oldRaw) === $hash) {
+        if ($localId > 0) {
+            db()->prepare("
+                UPDATE db_client_companies
+                SET manager_id = :manager_id,
+                    keycrm_manager_id = :keycrm_manager_id,
+                    keycrm_manager_name = :keycrm_manager_name,
+                    synced_at = NOW()
+                WHERE id = :id
+            ")->execute([
+                'manager_id' => sync_source_manager_id($company),
+                'keycrm_manager_id' => sync_source_manager_id($company),
+                'keycrm_manager_name' => sync_source_manager_name($company),
+                'id' => $localId,
+            ]);
+        }
         return 'unchanged';
     }
 
@@ -1454,7 +1515,9 @@ function sync_upsert_company(array $company): string
         'keycrm_title' => $title,
         'name' => $name,
         'title' => $title,
-        'manager_id' => !empty($company['manager_id']) ? (int) $company['manager_id'] : null,
+        'manager_id' => sync_source_manager_id($company),
+        'keycrm_manager_id' => sync_source_manager_id($company),
+        'keycrm_manager_name' => sync_source_manager_name($company),
         'raw_json' => $raw ?: null,
     ];
 
@@ -1470,6 +1533,8 @@ function sync_upsert_company(array $company): string
                 name = :name,
                 title = :title,
                 manager_id = :manager_id,
+                keycrm_manager_id = :keycrm_manager_id,
+                keycrm_manager_name = :keycrm_manager_name,
                 raw_json = :raw_json,
                 synced_at = NOW()
             WHERE id = :id
@@ -1480,9 +1545,9 @@ function sync_upsert_company(array $company): string
 
     db()->prepare("
         INSERT INTO db_client_companies
-            (keycrm_company_id, display_name, keycrm_name, keycrm_title, name, title, manager_id, raw_json, synced_at)
+            (keycrm_company_id, display_name, keycrm_name, keycrm_title, name, title, manager_id, keycrm_manager_id, keycrm_manager_name, raw_json, synced_at)
         VALUES
-            (:keycrm_company_id, :display_name, :keycrm_name, :keycrm_title, :name, :title, :manager_id, :raw_json, NOW())
+            (:keycrm_company_id, :display_name, :keycrm_name, :keycrm_title, :name, :title, :manager_id, :keycrm_manager_id, :keycrm_manager_name, :raw_json, NOW())
     ")->execute($data);
 
     return 'inserted';
@@ -1516,6 +1581,21 @@ function sync_upsert_buyer(array $buyer): string
     $localId = (int) ($existing['id'] ?? 0);
     $oldRaw = (string) ($existing['raw_json'] ?? '');
     if ($oldRaw !== '' && hash('sha256', $oldRaw) === $hash) {
+        if ($localId > 0) {
+            db()->prepare("
+                UPDATE db_client_contacts
+                SET client_company_id = :client_company_id,
+                    keycrm_manager_id = :keycrm_manager_id,
+                    keycrm_manager_name = :keycrm_manager_name,
+                    synced_at = NOW()
+                WHERE id = :id
+            ")->execute([
+                'client_company_id' => $clientCompanyId ?: null,
+                'keycrm_manager_id' => sync_source_manager_id($buyer),
+                'keycrm_manager_name' => sync_source_manager_name($buyer),
+                'id' => $localId,
+            ]);
+        }
         return 'unchanged';
     }
     $data = [
@@ -1525,6 +1605,8 @@ function sync_upsert_buyer(array $buyer): string
         'email' => $email,
         'phone' => $phone,
         'position' => sync_company_label($buyer, ['position']),
+        'keycrm_manager_id' => sync_source_manager_id($buyer),
+        'keycrm_manager_name' => sync_source_manager_name($buyer),
         'raw_json' => $raw ?: null,
     ];
 
@@ -1539,6 +1621,8 @@ function sync_upsert_buyer(array $buyer): string
                 email = :email,
                 phone = :phone,
                 position = :position,
+                keycrm_manager_id = :keycrm_manager_id,
+                keycrm_manager_name = :keycrm_manager_name,
                 raw_json = :raw_json,
                 synced_at = NOW()
             WHERE id = :id
@@ -1549,9 +1633,9 @@ function sync_upsert_buyer(array $buyer): string
 
     db()->prepare("
         INSERT INTO db_client_contacts
-            (keycrm_buyer_id, client_company_id, full_name, email, phone, position, raw_json, synced_at)
+            (keycrm_buyer_id, client_company_id, full_name, email, phone, position, keycrm_manager_id, keycrm_manager_name, raw_json, synced_at)
         VALUES
-            (:keycrm_buyer_id, :client_company_id, :full_name, :email, :phone, :position, :raw_json, NOW())
+            (:keycrm_buyer_id, :client_company_id, :full_name, :email, :phone, :position, :keycrm_manager_id, :keycrm_manager_name, :raw_json, NOW())
     ")->execute($data);
 
     return 'inserted';
@@ -1580,6 +1664,10 @@ function sync_run_product_statuses(string $apiKey, array &$counts): void
 
 function sync_worker_run_once(): ?array
 {
+    if (function_exists('ensure_invoice_tables')) {
+        ensure_invoice_tables();
+    }
+
     if (!invoice_table_exists('db_sync_jobs')) {
         return null;
     }
@@ -1599,6 +1687,10 @@ function sync_worker_run_once(): ?array
 
 function sync_worker_run_orders_backfill_once(): ?array
 {
+    if (function_exists('ensure_invoice_tables')) {
+        ensure_invoice_tables();
+    }
+
     if (!invoice_table_exists('db_sync_jobs')) {
         return null;
     }

@@ -464,6 +464,8 @@ function ensure_invoice_tables(): void
     invoice_add_column_if_missing('db_client_companies', 'assigned_manager_keycrm_id', 'INT UNSIGNED NULL');
     invoice_add_column_if_missing('db_client_companies', 'assigned_manager_name', 'VARCHAR(150) NULL');
     invoice_add_column_if_missing('db_client_companies', 'manager_assignment_note', 'TEXT NULL');
+    invoice_add_column_if_missing('db_client_companies', 'keycrm_manager_id', 'INT UNSIGNED NULL');
+    invoice_add_column_if_missing('db_client_companies', 'keycrm_manager_name', 'VARCHAR(150) NULL');
     invoice_add_index_if_missing('db_client_companies', 'idx_display_name', 'display_name(191)');
     invoice_add_index_if_missing('db_client_companies', 'idx_keycrm_name', 'keycrm_name(191)');
     invoice_add_index_if_missing('db_client_companies', 'idx_keycrm_title', 'keycrm_title(191)');
@@ -493,6 +495,8 @@ function ensure_invoice_tables(): void
     invoice_add_column_if_missing('db_client_contacts', 'assigned_manager_name', 'VARCHAR(150) NULL');
     invoice_add_column_if_missing('db_client_contacts', 'inherits_company_manager', 'TINYINT(1) NOT NULL DEFAULT 1');
     invoice_add_column_if_missing('db_client_contacts', 'manager_assignment_note', 'TEXT NULL');
+    invoice_add_column_if_missing('db_client_contacts', 'keycrm_manager_id', 'INT UNSIGNED NULL');
+    invoice_add_column_if_missing('db_client_contacts', 'keycrm_manager_name', 'VARCHAR(150) NULL');
     invoice_add_index_if_missing('db_client_contacts', 'idx_full_name', 'full_name(191)');
     invoice_add_index_if_missing('db_client_contacts', 'idx_email', 'email');
     invoice_add_index_if_missing('db_client_contacts', 'idx_phone', 'phone');
@@ -622,6 +626,8 @@ function ensure_analytics_exclusion_columns(): void
     }
 
     if (invoice_table_exists('db_client_companies')) {
+        invoice_add_column_if_missing('db_client_companies', 'keycrm_manager_id', 'INT UNSIGNED NULL');
+        invoice_add_column_if_missing('db_client_companies', 'keycrm_manager_name', 'VARCHAR(150) NULL');
         invoice_add_column_if_missing('db_client_companies', 'analytics_excluded', 'TINYINT(1) NOT NULL DEFAULT 0');
         invoice_add_column_if_missing('db_client_companies', 'analytics_excluded_at', 'DATETIME NULL');
         invoice_add_column_if_missing('db_client_companies', 'analytics_excluded_by_user_id', 'INT UNSIGNED NULL');
@@ -912,6 +918,11 @@ function seed_our_company(array $company): int
         ]);
 
         return $id;
+    }
+
+    if (invoice_table_exists('db_client_contacts')) {
+        invoice_add_column_if_missing('db_client_contacts', 'keycrm_manager_id', 'INT UNSIGNED NULL');
+        invoice_add_column_if_missing('db_client_contacts', 'keycrm_manager_name', 'VARCHAR(150) NULL');
     }
 
     $stmt = db()->prepare("

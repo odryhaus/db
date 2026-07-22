@@ -77,13 +77,32 @@ function client_sync_value(array $data, array $keys): ?string
     return null;
 }
 
+function client_sync_manager_id(array $data): ?int
+{
+    if (isset($data['manager']) && is_array($data['manager']) && !empty($data['manager']['id'])) {
+        return (int) $data['manager']['id'];
+    }
+    if (!empty($data['manager_id'])) {
+        return (int) $data['manager_id'];
+    }
+
+    return null;
+}
+
+function client_sync_manager_name(array $data): ?string
+{
+    $manager = isset($data['manager']) && is_array($data['manager']) ? $data['manager'] : [];
+    return client_sync_value($manager, ['full_name', 'name', 'username']);
+}
+
 function client_sync_upsert_company(PDO $pdo, array $company): ?int
 {
     $keycrmId = (int) ($company['id'] ?? 0);
     $name = client_sync_value($company, ['name', 'display_name']);
     $title = client_sync_value($company, ['title', 'full_name', 'legal_name']);
     $displayName = $title ?: $name;
-    $managerId = isset($company['manager_id']) ? (int) $company['manager_id'] : null;
+    $managerId = client_sync_manager_id($company);
+    $managerName = client_sync_manager_name($company);
     $rawJson = json_encode($company, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
     if ($keycrmId <= 0 && $displayName === null) {
@@ -106,6 +125,8 @@ function client_sync_upsert_company(PDO $pdo, array $company): ?int
                 name = :name,
                 title = :title,
                 manager_id = :manager_id,
+                keycrm_manager_id = :keycrm_manager_id,
+                keycrm_manager_name = :keycrm_manager_name,
                 raw_json = :raw_json,
                 synced_at = NOW()
             WHERE id = :id
@@ -117,6 +138,8 @@ function client_sync_upsert_company(PDO $pdo, array $company): ?int
             'name' => $name,
             'title' => $title,
             'manager_id' => $managerId,
+            'keycrm_manager_id' => $managerId,
+            'keycrm_manager_name' => $managerName,
             'raw_json' => $rawJson ?: null,
             'id' => (int) $localId,
         ]);
@@ -126,9 +149,9 @@ function client_sync_upsert_company(PDO $pdo, array $company): ?int
 
     $stmt = $pdo->prepare("
         INSERT INTO db_client_companies
-            (keycrm_company_id, display_name, keycrm_name, keycrm_title, name, title, manager_id, raw_json, synced_at)
+            (keycrm_company_id, display_name, keycrm_name, keycrm_title, name, title, manager_id, keycrm_manager_id, keycrm_manager_name, raw_json, synced_at)
         VALUES
-            (:keycrm_company_id, :display_name, :keycrm_name, :keycrm_title, :name, :title, :manager_id, :raw_json, NOW())
+            (:keycrm_company_id, :display_name, :keycrm_name, :keycrm_title, :name, :title, :manager_id, :keycrm_manager_id, :keycrm_manager_name, :raw_json, NOW())
     ");
     $stmt->execute([
         'keycrm_company_id' => $keycrmId > 0 ? $keycrmId : null,
@@ -138,6 +161,8 @@ function client_sync_upsert_company(PDO $pdo, array $company): ?int
         'name' => $name,
         'title' => $title,
         'manager_id' => $managerId,
+        'keycrm_manager_id' => $managerId,
+        'keycrm_manager_name' => $managerName,
         'raw_json' => $rawJson ?: null,
     ]);
 
@@ -161,6 +186,8 @@ function client_sync_upsert_buyer(PDO $pdo, array $buyer): ?int
     $email = client_sync_value($buyer, ['email']);
     $phone = client_sync_value($buyer, ['phone']);
     $position = client_sync_value($buyer, ['position']);
+    $managerId = client_sync_manager_id($buyer);
+    $managerName = client_sync_manager_name($buyer);
     $rawJson = json_encode($buyer, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
     if ($keycrmId <= 0 && $fullName === null && $email === null && $phone === null) {
@@ -182,6 +209,8 @@ function client_sync_upsert_buyer(PDO $pdo, array $buyer): ?int
                 email = :email,
                 phone = :phone,
                 position = :position,
+                keycrm_manager_id = :keycrm_manager_id,
+                keycrm_manager_name = :keycrm_manager_name,
                 raw_json = :raw_json,
                 synced_at = NOW()
             WHERE id = :id
@@ -192,6 +221,8 @@ function client_sync_upsert_buyer(PDO $pdo, array $buyer): ?int
             'email' => $email,
             'phone' => $phone,
             'position' => $position,
+            'keycrm_manager_id' => $managerId,
+            'keycrm_manager_name' => $managerName,
             'raw_json' => $rawJson ?: null,
             'id' => (int) $localId,
         ]);
@@ -201,9 +232,9 @@ function client_sync_upsert_buyer(PDO $pdo, array $buyer): ?int
 
     $stmt = $pdo->prepare("
         INSERT INTO db_client_contacts
-            (keycrm_buyer_id, client_company_id, full_name, email, phone, position, raw_json, synced_at)
+            (keycrm_buyer_id, client_company_id, full_name, email, phone, position, keycrm_manager_id, keycrm_manager_name, raw_json, synced_at)
         VALUES
-            (:keycrm_buyer_id, :client_company_id, :full_name, :email, :phone, :position, :raw_json, NOW())
+            (:keycrm_buyer_id, :client_company_id, :full_name, :email, :phone, :position, :keycrm_manager_id, :keycrm_manager_name, :raw_json, NOW())
     ");
     $stmt->execute([
         'keycrm_buyer_id' => $keycrmId > 0 ? $keycrmId : null,
@@ -212,6 +243,8 @@ function client_sync_upsert_buyer(PDO $pdo, array $buyer): ?int
         'email' => $email,
         'phone' => $phone,
         'position' => $position,
+        'keycrm_manager_id' => $managerId,
+        'keycrm_manager_name' => $managerName,
         'raw_json' => $rawJson ?: null,
     ]);
 
