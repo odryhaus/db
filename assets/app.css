@@ -2548,20 +2548,38 @@ tr:last-child td {
 }
 
 .order-products {
-    display: grid;
-    gap: 0;
     border-top: 1px solid var(--line);
     background: #f8f9fb;
     padding: 8px 16px 10px;
 }
 
-.order-products__caption {
-    margin-bottom: 3px;
+.order-products summary {
+    cursor: pointer;
+    list-style: none;
     color: var(--muted);
     font-size: 10px;
     font-weight: 800;
     letter-spacing: .08em;
     text-transform: uppercase;
+}
+
+.order-products summary::-webkit-details-marker {
+    display: none;
+}
+
+.order-products summary::before {
+    content: '+';
+    display: inline-block;
+    width: 18px;
+    color: var(--ink);
+}
+
+.order-products[open] summary {
+    margin-bottom: 3px;
+}
+
+.order-products[open] summary::before {
+    content: '-';
 }
 
 .order-product {

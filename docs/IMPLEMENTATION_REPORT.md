@@ -504,6 +504,31 @@ The dashboard button became disabled whenever any sync job stayed `queued` or `r
 3. Check `db_sync_jobs`: the active `global_refresh` should have queued/running child jobs for `orders`, `unpaid_orders`, `payments`, `companies`, `buyers`, `order_expenses`, and `statuses`.
 4. Click `Оновити все` again while some jobs are still active. Finished job types should be queued again; already queued/running types should not duplicate.
 
+## 2026-07-22 — Sales Receivables Mode Cleanup
+
+### Files Changed
+
+- `sales.php`
+- `assets/app.css`
+- documentation files
+
+### Problem Found
+
+`Продажі → Дебіторка` still rendered the payments block first, so the page looked like sales/cash history even when the CEO wanted unpaid orders. This made it hard to answer the main debt question: who owes us, how much, and which manager owns it.
+
+### What Changed
+
+- Debt mode now hides the payments table.
+- Debt orders are sorted by `unpaid_amount_uah DESC`.
+- Added manager receivables summary: manager, total debt, order count, largest debt, already paid amount.
+- Debt KPI cards now focus on debt amount, unpaid order count, largest debt, paid part, and order total.
+- Product lines inside order cards are collapsed by default to keep the debt list compact.
+- The monthly chart in debt mode uses yellow for unpaid amount instead of incoming payments.
+
+### What Remains
+
+Debt mode still uses locally cached `db_orders.unpaid_amount_uah`. If KeyCRM changed payment status, CEO should click `Оновити все` first so the local cache refreshes before reviewing receivables.
+
 ## 2026-07-17 — Sync Debt Refresh Fix
 
 ### Files Changed

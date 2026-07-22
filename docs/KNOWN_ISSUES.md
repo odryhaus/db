@@ -46,6 +46,7 @@ Known limitations:
 - Without cron, refresh can still take longer because the browser processes queued jobs in small batches while the page is open.
 - `Оновити все` is the daily all-changes refresh, but it is still bounded delta/recent sync; old history before the current cache must be loaded through `history_sync.php`.
 - Sync jobs have auto-timeout recovery, but repeated failures should still be inspected in `db_sync_jobs.error_message`.
+- Sales debt mode depends on local `db_orders.unpaid_amount_uah`; if payments changed in KeyCRM, the CEO must run `Оновити все` before reviewing receivables.
 - Sync scans bounded delta/recent pages only; it does not scan all history.
 - KeyCRM `filter[updated_between]` is confirmed from OpenAPI, but production runtime behavior still needs verification.
 - Webhook support was not found in the uploaded OpenAPI file.

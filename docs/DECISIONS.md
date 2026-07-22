@@ -457,3 +457,14 @@ Decision:
 - If KeyCRM company or buyer has no manager, `.BRAND DB` must show `Без менеджера` until CEO assigns a local manager.
 
 Reason: order ownership and client ownership are different business concepts. Mixing them makes the client base look assigned when it is not.
+
+## Sales Page Debt Mode
+
+Decision:
+
+- `Продажі → Дебіторка` is a receivables workspace, not a payment journal.
+- In debt mode, hide incoming payments and prioritize unpaid orders, manager debt totals, and largest debts.
+- Use `db_orders.unpaid_amount_uah > 0` as the debt rule.
+- Product lines are collapsed by default so the CEO can scan debt before opening details.
+
+Reason: receivables work starts with who owes money and who must act. Payments belong to normal sales/cash views, not the first screen of debt control.

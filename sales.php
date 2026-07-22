@@ -32,6 +32,7 @@ $orders = [];
 $orderItems = [];
 $cashPayments = [];
 $monthlyChart = [];
+$debtManagerRows = [];
 $managerOptions = [];
 $summary = cockpit_monthly_summary($month);
 $canSeeCosts = in_array(user_role(), ['ceo', 'accountant'], true);
@@ -52,6 +53,7 @@ $periodStart = $periodFromMonth . '-01 00:00:00';
 $periodEndDate = DateTimeImmutable::createFromFormat('!Y-m', $periodToMonth);
 $periodEnd = ($periodEndDate ?: new DateTimeImmutable('first day of this month'))->modify('last day of this month')->format('Y-m-d 23:59:59');
 $clientTitle = '';
+$isDebtMode = $statusFilter === 'debt';
 
 function sales_month_label_short(string $month): string
 {
@@ -229,8 +231,8 @@ function sales_render_order_card(array $order, array $orderItems, bool $canSeeCo
             </div>
         </div>
         <?php if ($items): ?>
-            <div class="order-products">
-                <div class="order-products__caption">Позиції замовлення</div>
+            <details class="order-products">
+                <summary>Позиції замовлення · <?= e((string) count($items)) ?></summary>
                 <?php foreach ($items as $item): ?>
                     <div class="order-product">
                         <div>
@@ -244,7 +246,7 @@ function sales_render_order_card(array $order, array $orderItems, bool $canSeeCo
                         <strong><?= e(finance_money($item['total_amount'] ?? 0)) ?></strong>
                     </div>
                 <?php endforeach; ?>
-            </div>
+            </details>
         <?php endif; ?>
     </article>
     <?php
@@ -381,6 +383,9 @@ try {
         if ($statusFilter === 'debt') {
             $where[] = 'o.unpaid_amount_uah > 0';
         }
+        $orderSortSql = $isDebtMode
+            ? "o.unpaid_amount_uah DESC, o.ordered_at ASC, o.id DESC"
+            : "o.ordered_at DESC, o.id DESC";
         $stmt = db()->prepare("
             SELECT o.order_number, o.ordered_at, o.company_name, o.buyer_name, o.manager_name,
                    o.status_name, o.total_amount_uah, o.paid_amount_uah, o.unpaid_amount_uah,
@@ -390,7 +395,7 @@ try {
             FROM db_orders o
             {$itemJoin}
             WHERE " . implode(' AND ', $where) . "
-            ORDER BY o.ordered_at DESC, o.id DESC
+            ORDER BY {$orderSortSql}
             LIMIT 300
         ");
         $stmt->execute($params);
@@ -419,7 +424,7 @@ try {
             }
         }
 
-        if (invoice_table_exists('db_order_payments')) {
+        if (invoice_table_exists('db_order_payments') && !$isDebtMode) {
             $activePayment = cockpit_active_payment_sql('p');
             $paymentWhere = [$statusFilter === 'inactive' ? $notCanceledOnly . ' AND ' . $inactiveOrders : $notCanceled, $activePayment, 'p.payment_date >= :payment_period_start', 'p.payment_date <= :payment_period_end'];
             $paymentParams = [
@@ -505,7 +510,24 @@ try {
             }
         }
 
-        if (invoice_table_exists('db_order_payments')) {
+        if ($isDebtMode) {
+            $debtManagerStmt = db()->prepare("
+                SELECT COALESCE(NULLIF(o.manager_name, ''), 'Без менеджера') AS manager_name,
+                       COUNT(*) AS debt_order_count,
+                       COALESCE(SUM(o.total_amount_uah), 0) AS total_amount,
+                       COALESCE(SUM(o.paid_amount_uah), 0) AS paid_amount,
+                       COALESCE(SUM(o.unpaid_amount_uah), 0) AS unpaid_amount,
+                       COALESCE(MAX(o.unpaid_amount_uah), 0) AS largest_debt
+                FROM db_orders o
+                WHERE " . implode(' AND ', $where) . "
+                GROUP BY COALESCE(NULLIF(o.manager_name, ''), 'Без менеджера')
+                ORDER BY unpaid_amount DESC, debt_order_count DESC
+            ");
+            $debtManagerStmt->execute($params);
+            $debtManagerRows = $debtManagerStmt->fetchAll();
+        }
+
+        if (invoice_table_exists('db_order_payments') && !$isDebtMode) {
             $activePayment = cockpit_active_payment_sql('p');
             $chartPaymentWhere = [$statusFilter === 'inactive' ? $notCanceledOnly . ' AND ' . $inactiveOrders : $notCanceled, $activePayment, 'p.payment_date >= :chart_payment_start', 'p.payment_date <= :chart_payment_end'];
             $chartPaymentParams = [
@@ -558,6 +580,7 @@ $visibleCashForPeriodOrders = array_sum(array_map(static function ($payment) use
 }, $cashPayments));
 $visibleCashForOtherOrders = max($visibleCashTotal - $visibleCashForPeriodOrders, 0);
 $debtOrders = array_values(array_filter($orders, static fn($order) => (float) ($order['unpaid_amount_uah'] ?? 0) > 0));
+$largestDebt = $debtOrders ? max(array_map(static fn($order) => (float) ($order['unpaid_amount_uah'] ?? 0), $debtOrders)) : 0.0;
 $isFilteredView = $rangeMode || $clientKeyFilter !== '' || $searchFilter !== '' || $managerFilter !== '' || $statusFilter !== 'all';
 $displaySalesTotal = $isFilteredView ? $visibleSalesTotal : (float) $summary['sales_fact'];
 $displayOrderCount = $isFilteredView ? count($orders) : (int) $summary['order_count'];
@@ -568,9 +591,9 @@ $displayUnpaid = $isFilteredView ? $visibleUnpaidTotal : (float) $summary['sales
 $displayMarginPercent = $displaySalesTotal > 0 ? round(($displayMargin / $displaySalesTotal) * 100, 1) : 0;
 $chartMax = 0.0;
 foreach ($monthlyChart as $chartRow) {
-    $chartMax = max($chartMax, (float) $chartRow['sales'], (float) $chartRow['cash_received']);
+    $chartMax = max($chartMax, (float) $chartRow['sales'], $isDebtMode ? (float) $chartRow['unpaid'] : (float) $chartRow['cash_received']);
 }
-$orderPreviewLimit = 10;
+$orderPreviewLimit = $isDebtMode ? 25 : 10;
 $previewOrders = array_slice($orders, 0, $orderPreviewLimit);
 $hiddenOrders = array_slice($orders, $orderPreviewLimit);
 
@@ -588,23 +611,29 @@ if (isset($_GET['debt_pdf'])) {
 </head>
 <body>
 <main class="app-shell cockpit-shell">
-    <?php cockpit_page_header('CEO Money Cockpit', 'Продажі', 'Замовлення, товари, оплата і борг: ' . $pageTitle . ($managerFilter !== '' ? ' · Менеджер: ' . $managerFilter : '') . ($clientKeyFilter !== '' ? ' · ' . ($clientTitle !== '' ? $clientTitle : 'клієнт') : ''), 'sales', $month, !$rangeMode); ?>
+    <?php cockpit_page_header('CEO Money Cockpit', $isDebtMode ? 'Дебіторка' : 'Продажі', ($isDebtMode ? 'Борги клієнтів і відповідальні менеджери: ' : 'Замовлення, товари, оплата і борг: ') . $pageTitle . ($managerFilter !== '' ? ' · Менеджер: ' . $managerFilter : '') . ($clientKeyFilter !== '' ? ' · ' . ($clientTitle !== '' ? $clientTitle : 'клієнт') : ''), 'sales', $month, !$rangeMode); ?>
 
     <section class="panel dashboard-section sales-filter-panel">
         <div class="section-heading">
             <div>
-                <p class="eyebrow">Період</p>
-                <h2><?= e($hasClientFilter ? ($clientTitle !== '' ? $clientTitle : 'Клієнт') : 'Всі продажі') ?></h2>
+                <p class="eyebrow"><?= $isDebtMode ? 'Контроль боргів' : 'Період' ?></p>
+                <h2><?= e($hasClientFilter ? ($clientTitle !== '' ? $clientTitle : 'Клієнт') : ($isDebtMode ? 'Вся дебіторка' : 'Всі продажі')) ?></h2>
             </div>
-            <span class="status-badge"><?= $hasClientFilter ? 'обрана компанія' : 'загальний режим' ?> · <?= e($periodFromMonth) ?> → <?= e($periodToMonth) ?></span>
+            <span class="status-badge"><?= $hasClientFilter ? 'обрана компанія' : ($isDebtMode ? 'тільки борги' : 'загальний режим') ?> · <?= e($periodFromMonth) ?> → <?= e($periodToMonth) ?></span>
         </div>
         <?php if (!$hasClientFilter): ?>
-            <p class="muted">Це загальний графік. Щоб побачити одну компанію, відкрий `Клієнти` і натисни на назву компанії.</p>
+            <p class="muted">Це загальний графік. Щоб побачити одну компанію, відкрий сторінку Клієнти і натисни на назву компанії.</p>
         <?php endif; ?>
         <div class="sales-money-legend">
-            <span><strong>Замовили</strong> — сума замовлень, створених у вибраному періоді.</span>
-            <span><strong>Оплатили з цих</strong> — скільки вже оплачено саме з цих замовлень.</span>
-            <span><strong>Прийшло за старі</strong> — платежі у цьому періоді за замовлення з інших періодів.</span>
+            <?php if ($isDebtMode): ?>
+                <span><strong>Борг</strong> — тільки неоплачені або частково оплачені замовлення.</span>
+                <span><strong>Період</strong> — місяць створення замовлення, не дата оплати.</span>
+                <span><strong>Сортування</strong> — від найбільшого боргу до меншого.</span>
+            <?php else: ?>
+                <span><strong>Замовили</strong> — сума замовлень, створених у вибраному періоді.</span>
+                <span><strong>Оплатили з цих</strong> — скільки вже оплачено саме з цих замовлень.</span>
+                <span><strong>Прийшло за старі</strong> — платежі у цьому періоді за замовлення з інших періодів.</span>
+            <?php endif; ?>
         </div>
         <form class="sales-period-toolbar" method="get" action="<?= e(base_path('/sales.php')) ?>">
             <input type="hidden" name="month" value="<?= e($periodToMonth) ?>">
@@ -648,24 +677,70 @@ if (isset($_GET['debt_pdf'])) {
     </section>
 
     <section class="kpi-grid">
-        <div class="kpi-card"><span class="label">Замовили</span><strong><?= e(finance_money($displaySalesTotal)) ?></strong><small>замовлення, створені у періоді</small></div>
-        <div class="kpi-card"><span class="label">Замовлення</span><strong><?= e((string) $displayOrderCount) ?></strong></div>
-        <div class="kpi-card"><span class="label">Оплатили з цих</span><strong><?= e(finance_money($displayPaid)) ?></strong><small>оплата саме цих замовлень</small></div>
-        <div class="kpi-card"><span class="label">Прийшло за старі</span><strong><?= e(finance_money($displayCashOther)) ?></strong><small>платежі за інші замовлення у періоді</small></div>
-        <div class="kpi-card"><span class="label">Борг</span><strong><?= e(finance_money($displayUnpaid)) ?></strong></div>
-        <?php if ($canSeeCosts): ?><div class="kpi-card"><span class="label">Маржа</span><strong><?= e(finance_money($displayMargin)) ?></strong><small><?= e((string) $displayMarginPercent) ?>%</small></div><?php endif; ?>
+        <?php if ($isDebtMode): ?>
+            <div class="kpi-card danger"><span class="label">Борг</span><strong><?= e(finance_money($displayUnpaid)) ?></strong><small>нам винні за вибраний період</small></div>
+            <div class="kpi-card"><span class="label">Замовлень з боргом</span><strong><?= e((string) count($debtOrders)) ?></strong></div>
+            <div class="kpi-card"><span class="label">Найбільший борг</span><strong><?= e(finance_money($largestDebt)) ?></strong></div>
+            <div class="kpi-card"><span class="label">Вже оплачено</span><strong><?= e(finance_money($displayPaid)) ?></strong><small>частина цих замовлень</small></div>
+            <div class="kpi-card"><span class="label">Сума замовлень</span><strong><?= e(finance_money($displaySalesTotal)) ?></strong></div>
+        <?php else: ?>
+            <div class="kpi-card"><span class="label">Замовили</span><strong><?= e(finance_money($displaySalesTotal)) ?></strong><small>замовлення, створені у періоді</small></div>
+            <div class="kpi-card"><span class="label">Замовлення</span><strong><?= e((string) $displayOrderCount) ?></strong></div>
+            <div class="kpi-card"><span class="label">Оплатили з цих</span><strong><?= e(finance_money($displayPaid)) ?></strong><small>оплата саме цих замовлень</small></div>
+            <div class="kpi-card"><span class="label">Прийшло за старі</span><strong><?= e(finance_money($displayCashOther)) ?></strong><small>платежі за інші замовлення у періоді</small></div>
+            <div class="kpi-card"><span class="label">Борг</span><strong><?= e(finance_money($displayUnpaid)) ?></strong></div>
+            <?php if ($canSeeCosts): ?><div class="kpi-card"><span class="label">Маржа</span><strong><?= e(finance_money($displayMargin)) ?></strong><small><?= e((string) $displayMarginPercent) ?>%</small></div><?php endif; ?>
+        <?php endif; ?>
     </section>
+
+    <?php if ($isDebtMode): ?>
+        <section class="panel dashboard-section sales-workstation">
+            <div class="section-heading">
+                <div><p class="eyebrow">Менеджери</p><h2>У кого яка дебіторка</h2></div>
+                <span class="status-badge"><?= e((string) count($debtManagerRows)) ?> менеджерів</span>
+            </div>
+            <div class="table-scroll">
+                <table class="data-table">
+                    <thead>
+                    <tr>
+                        <th>Менеджер</th>
+                        <th class="num">Борг</th>
+                        <th class="num">Замовлень</th>
+                        <th class="num">Найбільший</th>
+                        <th class="num">Оплачено</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($debtManagerRows as $managerRow): ?>
+                        <?php $debtManagerName = (string) ($managerRow['manager_name'] ?? 'Без менеджера'); ?>
+                        <tr>
+                            <td><a class="metric-link" href="<?= e(base_path('/sales.php?' . sales_current_query(['status' => 'debt', 'manager' => $debtManagerName, 'debt_pdf' => null]))) ?>"><?= e($debtManagerName) ?></a></td>
+                            <td class="num"><strong class="danger-text"><?= e(finance_money($managerRow['unpaid_amount'] ?? 0)) ?></strong></td>
+                            <td class="num"><?= e((string) ($managerRow['debt_order_count'] ?? 0)) ?></td>
+                            <td class="num"><?= e(finance_money($managerRow['largest_debt'] ?? 0)) ?></td>
+                            <td class="num"><?= e(finance_money($managerRow['paid_amount'] ?? 0)) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    <?php if (!$debtManagerRows): ?>
+                        <tr><td colspan="5">Боргів за цей період немає.</td></tr>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    <?php endif; ?>
 
     <section class="panel dashboard-section sales-chart-panel">
         <div class="section-heading">
             <div><p class="eyebrow"><?= $hasClientFilter ? 'Графік компанії' : 'Загальний графік' ?></p><h2><?= e($periodFromMonth) ?> → <?= e($periodToMonth) ?> по місяцях<?= $hasClientFilter && $clientTitle !== '' ? ' · ' . e($clientTitle) : '' ?></h2></div>
-            <span class="status-badge">чорне — продажі · жовте — гроші прийшли</span>
+            <span class="status-badge"><?= $isDebtMode ? 'чорне — сума боргових замовлень · жовте — борг' : 'чорне — продажі · жовте — гроші прийшли' ?></span>
         </div>
         <div class="sales-year-chart">
             <?php foreach ($monthlyChart as $chartRow): ?>
                 <?php
-                $salesHeight = $chartMax > 0 ? max(2, round(((float) $chartRow['sales'] / $chartMax) * 100, 1)) : 0;
-                $cashHeight = $chartMax > 0 ? max(2, round(((float) $chartRow['cash_received'] / $chartMax) * 100, 1)) : 0;
+                $salesHeight = $chartMax > 0 && (float) $chartRow['sales'] > 0 ? max(2, round(((float) $chartRow['sales'] / $chartMax) * 100, 1)) : 0;
+                $yellowValue = $isDebtMode ? (float) $chartRow['unpaid'] : (float) $chartRow['cash_received'];
+                $cashHeight = $chartMax > 0 && $yellowValue > 0 ? max(2, round(($yellowValue / $chartMax) * 100, 1)) : 0;
                 ?>
                 <div class="sales-month-bar">
                     <div class="sales-month-bar__plot">
@@ -674,13 +749,13 @@ if (isset($_GET['debt_pdf'])) {
                     </div>
                     <strong><?= e(sales_month_label_short((string) $chartRow['month'])) ?></strong>
                     <span><?= e(finance_money($chartRow['sales'])) ?></span>
-                    <small><?= e(finance_money($chartRow['cash_received'])) ?></small>
+                    <small><?= e(finance_money($yellowValue)) ?></small>
                 </div>
             <?php endforeach; ?>
         </div>
     </section>
 
-    <?php if ($cashPayments): ?>
+    <?php if ($cashPayments && !$isDebtMode): ?>
         <section class="panel dashboard-section sales-workstation">
             <div class="section-heading">
                 <div><p class="eyebrow">Оплати</p><h2>Платежі, які прийшли за <?= e($periodFromMonth) ?> → <?= e($periodToMonth) ?></h2></div>
@@ -717,8 +792,8 @@ if (isset($_GET['debt_pdf'])) {
 
     <section class="panel dashboard-section sales-workstation">
         <div class="section-heading">
-            <div><p class="eyebrow">Деталізація</p><h2>Замовлення за <?= e($pageTitle) ?></h2></div>
-            <span class="status-badge"><?= $statusFilter === 'debt' ? 'тільки неоплачені / частково оплачені' : 'останні ' . e((string) min($orderPreviewLimit, count($orders))) . ' із ' . e((string) count($orders)) ?></span>
+            <div><p class="eyebrow"><?= $isDebtMode ? 'Борги' : 'Деталізація' ?></p><h2><?= $isDebtMode ? 'Замовлення з боргом' : 'Замовлення за ' . e($pageTitle) ?></h2></div>
+            <span class="status-badge"><?= $isDebtMode ? 'від більшого боргу до меншого' : 'останні ' . e((string) min($orderPreviewLimit, count($orders))) . ' із ' . e((string) count($orders)) ?></span>
         </div>
         <div class="order-feed">
             <?php if (!$orders): ?><div class="empty-state">Немає даних.</div><?php endif; ?>

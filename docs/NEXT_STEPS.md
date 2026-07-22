@@ -384,6 +384,7 @@ After deploy:
 - Review name-only excluded clients after full company sync; replace them with KeyCRM company-id exclusions when possible.
 - Decide whether target history needs delete/cancel controls or whether new effective-dated rows are enough.
 - After the client manager source fix, run `Клієнти Sync` for companies and buyers, then review `Клієнти → Менеджер → Без менеджера`.
+- In `Продажі → Дебіторка`, validate several real paid/part-paid/unpaid orders after clicking `Оновити все`; debt mode should show unpaid orders first and no payments table.
 - Continue reducing duplicate pages:
   - keep `Cockpit`, `Клієнти`, `Продажі`, `Гроші`, and `Документи` as daily pages;
   - keep `Менеджери`, `Плани`, `Витрати`, `Операції`, `Реквізити`, `Наші компанії`, sync pages, and users under Admin/direct links;
