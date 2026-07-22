@@ -529,6 +529,25 @@ The dashboard button became disabled whenever any sync job stayed `queued` or `r
 
 Debt mode still uses locally cached `db_orders.unpaid_amount_uah`. If KeyCRM changed payment status, CEO should click `Оновити все` first so the local cache refreshes before reviewing receivables.
 
+## 2026-07-22 — Client Search Period Filter
+
+### Files Changed
+
+- `client_balances.php`
+- documentation files
+
+### Problem Found
+
+The clients page was centered on one selected month. When the CEO searched for a company while July was selected, the company could appear missing if it had no July orders, even though it existed in the historical client base.
+
+### What Changed
+
+- Replaced the single month control with a period control: `from_month` and `to_month`.
+- Search now works against historical client/order data and does not depend on the client having orders in the selected end month.
+- Period KPIs now show sales, paid amount, incoming cash, and active clients for the whole selected period.
+- Health and trend logic still use the final month of the selected period as the reference month.
+- Client links to `sales.php` now preserve the selected period.
+
 ## 2026-07-17 — Sync Debt Refresh Fix
 
 ### Files Changed

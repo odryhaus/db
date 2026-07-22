@@ -11,7 +11,8 @@ if (function_exists('ensure_analytics_exclusion_columns')) {
     ensure_analytics_exclusion_columns();
 }
 
-$monthInput = (string) ($_GET['month'] ?? ($_GET['quarter'] ?? date('Y-m')));
+$toMonthInput = (string) ($_GET['to_month'] ?? ($_GET['month'] ?? ($_GET['quarter'] ?? date('Y-m'))));
+$fromMonthInput = (string) ($_GET['from_month'] ?? '');
 $search = trim((string) ($_GET['q'] ?? ''));
 $managerFilter = trim((string) ($_GET['manager'] ?? ''));
 $trendFilter = trim((string) ($_GET['trend'] ?? ''));
@@ -370,7 +371,7 @@ function client_balances_scope_labels(): array
     return [
         'all' => 'весь час',
         'year' => '12 міс.',
-        'month' => 'місяць',
+        'month' => 'період',
     ];
 }
 
@@ -434,17 +435,27 @@ function client_balances_trend(array $trend, string $clientKey, string $selected
     ];
 }
 
-$selectedMonth = cockpit_valid_month($monthInput);
+$selectedMonth = cockpit_valid_month($toMonthInput);
+$defaultFromMonth = substr($selectedMonth, 0, 4) . '-01';
+$periodFromMonth = cockpit_valid_month($fromMonthInput !== '' ? $fromMonthInput : $defaultFromMonth);
+$periodToMonth = $selectedMonth;
+if ($periodFromMonth > $periodToMonth) {
+    [$periodFromMonth, $periodToMonth] = [$periodToMonth, $periodFromMonth];
+    $selectedMonth = $periodToMonth;
+}
 $monthDate = DateTimeImmutable::createFromFormat('!Y-m', $selectedMonth) ?: new DateTimeImmutable('first day of this month');
 $previousMonth = $monthDate->modify('-1 month')->format('Y-m');
 $twoMonthsAgo = $monthDate->modify('-2 months')->format('Y-m');
 $threeMonthsAgo = $monthDate->modify('-3 months')->format('Y-m');
 $allTrendMonths = [$threeMonthsAgo, $twoMonthsAgo, $previousMonth, $selectedMonth];
-$scopeStartMonth = $valueScope === 'year' ? $monthDate->modify('-11 months')->format('Y-m') : $selectedMonth;
-$boundsStart = $monthDate->format('Y-m-01 00:00:00');
-$boundsEnd = $monthDate->modify('last day of this month')->format('Y-m-d 23:59:59');
+$scopeStartMonth = $valueScope === 'year' ? $monthDate->modify('-11 months')->format('Y-m') : $periodFromMonth;
+$periodStartDate = DateTimeImmutable::createFromFormat('!Y-m', $periodFromMonth) ?: $monthDate;
+$periodEndDate = DateTimeImmutable::createFromFormat('!Y-m', $periodToMonth) ?: $monthDate;
+$boundsStart = $periodStartDate->format('Y-m-01 00:00:00');
+$boundsEnd = $periodEndDate->modify('last day of this month')->format('Y-m-d 23:59:59');
 $prevMonthUrl = base_path('/client_balances.php?' . client_balances_query([
-    'month' => $monthDate->modify('-1 month')->format('Y-m'),
+    'from_month' => $periodStartDate->modify('-1 month')->format('Y-m'),
+    'to_month' => $periodEndDate->modify('-1 month')->format('Y-m'),
     'q' => $search,
     'manager' => $managerFilter,
     'trend' => $trendFilter,
@@ -453,7 +464,8 @@ $prevMonthUrl = base_path('/client_balances.php?' . client_balances_query([
     'inactive' => $inactiveMode ? '1' : '',
 ]));
 $nextMonthUrl = base_path('/client_balances.php?' . client_balances_query([
-    'month' => $monthDate->modify('+1 month')->format('Y-m'),
+    'from_month' => $periodStartDate->modify('+1 month')->format('Y-m'),
+    'to_month' => $periodEndDate->modify('+1 month')->format('Y-m'),
     'q' => $search,
     'manager' => $managerFilter,
     'trend' => $trendFilter,
@@ -599,7 +611,8 @@ try {
                 COALESCE(SUM(o.unpaid_amount_uah), 0) AS unpaid_by_order
             FROM db_orders o
             {$expr['joins']}
-            WHERE o.order_month = :selected_month
+            WHERE o.order_month >= :period_from_month
+              AND o.order_month <= :period_to_month
               AND {$notCanceled}
               {$clientScopeSql}
               {$searchSql}
@@ -607,7 +620,8 @@ try {
             GROUP BY client_key, client_name
         ");
         $stmt->execute(array_merge([
-            'selected_month' => $selectedMonth,
+            'period_from_month' => $periodFromMonth,
+            'period_to_month' => $periodToMonth,
         ], $searchParams));
         foreach ($stmt->fetchAll() as $row) {
             $key = (string) ($row['client_key'] ?? 'unknown');
@@ -628,9 +642,10 @@ try {
             $historyParams['scope_start'] = $scopeStartMonth;
             $historyParams['scope_end'] = $selectedMonth;
         } elseif ($valueScope === 'month') {
-            $scopePurchaseSql = "COALESCE(SUM(CASE WHEN o.order_month = :scope_month THEN o.total_amount_uah ELSE 0 END), 0)";
-            $scopeActiveSql = "COUNT(DISTINCT CASE WHEN o.order_month = :scope_month THEN o.order_month ELSE NULL END)";
-            $historyParams['scope_month'] = $selectedMonth;
+            $scopePurchaseSql = "COALESCE(SUM(CASE WHEN o.order_month >= :scope_start AND o.order_month <= :scope_end THEN o.total_amount_uah ELSE 0 END), 0)";
+            $scopeActiveSql = "COUNT(DISTINCT CASE WHEN o.order_month >= :scope_start AND o.order_month <= :scope_end THEN o.order_month ELSE NULL END)";
+            $historyParams['scope_start'] = $periodFromMonth;
+            $historyParams['scope_end'] = $periodToMonth;
         }
 
         $stmt = db()->prepare("
@@ -925,10 +940,10 @@ $rows = array_slice($filteredRows, 0, 200);
     <?php cockpit_page_header('CEO Money Cockpit', 'Клієнти', 'Клієнтська база: хто росте, хто падає, хто спить і кому треба увага.', 'client_balances', $selectedMonth, false); ?>
 
     <section class="kpi-grid compact-kpis">
-        <div class="kpi-card"><span class="label">Факт за місяць</span><strong><?= e(finance_money($monthSalesTotal)) ?></strong><small><?= e(client_balances_month_label($selectedMonth)) ?></small></div>
-        <div class="kpi-card"><span class="label">Оплачено</span><strong><?= e(finance_money($monthPaidTotal)) ?></strong><small>у замовленнях цього місяця</small></div>
-        <div class="kpi-card"><span class="label">Гроші прийшли</span><strong><?= e(finance_money($monthCashTotal)) ?></strong><small>за датою платежу у місяці</small></div>
-        <div class="kpi-card"><span class="label">Активні у місяці</span><strong><?= e((string) $activeClientCount) ?></strong><small>компаній</small></div>
+        <div class="kpi-card"><span class="label">Факт за період</span><strong><?= e(finance_money($monthSalesTotal)) ?></strong><small><?= e($periodFromMonth) ?> → <?= e($periodToMonth) ?></small></div>
+        <div class="kpi-card"><span class="label">Оплачено</span><strong><?= e(finance_money($monthPaidTotal)) ?></strong><small>у замовленнях цього періоду</small></div>
+        <div class="kpi-card"><span class="label">Гроші прийшли</span><strong><?= e(finance_money($monthCashTotal)) ?></strong><small>за датою платежу у періоді</small></div>
+        <div class="kpi-card"><span class="label">Активні у періоді</span><strong><?= e((string) $activeClientCount) ?></strong><small>компаній</small></div>
     </section>
 
     <?php if ($pageError !== ''): ?>
@@ -947,19 +962,26 @@ $rows = array_slice($filteredRows, 0, 200);
             <span>Борг не штрафує Health, якщо строк оплати не настав або строк не визначено.</span>
         </div>
         <div class="client-month-nav">
-            <a class="quarter-arrow" href="<?= e($prevMonthUrl) ?>" aria-label="Попередній місяць">‹</a>
+            <a class="quarter-arrow" href="<?= e($prevMonthUrl) ?>" aria-label="Попередній період">‹</a>
             <div>
-                <span class="label">Місяць</span>
-                <strong><?= e(client_balances_month_label($selectedMonth)) ?></strong>
+                <span class="label">Період</span>
+                <strong><?= e($periodFromMonth) ?> → <?= e($periodToMonth) ?></strong>
             </div>
-            <a class="quarter-arrow" href="<?= e($nextMonthUrl) ?>" aria-label="Наступний місяць">›</a>
+            <a class="quarter-arrow" href="<?= e($nextMonthUrl) ?>" aria-label="Наступний період">›</a>
         </div>
         <form class="client-balance-toolbar client-balance-toolbar--clients" method="get" action="<?= e(base_path('/client_balances.php')) ?>">
-            <input type="hidden" name="month" value="<?= e($selectedMonth) ?>">
             <input type="hidden" name="scope" value="<?= e($valueScope) ?>">
             <input type="hidden" name="trend" value="<?= e($trendFilter) ?>">
             <input type="hidden" name="segment" value="<?= e($segmentFilter) ?>">
             <?php if ($inactiveMode): ?><input type="hidden" name="inactive" value="1"><?php endif; ?>
+            <label>
+                <span>З місяця</span>
+                <input type="month" name="from_month" value="<?= e($periodFromMonth) ?>">
+            </label>
+            <label>
+                <span>По місяць</span>
+                <input type="month" name="to_month" value="<?= e($periodToMonth) ?>">
+            </label>
             <label class="client-balance-search">
                 <span>Пошук</span>
                 <input type="search" name="q" value="<?= e($search) ?>" placeholder="компанія, покупець, email, телефон, номер">
@@ -980,28 +1002,28 @@ $rows = array_slice($filteredRows, 0, 200);
             <?php if ($canManageAnalytics): ?>
                 <div class="segmented-scroll client-trend-filter">
                     <span class="client-filter-label">Облік</span>
-                    <a class="<?= !$inactiveMode ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentFilter, 'scope' => $valueScope]))) ?>">Активні</a>
-                    <a class="<?= $inactiveMode ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentFilter, 'scope' => $valueScope, 'inactive' => '1']))) ?>">Виключені</a>
+                    <a class="<?= !$inactiveMode ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['from_month' => $periodFromMonth, 'to_month' => $periodToMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentFilter, 'scope' => $valueScope]))) ?>">Активні</a>
+                    <a class="<?= $inactiveMode ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['from_month' => $periodFromMonth, 'to_month' => $periodToMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentFilter, 'scope' => $valueScope, 'inactive' => '1']))) ?>">Виключені</a>
                 </div>
             <?php endif; ?>
             <div class="segmented-scroll client-trend-filter">
                 <span class="client-filter-label">Цінність</span>
                 <?php foreach (client_balances_scope_labels() as $scopeKey => $scopeLabelText): ?>
-                    <a class="<?= $valueScope === $scopeKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentFilter, 'scope' => $scopeKey, 'inactive' => $inactiveMode ? '1' : '']))) ?>"><?= e($scopeLabelText) ?></a>
+                    <a class="<?= $valueScope === $scopeKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['from_month' => $periodFromMonth, 'to_month' => $periodToMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentFilter, 'scope' => $scopeKey, 'inactive' => $inactiveMode ? '1' : '']))) ?>"><?= e($scopeLabelText) ?></a>
                 <?php endforeach; ?>
             </div>
             <div class="segmented-scroll client-trend-filter">
                 <span class="client-filter-label">Здоровʼя</span>
-                <a class="<?= $trendFilter === '' ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'segment' => $segmentFilter, 'scope' => $valueScope, 'inactive' => $inactiveMode ? '1' : '']))) ?>">Всі <small><?= e((string) count($allRows)) ?></small></a>
+                <a class="<?= $trendFilter === '' ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['from_month' => $periodFromMonth, 'to_month' => $periodToMonth, 'q' => $search, 'manager' => $managerFilter, 'segment' => $segmentFilter, 'scope' => $valueScope, 'inactive' => $inactiveMode ? '1' : '']))) ?>">Всі <small><?= e((string) count($allRows)) ?></small></a>
                 <?php foreach (client_balances_trend_labels() as $trendKey => $trendLabelText): ?>
-                    <a class="<?= $trendFilter === $trendKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendKey, 'segment' => $segmentFilter, 'scope' => $valueScope, 'inactive' => $inactiveMode ? '1' : '']))) ?>"><?= e($trendLabelText) ?> <small><?= e((string) ($trendCounts[$trendKey] ?? 0)) ?></small></a>
+                    <a class="<?= $trendFilter === $trendKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['from_month' => $periodFromMonth, 'to_month' => $periodToMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendKey, 'segment' => $segmentFilter, 'scope' => $valueScope, 'inactive' => $inactiveMode ? '1' : '']))) ?>"><?= e($trendLabelText) ?> <small><?= e((string) ($trendCounts[$trendKey] ?? 0)) ?></small></a>
                 <?php endforeach; ?>
             </div>
             <div class="segmented-scroll client-trend-filter">
                 <span class="client-filter-label">Сегмент за весь час</span>
-                <a class="<?= $segmentFilter === '' ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'scope' => $valueScope, 'inactive' => $inactiveMode ? '1' : '']))) ?>">Всі <small><?= e((string) count($allRows)) ?></small></a>
+                <a class="<?= $segmentFilter === '' ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['from_month' => $periodFromMonth, 'to_month' => $periodToMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'scope' => $valueScope, 'inactive' => $inactiveMode ? '1' : '']))) ?>">Всі <small><?= e((string) count($allRows)) ?></small></a>
                 <?php foreach (client_balances_segment_labels() as $segmentKey => $segmentLabelText): ?>
-                    <a class="<?= $segmentFilter === $segmentKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentKey, 'scope' => $valueScope, 'inactive' => $inactiveMode ? '1' : '']))) ?>"><?= e($segmentLabelText) ?> <small><?= e((string) ($segmentCounts[$segmentKey] ?? 0)) ?></small></a>
+                    <a class="<?= $segmentFilter === $segmentKey ? 'active' : '' ?>" href="<?= e(base_path('/client_balances.php?' . client_balances_query(['from_month' => $periodFromMonth, 'to_month' => $periodToMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentKey, 'scope' => $valueScope, 'inactive' => $inactiveMode ? '1' : '']))) ?>"><?= e($segmentLabelText) ?> <small><?= e((string) ($segmentCounts[$segmentKey] ?? 0)) ?></small></a>
                 <?php endforeach; ?>
             </div>
         </div>
@@ -1022,7 +1044,7 @@ $rows = array_slice($filteredRows, 0, 200);
                 <div class="mini-list">
                     <?php if (!$unassignedCompanyRows): ?><div class="empty-state">Компаній без менеджера не знайдено.</div><?php endif; ?>
                     <?php foreach (array_slice($unassignedCompanyRows, 0, 20) as $row): ?>
-                        <a class="mini-list-row" href="<?= e(base_path('/sales.php?' . client_balances_query(['month' => $selectedMonth, 'from_month' => substr($selectedMonth, 0, 4) . '-01', 'to_month' => $selectedMonth, 'client_key' => (string) $row['client_key']]))) ?>">
+                        <a class="mini-list-row" href="<?= e(base_path('/sales.php?' . client_balances_query(['month' => $periodToMonth, 'from_month' => $periodFromMonth, 'to_month' => $periodToMonth, 'client_key' => (string) $row['client_key']]))) ?>">
                             <strong><?= e((string) $row['client_name']) ?></strong>
                             <span><?= e(finance_money($row['total_purchases'])) ?> · борг <?= e(finance_money($row['receivable_total'])) ?></span>
                         </a>
@@ -1070,10 +1092,10 @@ $rows = array_slice($filteredRows, 0, 200);
                 $scopeLabel = client_balances_scope_labels()[$valueScope] ?? 'період';
                 $extraBuyers = (int) $row['buyers_count'] - count($row['buyers']);
                 $salesLink = base_path('/sales.php?' . client_balances_query([
-                    'month' => $selectedMonth,
-                    'from_month' => substr($selectedMonth, 0, 4) . '-01',
-                    'to_month' => $selectedMonth,
-                    'year' => substr($selectedMonth, 0, 4),
+                    'month' => $periodToMonth,
+                    'from_month' => $periodFromMonth,
+                    'to_month' => $periodToMonth,
+                    'year' => substr($periodToMonth, 0, 4),
                     'client_key' => $clientKey,
                 ]));
                 ?>
@@ -1094,7 +1116,7 @@ $rows = array_slice($filteredRows, 0, 200);
                         <?php endif; ?>
                         <span class="client-manager-tag"><?= e((string) ($row['manager_name'] ?: 'Без менеджера')) ?></span>
                         <?php if ($canManageAnalytics && (preg_match('/^company:(\d+)$/', $clientKey, $clientMatch) || str_starts_with($clientKey, 'company-name:'))): ?>
-                            <form class="inline-form client-row-action" method="post" action="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentFilter, 'scope' => $valueScope, 'inactive' => $inactiveMode ? '1' : '']))) ?>">
+                            <form class="inline-form client-row-action" method="post" action="<?= e(base_path('/client_balances.php?' . client_balances_query(['from_month' => $periodFromMonth, 'to_month' => $periodToMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentFilter, 'scope' => $valueScope, 'inactive' => $inactiveMode ? '1' : '']))) ?>">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="toggle_client_analytics">
                                 <input type="hidden" name="keycrm_company_id" value="<?= e($clientMatch[1] ?? '') ?>">
@@ -1109,7 +1131,7 @@ $rows = array_slice($filteredRows, 0, 200);
                         <div class="client-stat"><span>Закупки всього</span><strong><?= e(finance_money($row['total_purchases'])) ?></strong><small><?= e($scopeLabel) ?> <?= e(finance_money($row['scope_purchases'])) ?></small></div>
                         <div class="client-stat"><span>Борг</span><strong class="<?= (float) $row['receivable_total'] > 0 ? 'danger-text' : '' ?>"><?= e(finance_money($row['receivable_total'])) ?></strong><small><?= (int) $row['receivable_count'] > 0 ? e((string) $row['receivable_count']) . ' борг.' : '&nbsp;' ?></small></div>
                         <div class="client-stat"><span>Оплатили</span><strong><?= e(finance_money($row['cash_received'])) ?></strong><small><?= (int) $row['cash_count'] > 0 ? e((string) $row['cash_count']) . ' пл.' : '&nbsp;' ?></small></div>
-                        <div class="client-stat"><span>Місяць</span><strong><?= e(finance_money($currentMonthSales)) ?></strong><small>було <?= e(finance_money($previousMonthSales)) ?></small></div>
+                        <div class="client-stat"><span>Кінець періоду</span><strong><?= e(finance_money($currentMonthSales)) ?></strong><small>було <?= e(finance_money($previousMonthSales)) ?></small></div>
                         <div class="client-stat"><span>Останнє</span><strong><?= e($lastOrderLabel) ?></strong><small><?= e((string) $row['active_month_count']) ?> акт. міс.</small></div>
                         <div class="client-stat"><span>Цикл</span><strong><?= e((string) $row['cycle_label']) ?></strong><small><?= e((string) $row['cycle_deviation_label']) ?></small></div>
                         <div class="client-stat"><span>Строк оплати</span><strong><?= e((string) $row['payment_status_label']) ?></strong><small><?= e((string) $row['payment_due_label']) ?></small></div>

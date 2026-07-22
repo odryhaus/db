@@ -468,3 +468,14 @@ Decision:
 - Product lines are collapsed by default so the CEO can scan debt before opening details.
 
 Reason: receivables work starts with who owes money and who must act. Payments belong to normal sales/cash views, not the first screen of debt control.
+
+## Clients Page Period Search
+
+Decision:
+
+- The clients page uses a period (`from_month` → `to_month`) instead of a single month.
+- Company search must not depend on the company having orders in the final month of the period.
+- Health/trend calculations use the final month of the selected period as the reference point.
+- Sales and cash KPIs use the whole selected period.
+
+Reason: the CEO often searches for an existing client to inspect history, even if that client did not order in the currently selected month.
