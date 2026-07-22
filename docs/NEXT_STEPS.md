@@ -380,6 +380,8 @@ After deploy:
 - Verify that excluded individual orders no longer affect the same totals.
 - Decide whether exclusion notes are needed in the UI; the columns exist but the first UI keeps the action one-click.
 - Decide whether non-CEO roles should be allowed to request exclusion without applying it.
+- Review name-only excluded clients after full company sync; replace them with KeyCRM company-id exclusions when possible.
+- Decide whether target history needs delete/cancel controls or whether new effective-dated rows are enough.
 - Continue reducing duplicate pages:
   - keep `Cockpit`, `Клієнти`, `Продажі`, `Гроші`, and `Документи` as daily pages;
   - keep `Менеджери`, `Плани`, `Витрати`, `Операції`, `Реквізити`, `Наші компанії`, sync pages, and users under Admin/direct links;

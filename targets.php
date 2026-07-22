@@ -1,8 +1,14 @@
 <?php
 
 require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/cockpit.php';
+require_once __DIR__ . '/financial.php';
+require_once __DIR__ . '/cockpit_layout.php';
 require_role('ceo');
 ensure_finance_tables();
+if (function_exists('ensure_analytics_exclusion_columns')) {
+    ensure_analytics_exclusion_columns();
+}
 
 $selectedMonth = (string) ($_GET['month'] ?? $_POST['month'] ?? date('Y-m'));
 if (!preg_match('/^\d{4}-\d{2}$/', $selectedMonth)) {
@@ -11,6 +17,7 @@ if (!preg_match('/^\d{4}-\d{2}$/', $selectedMonth)) {
 
 $message = '';
 $error = '';
+$defaultEffectiveFrom = $selectedMonth . '-01';
 
 function target_money($value): string
 {
@@ -27,7 +34,7 @@ function target_progress_mini(float $progress): string
 if (is_post()) {
     $action = (string) ($_POST['action'] ?? '');
     $targetAmount = max(0, (float) str_replace(' ', '', (string) ($_POST['amount_uah'] ?? '0')));
-    $effectiveFrom = trim((string) ($_POST['effective_from'] ?? date('Y-m-d')));
+    $effectiveFrom = trim((string) ($_POST['effective_from'] ?? $defaultEffectiveFrom));
     $managerName = trim((string) ($_POST['manager_name'] ?? ''));
 
     if (!csrf_is_valid() || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $effectiveFrom)) {
@@ -70,27 +77,56 @@ $companyTarget = active_company_target(db(), $selectedMonth);
 $monthlyTarget = (float) $companyTarget['amount_uah'];
 $monthEnd = month_end_date($selectedMonth);
 
-$notCanceledSql = "
-    LOWER(COALESCE(status_name, '')) NOT LIKE '%cancel%'
-    AND LOWER(COALESCE(status_name, '')) NOT LIKE '%deleted%'
-    AND LOWER(COALESCE(status_name, '')) NOT LIKE '%скас%'
-    AND LOWER(COALESCE(payment_status, '')) NOT LIKE '%cancel%'
-    AND LOWER(COALESCE(payment_status, '')) NOT LIKE '%deleted%'
-    AND LOWER(COALESCE(payment_status, '')) NOT LIKE '%скас%'
-";
+$notCanceledSql = cockpit_active_order_sql('o');
 $managersStmt = db()->prepare("
-    SELECT
-        COALESCE(NULLIF(manager_name, ''), 'No manager') AS manager_name,
-        COUNT(*) AS order_count,
-        COALESCE(SUM(total_amount_uah), 0) AS sales_fact
-    FROM db_orders
-    WHERE order_month = :month
-      AND {$notCanceledSql}
-    GROUP BY COALESCE(NULLIF(manager_name, ''), 'No manager')
+    SELECT manager_name, MAX(order_count) AS order_count, SUM(sales_fact) AS sales_fact
+    FROM (
+        SELECT
+            COALESCE(NULLIF(o.manager_name, ''), 'Без менеджера') AS manager_name,
+            COUNT(*) AS order_count,
+            COALESCE(SUM(o.total_amount_uah), 0) AS sales_fact
+        FROM db_orders o
+        WHERE o.order_month = :month
+          AND {$notCanceledSql}
+        GROUP BY COALESCE(NULLIF(o.manager_name, ''), 'Без менеджера')
+        UNION ALL
+        SELECT
+            COALESCE(NULLIF(o.manager_name, ''), 'Без менеджера') AS manager_name,
+            0 AS order_count,
+            0 AS sales_fact
+        FROM db_orders o
+        WHERE {$notCanceledSql}
+        GROUP BY COALESCE(NULLIF(o.manager_name, ''), 'Без менеджера')
+        UNION ALL
+        SELECT manager_name, 0 AS order_count, 0 AS sales_fact
+        FROM db_sales_targets
+        WHERE target_type = 'manager'
+          AND manager_name IS NOT NULL
+          AND manager_name <> ''
+        GROUP BY manager_name
+    ) managers
+    GROUP BY manager_name
     ORDER BY manager_name
 ");
 $managersStmt->execute(['month' => $selectedMonth]);
 $managers = $managersStmt->fetchAll();
+
+$historyStmt = db()->query("
+    SELECT
+        t.id,
+        t.target_type,
+        t.manager_name,
+        t.amount_uah,
+        t.effective_from,
+        t.created_at,
+        t.note,
+        COALESCE(NULLIF(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')), ' '), u.email, '') AS created_by
+    FROM db_sales_targets t
+    LEFT JOIN users u ON u.id = t.created_by_user_id
+    ORDER BY t.effective_from DESC, t.id DESC
+    LIMIT 300
+");
+$targetHistory = $historyStmt->fetchAll();
 
 $managerNames = array_map(static function (array $manager): string {
     return (string) $manager['manager_name'];
@@ -116,22 +152,8 @@ $monthlyProgress = $monthlyTarget > 0 ? min(100, round(($managerSalesTotal / $mo
     <link rel="stylesheet" href="<?= e(asset_path('/assets/app.css')) ?>">
 </head>
 <body>
-    <main class="page">
-        <header class="topbar">
-            <div class="brand-block">
-                <p class="eyebrow">CEO access</p>
-                <h1>Плани продажів</h1>
-                <p class="muted">Місячний план і план по менеджерах</p>
-            </div>
-            <nav class="nav">
-                <a href="<?= e(base_path('/index.php?month=' . urlencode($selectedMonth))) ?>">Дашборд</a>
-                <a class="active" href="<?= e(base_path('/targets.php?month=' . urlencode($selectedMonth))) ?>">Плани</a>
-                <a href="<?= e(base_path('/invoices.php')) ?>">Рахунки</a>
-                <a href="<?= e(base_path('/expenses.php?month=' . urlencode($selectedMonth))) ?>">Витрати</a>
-                <a href="<?= e(base_path('/users.php')) ?>">Користувачі</a>
-                <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>
-            </nav>
-        </header>
+    <main class="app-shell cockpit-shell">
+        <?php cockpit_page_header('CEO Money Cockpit', 'Плани продажів', 'Плани діють з обраної дати: можна ставити заднім числом і додавати новий план на майбутнє.', 'targets', $selectedMonth, false); ?>
 
         <?php if ($message !== ''): ?>
             <div class="notice"><?= e($message) ?></div>
@@ -175,7 +197,7 @@ $monthlyProgress = $monthlyTarget > 0 ? min(100, round(($managerSalesTotal / $mo
         <section class="panel dashboard-section">
             <div class="section-heading">
                 <div>
-                    <span class="label">Company target</span>
+                    <span class="label">План компанії</span>
                     <h2>План компанії</h2>
                 </div>
                 <strong><?= e(target_money($monthlyTarget)) ?></strong>
@@ -190,7 +212,7 @@ $monthlyProgress = $monthlyTarget > 0 ? min(100, round(($managerSalesTotal / $mo
                 </label>
                 <label>
                     <span>Діє з</span>
-                    <input class="compact-date-input" type="date" name="effective_from" value="<?= e(date('Y-m-d')) ?>">
+                    <input class="compact-date-input" type="date" name="effective_from" value="<?= e($defaultEffectiveFrom) ?>">
                 </label>
                 <button type="submit">Зберегти</button>
             </form>
@@ -238,7 +260,7 @@ $monthlyProgress = $monthlyTarget > 0 ? min(100, round(($managerSalesTotal / $mo
                                     <input form="<?= e($formId) ?>" class="compact-money-input" type="number" step="0.01" min="0" name="amount_uah" value="<?= e($managerTarget > 0 ? (string) $managerTarget : '') ?>">
                                 </td>
                                 <td>
-                                    <input form="<?= e($formId) ?>" class="compact-date-input" type="date" name="effective_from" value="<?= e(date('Y-m-d')) ?>">
+                                    <input form="<?= e($formId) ?>" class="compact-date-input" type="date" name="effective_from" value="<?= e($defaultEffectiveFrom) ?>">
                                 </td>
                                 <td>
                                     <form id="<?= e($formId) ?>" method="post" action="<?= e(base_path('/targets.php')) ?>">
@@ -247,8 +269,47 @@ $monthlyProgress = $monthlyTarget > 0 ? min(100, round(($managerSalesTotal / $mo
                                         <input type="hidden" name="month" value="<?= e($selectedMonth) ?>">
                                         <input type="hidden" name="manager_name" value="<?= e($managerName) ?>">
                                     </form>
-                                    <button form="<?= e($formId) ?>" type="submit" class="small-button">Save</button>
+                                    <button form="<?= e($formId) ?>" type="submit" class="small-button">Зберегти</button>
                                 </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel table-panel dashboard-section">
+            <div class="section-heading padded">
+                <div>
+                    <span class="label">Історія</span>
+                    <h2>Історія планів</h2>
+                    <p class="muted">Кожен новий план додається як окремий запис. Активний план для місяця — останній запис з датою “Діє з” не пізніше кінця цього місяця.</p>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Тип</th>
+                            <th>Менеджер</th>
+                            <th class="num">План</th>
+                            <th>Діє з</th>
+                            <th>Створено</th>
+                            <th>Хто</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (!$targetHistory): ?>
+                            <tr><td colspan="6">Історії планів ще немає.</td></tr>
+                        <?php endif; ?>
+                        <?php foreach ($targetHistory as $historyRow): ?>
+                            <tr>
+                                <td><?= e($historyRow['target_type'] === 'company' ? 'Компанія' : 'Менеджер') ?></td>
+                                <td><?= e((string) ($historyRow['manager_name'] ?: '—')) ?></td>
+                                <td class="num"><strong><?= e(target_money($historyRow['amount_uah'])) ?></strong></td>
+                                <td><?= e((string) $historyRow['effective_from']) ?></td>
+                                <td><?= e((string) $historyRow['created_at']) ?></td>
+                                <td><?= e((string) ($historyRow['created_by'] ?: '—')) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>

@@ -53,21 +53,39 @@ function cockpit_order_not_excluded_sql(string $alias = ''): string
 
 function cockpit_order_client_not_excluded_sql(string $alias = ''): string
 {
-    if (
-        !cockpit_has_column('db_orders', 'company_id')
-        || !cockpit_has_column('db_client_companies', 'keycrm_company_id')
-        || !cockpit_has_column('db_client_companies', 'analytics_excluded')
-    ) {
+    if (!cockpit_has_column('db_client_companies', 'analytics_excluded')) {
         return '1=1';
     }
     $prefix = $alias !== '' ? rtrim($alias, '.') . '.' : '';
-    return "NOT EXISTS (
+    $conditions = [];
+
+    if (cockpit_has_column('db_orders', 'company_id') && cockpit_has_column('db_client_companies', 'keycrm_company_id')) {
+        $conditions[] = "analytics_cc.keycrm_company_id = {$prefix}company_id";
+    }
+
+    $nameParts = [];
+    foreach (['company_name', 'client_name', 'buyer_name'] as $column) {
+        if (cockpit_has_column('db_orders', $column)) {
+            $nameParts[] = "NULLIF({$prefix}{$column}, '')";
+        }
+    }
+    if ($nameParts) {
+        $orderName = 'COALESCE(' . implode(', ', $nameParts) . ')';
+        $companyName = "COALESCE(NULLIF(analytics_cc.display_name, ''), NULLIF(analytics_cc.keycrm_name, ''), NULLIF(analytics_cc.name, ''), NULLIF(analytics_cc.keycrm_title, ''), NULLIF(analytics_cc.title, ''))";
+        $conditions[] = "(analytics_cc.keycrm_company_id IS NULL AND {$companyName} = {$orderName})";
+    }
+
+    if (!$conditions) {
+        return '1=1';
+    }
+
+    return 'NOT EXISTS (
         SELECT 1
         FROM db_client_companies analytics_cc
-        WHERE analytics_cc.keycrm_company_id = {$prefix}company_id
-          AND COALESCE(analytics_cc.analytics_excluded, 0) = 1
+        WHERE COALESCE(analytics_cc.analytics_excluded, 0) = 1
+          AND (' . implode(' OR ', $conditions) . ')
         LIMIT 1
-    )";
+    )';
 }
 
 function cockpit_order_excluded_sql(string $alias = ''): string

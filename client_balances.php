@@ -80,6 +80,27 @@ function client_balances_redirect_back(): void
     exit;
 }
 
+function client_balances_client_inactive_sql(string $orderAlias = 'o', string $companyAlias = 'cc'): string
+{
+    $orderPrefix = rtrim($orderAlias, '.') . '.';
+    $companyPrefix = rtrim($companyAlias, '.') . '.';
+    $parts = [];
+    foreach (['company_name', 'client_name', 'buyer_name'] as $column) {
+        $parts[] = "NULLIF({$orderPrefix}{$column}, '')";
+    }
+    $orderName = 'COALESCE(' . implode(', ', $parts) . ')';
+    $companyName = "COALESCE(NULLIF(inactive_cc.display_name, ''), NULLIF(inactive_cc.keycrm_name, ''), NULLIF(inactive_cc.name, ''), NULLIF(inactive_cc.keycrm_title, ''), NULLIF(inactive_cc.title, ''))";
+
+    return "(COALESCE({$companyPrefix}analytics_excluded, 0) = 1 OR EXISTS (
+        SELECT 1
+        FROM db_client_companies inactive_cc
+        WHERE inactive_cc.keycrm_company_id IS NULL
+          AND COALESCE(inactive_cc.analytics_excluded, 0) = 1
+          AND {$companyName} = {$orderName}
+        LIMIT 1
+    ))";
+}
+
 function client_balances_coalesce(array $expressions, string $fallback): string
 {
     $parts = $expressions;
@@ -438,6 +459,7 @@ try {
                 exit('Invalid CSRF token');
             }
             $keycrmCompanyId = max(0, (int) post_string('keycrm_company_id'));
+            $clientName = trim(post_string('client_name'));
             $excluded = post_string('excluded') === '1' ? 1 : 0;
             if ($keycrmCompanyId > 0 && $hasClientCompanies) {
                 $stmt = db()->prepare("
@@ -455,6 +477,64 @@ try {
                     'user_id' => (int) (current_user()['id'] ?? 0),
                     'keycrm_company_id' => $keycrmCompanyId,
                 ]);
+                if ($clientName !== '') {
+                    $syncName = db()->prepare("
+                        UPDATE db_client_companies
+                        SET analytics_excluded = :excluded,
+                            analytics_excluded_at = CASE WHEN :excluded_at = 1 THEN NOW() ELSE NULL END,
+                            analytics_excluded_by_user_id = CASE WHEN :excluded_user = 1 THEN :user_id ELSE NULL END
+                        WHERE keycrm_company_id IS NULL
+                          AND COALESCE(NULLIF(display_name, ''), NULLIF(keycrm_name, ''), NULLIF(name, ''), NULLIF(keycrm_title, ''), NULLIF(title, '')) = :client_name
+                    ");
+                    $syncName->execute([
+                        'excluded' => $excluded,
+                        'excluded_at' => $excluded,
+                        'excluded_user' => $excluded,
+                        'user_id' => (int) (current_user()['id'] ?? 0),
+                        'client_name' => $clientName,
+                    ]);
+                }
+            } elseif ($clientName !== '' && $hasClientCompanies) {
+                $stmt = db()->prepare("
+                    SELECT id
+                    FROM db_client_companies
+                    WHERE keycrm_company_id IS NULL
+                      AND COALESCE(NULLIF(display_name, ''), NULLIF(keycrm_name, ''), NULLIF(name, ''), NULLIF(keycrm_title, ''), NULLIF(title, '')) = :client_name
+                    LIMIT 1
+                ");
+                $stmt->execute(['client_name' => $clientName]);
+                $existingId = (int) ($stmt->fetchColumn() ?: 0);
+                if ($existingId > 0) {
+                    $update = db()->prepare("
+                        UPDATE db_client_companies
+                        SET analytics_excluded = :excluded,
+                            analytics_excluded_at = CASE WHEN :excluded_at = 1 THEN NOW() ELSE NULL END,
+                            analytics_excluded_by_user_id = CASE WHEN :excluded_user = 1 THEN :user_id ELSE NULL END
+                        WHERE id = :id
+                        LIMIT 1
+                    ");
+                    $update->execute([
+                        'excluded' => $excluded,
+                        'excluded_at' => $excluded,
+                        'excluded_user' => $excluded,
+                        'user_id' => (int) (current_user()['id'] ?? 0),
+                        'id' => $existingId,
+                    ]);
+                } else {
+                    $insert = db()->prepare("
+                        INSERT INTO db_client_companies
+                            (display_name, name, analytics_excluded, analytics_excluded_at, analytics_excluded_by_user_id, synced_at)
+                        VALUES
+                            (:display_name, :name, :excluded, CASE WHEN :excluded_at = 1 THEN NOW() ELSE NULL END, :user_id, NOW())
+                    ");
+                    $insert->execute([
+                        'display_name' => substr($clientName, 0, 255),
+                        'name' => substr($clientName, 0, 255),
+                        'excluded' => $excluded,
+                        'excluded_at' => $excluded,
+                        'user_id' => (int) (current_user()['id'] ?? 0),
+                    ]);
+                }
             }
             client_balances_redirect_back();
         }
@@ -464,7 +544,7 @@ try {
         $clientScopeSql = '';
         if ($hasClientCompanies && in_array('analytics_excluded', $clientCompanyColumns, true) && str_contains((string) $expr['joins'], 'db_client_companies')) {
             $clientScopeSql = $inactiveMode
-                ? ' AND COALESCE(cc.analytics_excluded, 0) = 1'
+                ? ' AND ' . client_balances_client_inactive_sql('o', 'cc')
                 : ' AND (cc.id IS NULL OR COALESCE(cc.analytics_excluded, 0) = 0)';
         } elseif ($inactiveMode) {
             $clientScopeSql = ' AND 1=0';
@@ -940,11 +1020,12 @@ $rows = array_slice($filteredRows, 0, 200);
                             </details>
                         <?php endif; ?>
                         <span class="client-manager-tag"><?= e((string) ($row['manager_name'] ?: 'Без менеджера')) ?></span>
-                        <?php if ($canManageAnalytics && preg_match('/^company:(\d+)$/', $clientKey, $clientMatch)): ?>
+                        <?php if ($canManageAnalytics && (preg_match('/^company:(\d+)$/', $clientKey, $clientMatch) || str_starts_with($clientKey, 'company-name:'))): ?>
                             <form class="inline-form client-row-action" method="post" action="<?= e(base_path('/client_balances.php?' . client_balances_query(['month' => $selectedMonth, 'q' => $search, 'manager' => $managerFilter, 'trend' => $trendFilter, 'segment' => $segmentFilter, 'scope' => $valueScope, 'inactive' => $inactiveMode ? '1' : '']))) ?>">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="toggle_client_analytics">
-                                <input type="hidden" name="keycrm_company_id" value="<?= e($clientMatch[1]) ?>">
+                                <input type="hidden" name="keycrm_company_id" value="<?= e($clientMatch[1] ?? '') ?>">
+                                <input type="hidden" name="client_name" value="<?= e((string) $row['client_name']) ?>">
                                 <input type="hidden" name="excluded" value="<?= $inactiveMode ? '0' : '1' ?>">
                                 <input type="hidden" name="return_to" value="<?= e((string) ($_SERVER['REQUEST_URI'] ?? '/client_balances.php')) ?>">
                                 <button class="text-action <?= $inactiveMode ? 'success' : 'danger' ?>" type="submit"><?= $inactiveMode ? 'Повернути' : 'Не рахувати' ?></button>

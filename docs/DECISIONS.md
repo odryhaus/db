@@ -433,3 +433,15 @@ Decision:
 - `Дебіторка` is no longer a separate daily page; receivables work belongs inside `Продажі` with the `Дебіторка` filter.
 
 Reason: some rows are real CRM records but should not affect CEO turnover, debt, or manager performance. The system needs a reversible business-control flag, not deletion.
+
+## Sales Targets Are Effective-Dated
+
+Decision:
+
+- Company and manager targets are not overwritten in place.
+- Each target save creates a new `db_sales_targets` row with `effective_from`.
+- The active target for a month is the newest row whose `effective_from` is on or before the last day of that month.
+- Manager target history must remain visible to CEO.
+- Managers on the `Плани` page come from all-time orders and target history, not only from the selected month.
+
+Reason: `.BRAND` needs to set historical plans from 2022, change plans in future months, and still understand what plan was active at any point in time.

@@ -1163,3 +1163,24 @@ No records are deleted. Exclusions are local `.BRAND DB` control flags only.
 - Open `Продажі`, confirm that this client’s orders do not affect sales/debt totals.
 - Mark one test order as `Не рахувати`, then confirm it appears in `Продажі → Виключені` and can be restored.
 - Open `Менеджери` and verify the period chart against known monthly totals.
+
+## 2026-07-22 — Client Exclusions And Target History
+
+### What Changed
+
+- `Клієнти` now shows `Не рахувати` for clients grouped only by name, not only for clients with KeyCRM `company_id`.
+- Name-only excluded clients are stored as local `db_client_companies` rows with `keycrm_company_id = NULL`.
+- Central Cockpit active-order logic now excludes both:
+  - clients excluded by KeyCRM company id;
+  - clients excluded by local name-only company row.
+- `Плани` now lists managers from all-time orders and existing target history, not only from the selected month.
+- `Плани` defaults `Діє з` to the first day of the selected month.
+- Added target history table so CEO can see company and manager plan changes over time.
+
+### Data Rule
+
+Plans are effective-dated. Saving a new plan does not overwrite history. For any selected month, the active plan is the latest target row with `effective_from <= last day of selected month`.
+
+### Open Risk
+
+Name-only client exclusions are weaker than id-based exclusions because they depend on exact client/company name matching. Prefer KeyCRM company id when available.
