@@ -484,3 +484,17 @@ Decision:
 - Sales and cash KPIs use the whole selected period.
 
 Reason: the CEO often searches for an existing client to inspect history, even if that client did not order in the currently selected month.
+
+## Manager Role Scope
+
+Decision:
+
+- `manager` users get a narrow Manager Performance Cockpit instead of the full CEO Money Cockpit.
+- Manager-visible data is scoped server-side by the logged-in user identity:
+  - prefer `users.keycrm_id` against `db_orders.manager_id`;
+  - also allow `users.email` against `db_orders.manager_email`;
+  - fallback to user full name against `db_orders.manager_name`.
+- Managers see only their plan/fact/progress, paid/unpaid amounts, their clients, their receivables, and their recent orders.
+- Managers do not see company-wide cash, payments, expenses, accounts, sync controls, strategic debt, all-manager summaries, or admin pages.
+
+Reason: hiding menu links is not enough. Manager role must not be able to inspect other managers or company-wide financial data through direct URLs.

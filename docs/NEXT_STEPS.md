@@ -392,3 +392,4 @@ After deploy:
   - keep `Cockpit`, `Клієнти`, `Продажі`, `Гроші`, and `Документи` as daily pages;
   - keep `Менеджери`, `Плани`, `Витрати`, `Операції`, `Реквізити`, `Наші компанії`, sync pages, and users under Admin/direct links;
   - leave `receivables.php` only as a compatibility redirect to `sales.php?status=debt`.
+- Test with one real `manager` account and confirm that `users.keycrm_id` matches KeyCRM manager id. If not, fill/fix the user mapping before giving access.

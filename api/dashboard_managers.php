@@ -6,6 +6,11 @@ require_once dirname(__DIR__) . '/financial.php';
 
 require_login();
 header('Content-Type: application/json; charset=utf-8');
+if (user_role() === 'manager') {
+    http_response_code(403);
+    echo json_encode(['ok' => false, 'error' => 'Access denied.'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
 
 try {
     echo json_encode([

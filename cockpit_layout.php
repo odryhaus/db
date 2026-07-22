@@ -3,6 +3,17 @@
 function cockpit_nav(string $active, string $month): void
 {
     $monthQuery = '?month=' . urlencode(cockpit_valid_month($month));
+    if (user_role() === 'manager') {
+        ?>
+        <nav class="nav cockpit-nav">
+            <span><?= e(format_user_name(current_user() ?? [])) ?> · <?= e(user_role()) ?></span>
+            <a class="<?= $active === 'dashboard' ? 'active' : '' ?>" href="<?= e(base_path('/dashboard_v2.php' . $monthQuery)) ?>">Cockpit</a>
+            <a href="<?= e(base_path('/logout.php')) ?>">Вийти</a>
+        </nav>
+        <?php
+        return;
+    }
+
     $items = [
         'dashboard' => ['Cockpit', '/dashboard_v2.php' . $monthQuery],
         'client_balances' => ['Клієнти', '/client_balances.php' . $monthQuery],

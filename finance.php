@@ -1082,7 +1082,7 @@ function can_edit_our_companies(): bool
 
 function can_view_payment_requisites(): bool
 {
-    return in_array(user_role(), ['ceo', 'accountant', 'manager'], true);
+    return in_array(user_role(), ['ceo', 'accountant'], true);
 }
 
 function our_companies(bool $activeOnly = true): array

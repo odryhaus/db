@@ -34,21 +34,167 @@ function cockpit_status_label(array $summary): string
     return $last ? 'останнє оновлення ' . (string) $last : 'очікує першого оновлення';
 }
 
-try {
-    $summary = cockpit_monthly_summary($selectedMonth);
-    $managers = cockpit_manager_summary($selectedMonth);
-    $attention = cockpit_attention_items($selectedMonth);
-    $dashboardError = '';
-} catch (Throwable $e) {
-    $summary = cockpit_zero_summary($selectedMonth);
-    $managers = [];
-    $attention = [];
-    $dashboardError = 'CEO Money Cockpit v2 data is not available yet.';
+function manager_cockpit_data(string $month, array $user): array
+{
+    $month = cockpit_valid_month($month);
+    $zero = [
+        'manager_name' => cockpit_manager_scope($user)['display_name'],
+        'target' => 0.0,
+        'sales_fact' => 0.0,
+        'paid_by_order' => 0.0,
+        'unpaid_by_order' => 0.0,
+        'remaining_to_target' => null,
+        'progress_percent' => null,
+        'paid_percent' => 0.0,
+        'order_count' => 0,
+        'client_count' => 0,
+        'receivables_total' => 0.0,
+        'receivables_count' => 0,
+        'largest_receivable' => 0.0,
+        'clients' => [],
+        'debts' => [],
+        'orders' => [],
+    ];
+
+    if (!invoice_table_exists('db_orders')) {
+        return $zero;
+    }
+
+    $activeOrder = cockpit_active_order_sql('o');
+    $scopeFilter = cockpit_manager_scope_filter('o', 'manager_cockpit', $user);
+    $params = array_merge([
+        'month' => $month,
+        'fallback_manager_name' => $scopeFilter['scope']['display_name'],
+    ], $scopeFilter['params']);
+
+    $stmt = db()->prepare("
+        SELECT
+            COALESCE(NULLIF(MAX(o.manager_name), ''), :fallback_manager_name) AS manager_name,
+            COUNT(*) AS order_count,
+            COUNT(DISTINCT COALESCE(NULLIF(CAST(o.company_id AS CHAR), ''), NULLIF(CAST(o.buyer_id AS CHAR), ''), NULLIF(o.company_name, ''), NULLIF(o.buyer_name, ''), o.order_number)) AS client_count,
+            COALESCE(SUM(o.total_amount_uah), 0) AS sales_fact,
+            COALESCE(SUM(o.paid_amount_uah), 0) AS paid_by_order,
+            COALESCE(SUM(o.unpaid_amount_uah), 0) AS unpaid_by_order
+        FROM db_orders o
+        WHERE o.order_month = :month
+          AND {$activeOrder}
+          AND {$scopeFilter['sql']}
+    ");
+    $stmt->execute($params);
+    $data = array_merge($zero, $stmt->fetch() ?: []);
+    $data['sales_fact'] = (float) ($data['sales_fact'] ?? 0);
+    $data['paid_by_order'] = (float) ($data['paid_by_order'] ?? 0);
+    $data['unpaid_by_order'] = (float) ($data['unpaid_by_order'] ?? 0);
+    $data['order_count'] = (int) ($data['order_count'] ?? 0);
+    $data['client_count'] = (int) ($data['client_count'] ?? 0);
+    $data['manager_name'] = (string) (($data['manager_name'] ?? '') ?: $scopeFilter['scope']['display_name']);
+
+    $targetNames = array_values(array_unique(array_filter(array_merge([$data['manager_name']], $scopeFilter['scope']['names']))));
+    $targets = active_manager_targets(db(), $month, $targetNames);
+    foreach ($targetNames as $targetName) {
+        if (!empty($targets[$targetName]) && (float) ($targets[$targetName]['amount_uah'] ?? 0) > 0) {
+            $data['target'] = (float) $targets[$targetName]['amount_uah'];
+            break;
+        }
+    }
+    $data['remaining_to_target'] = $data['target'] > 0 ? max($data['target'] - $data['sales_fact'], 0) : null;
+    $data['progress_percent'] = $data['target'] > 0 ? min(100, round(($data['sales_fact'] / $data['target']) * 100, 1)) : null;
+    $data['paid_percent'] = $data['sales_fact'] > 0 ? min(100, round(($data['paid_by_order'] / $data['sales_fact']) * 100, 1)) : 0.0;
+
+    $debtParams = array_merge(['debt_threshold' => 100.0], $scopeFilter['params']);
+    $debtStmt = db()->prepare("
+        SELECT
+            COALESCE(SUM(o.unpaid_amount_uah), 0) AS receivables_total,
+            COUNT(*) AS receivables_count,
+            COALESCE(MAX(o.unpaid_amount_uah), 0) AS largest_receivable
+        FROM db_orders o
+        WHERE o.unpaid_amount_uah > :debt_threshold
+          AND {$activeOrder}
+          AND {$scopeFilter['sql']}
+    ");
+    $debtStmt->execute($debtParams);
+    $debtTotals = $debtStmt->fetch() ?: [];
+    $data['receivables_total'] = (float) ($debtTotals['receivables_total'] ?? 0);
+    $data['receivables_count'] = (int) ($debtTotals['receivables_count'] ?? 0);
+    $data['largest_receivable'] = (float) ($debtTotals['largest_receivable'] ?? 0);
+
+    $clientsStmt = db()->prepare("
+        SELECT
+            COALESCE(NULLIF(o.company_name, ''), NULLIF(o.buyer_name, ''), 'Без клієнта') AS client_name,
+            COUNT(*) AS order_count,
+            COALESCE(SUM(o.total_amount_uah), 0) AS sales_fact,
+            COALESCE(SUM(o.paid_amount_uah), 0) AS paid_by_order,
+            COALESCE(SUM(o.unpaid_amount_uah), 0) AS unpaid_by_order
+        FROM db_orders o
+        WHERE o.order_month = :month
+          AND {$activeOrder}
+          AND {$scopeFilter['sql']}
+        GROUP BY COALESCE(NULLIF(o.company_name, ''), NULLIF(o.buyer_name, ''), 'Без клієнта')
+        ORDER BY sales_fact DESC
+        LIMIT 8
+    ");
+    $clientsStmt->execute($params);
+    $data['clients'] = $clientsStmt->fetchAll();
+
+    $debtsStmt = db()->prepare("
+        SELECT o.order_number, o.ordered_at, o.company_name, o.buyer_name, o.total_amount_uah, o.paid_amount_uah, o.unpaid_amount_uah
+        FROM db_orders o
+        WHERE o.unpaid_amount_uah > :debt_threshold
+          AND {$activeOrder}
+          AND {$scopeFilter['sql']}
+        ORDER BY o.unpaid_amount_uah DESC, o.ordered_at ASC
+        LIMIT 8
+    ");
+    $debtsStmt->execute($debtParams);
+    $data['debts'] = $debtsStmt->fetchAll();
+
+    $ordersStmt = db()->prepare("
+        SELECT o.order_number, o.ordered_at, o.company_name, o.buyer_name, o.total_amount_uah, o.paid_amount_uah, o.unpaid_amount_uah
+        FROM db_orders o
+        WHERE o.order_month = :month
+          AND {$activeOrder}
+          AND {$scopeFilter['sql']}
+        ORDER BY o.ordered_at DESC, o.id DESC
+        LIMIT 8
+    ");
+    $ordersStmt->execute($params);
+    $data['orders'] = $ordersStmt->fetchAll();
+
+    return $data;
 }
 
-try {
-    $actionQueue = cockpit_action_queue($selectedMonth);
-} catch (Throwable $e) {
+$isManagerCockpit = user_role() === 'manager';
+$dashboardError = '';
+$summary = cockpit_zero_summary($selectedMonth);
+$managers = [];
+$attention = [];
+$actionQueue = [];
+$managerData = [];
+
+if ($isManagerCockpit) {
+    try {
+        $managerData = manager_cockpit_data($selectedMonth, $user ?? []);
+    } catch (Throwable $e) {
+        $managerData = [];
+        $dashboardError = 'Manager Cockpit data is not available yet.';
+    }
+} else {
+    try {
+        $summary = cockpit_monthly_summary($selectedMonth);
+        $managers = cockpit_manager_summary($selectedMonth);
+        $attention = cockpit_attention_items($selectedMonth);
+    } catch (Throwable $e) {
+        $summary = cockpit_zero_summary($selectedMonth);
+        $dashboardError = 'CEO Money Cockpit v2 data is not available yet.';
+    }
+    try {
+        $actionQueue = cockpit_action_queue($selectedMonth);
+    } catch (Throwable $e) {
+        $actionQueue = [];
+    }
+}
+
+if ($isManagerCockpit && !$managerData) {
     $actionQueue = [];
 }
 
@@ -66,9 +212,9 @@ $syncQueued = isset($_GET['sync_queued']);
 <main class="app-shell cockpit-shell">
     <header class="cockpit-topbar">
         <div>
-            <p class="eyebrow">CEO Money Cockpit v2 preview</p>
+            <p class="eyebrow"><?= $isManagerCockpit ? 'Manager Performance Cockpit' : 'CEO Money Cockpit v2 preview' ?></p>
             <h1>.BRAND DB</h1>
-            <p class="muted">Performance, cash і financial health без змішування формул.</p>
+            <p class="muted"><?= $isManagerCockpit ? 'Ваш план, продажі, оплати, борги і клієнти.' : 'Performance, cash і financial health без змішування формул.' ?></p>
         </div>
         <form class="cockpit-month-form" method="get" action="<?= e(base_path('/dashboard_v2.php')) ?>">
             <label>
@@ -81,23 +227,158 @@ $syncQueued = isset($_GET['sync_queued']);
 
     <?php cockpit_nav('dashboard', $selectedMonth); ?>
 
-    <section class="cockpit-sync-strip">
-        <span><?= e(cockpit_status_label($summary)) ?></span>
-        <?php if ($syncQueued): ?><strong>Оновлення поставлено в чергу.</strong><?php endif; ?>
-        <?php if (user_role() === 'ceo'): ?>
-            <form method="post" action="<?= e(base_path('/dashboard_v2.php?month=' . urlencode($selectedMonth))) ?>">
-                <?= csrf_field() ?>
-                <input type="hidden" name="action" value="enqueue_global_sync">
-                <button type="submit">Оновити все</button>
-            </form>
-        <?php endif; ?>
-    </section>
+    <?php if (!$isManagerCockpit): ?>
+        <section class="cockpit-sync-strip">
+            <span><?= e(cockpit_status_label($summary)) ?></span>
+            <?php if ($syncQueued): ?><strong>Оновлення поставлено в чергу.</strong><?php endif; ?>
+            <?php if (user_role() === 'ceo'): ?>
+                <form method="post" action="<?= e(base_path('/dashboard_v2.php?month=' . urlencode($selectedMonth))) ?>">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="enqueue_global_sync">
+                    <button type="submit">Оновити все</button>
+                </form>
+            <?php endif; ?>
+        </section>
+    <?php endif; ?>
 
     <?php if ($dashboardError !== ''): ?>
         <section class="panel dashboard-section">
             <span class="status-badge status-badge--danger"><?= e($dashboardError) ?></span>
         </section>
     <?php endif; ?>
+
+    <?php if ($isManagerCockpit): ?>
+        <?php
+        $managerTarget = (float) ($managerData['target'] ?? 0);
+        $managerFact = (float) ($managerData['sales_fact'] ?? 0);
+        $managerPaid = (float) ($managerData['paid_by_order'] ?? 0);
+        $managerProgress = ($managerData['progress_percent'] ?? null) !== null ? (float) $managerData['progress_percent'] : 0.0;
+        $managerPaidToPlan = $managerTarget > 0 ? min(100, round(($managerPaid / $managerTarget) * 100, 1)) : 0.0;
+        ?>
+        <section class="cockpit-hero manager-cockpit-hero">
+            <div class="cockpit-hero-main">
+                <p class="eyebrow">Performance</p>
+                <h2><?= e((string) ($managerData['manager_name'] ?? format_user_name($user ?? []))) ?></h2>
+                <p>Ваш план і продажі за <?= e($selectedMonth) ?>. Видно тільки ваші клієнти та замовлення.</p>
+                <?= cockpit_dual_progress($managerProgress, $managerPaidToPlan, ($managerTarget > 0 ? e((string) $managerProgress) . '% план' : 'план не задано') . ' · оплачено ' . e((string) ($managerData['paid_percent'] ?? 0)) . '%') ?>
+                <div class="cockpit-hero-meta">
+                    <strong><?= e(money_uah_compact($managerFact)) ?></strong>
+                    <span>план <?= $managerTarget > 0 ? e(money_uah_compact($managerTarget)) : 'не задано' ?> · оплачено <?= e(money_uah_compact($managerPaid)) ?></span>
+                </div>
+            </div>
+            <div class="cockpit-attention">
+                <p class="eyebrow">Фокус зараз</p>
+                <?php if ((float) ($managerData['receivables_total'] ?? 0) > 0): ?>
+                    <a class="attention-row warning" href="<?= e(base_path('/sales.php?' . http_build_query(['month' => $selectedMonth, 'status' => 'debt']))) ?>">
+                        <span>Нагадати оплату</span>
+                        <strong><?= e(money_uah_compact($managerData['receivables_total'])) ?></strong>
+                    </a>
+                <?php else: ?>
+                    <div class="attention-row neutral">
+                        <span>Критичних боргів немає</span>
+                        <strong>OK</strong>
+                    </div>
+                <?php endif; ?>
+                <?php if ($managerTarget > 0 && ($managerData['remaining_to_target'] ?? 0) > 0): ?>
+                    <div class="attention-row neutral">
+                        <span>Залишилось до плану</span>
+                        <strong><?= e(money_uah_compact($managerData['remaining_to_target'])) ?></strong>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </section>
+
+        <section class="kpi-grid compact-kpis">
+            <div class="kpi-card"><span class="label">План</span><strong><?= $managerTarget > 0 ? e(money_uah_compact($managerTarget)) : 'Не задано' ?></strong></div>
+            <div class="kpi-card"><span class="label">Факт</span><strong><?= e(money_uah_compact($managerFact)) ?></strong><small><?= e((string) ($managerData['order_count'] ?? 0)) ?> замовлень</small></div>
+            <div class="kpi-card"><span class="label">Оплачено</span><strong><?= e(money_uah_compact($managerPaid)) ?></strong><small><?= e((string) ($managerData['paid_percent'] ?? 0)) ?>% від факту</small></div>
+            <div class="kpi-card danger"><span class="label">Не оплачено</span><strong><?= e(money_uah_compact($managerData['unpaid_by_order'] ?? 0)) ?></strong></div>
+            <div class="kpi-card"><span class="label">Клієнтів</span><strong><?= e((string) ($managerData['client_count'] ?? 0)) ?></strong><small>активні у місяці</small></div>
+        </section>
+
+        <section class="cockpit-section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Clients</p>
+                    <h2>Ваші клієнти за <?= e($selectedMonth) ?></h2>
+                </div>
+                <a class="button-secondary small-button" href="<?= e(base_path('/client_balances.php?' . http_build_query(['month' => $selectedMonth]))) ?>">Відкрити клієнтів</a>
+            </div>
+            <div class="table-scroll">
+                <table class="data-table">
+                    <thead><tr><th>Клієнт</th><th>Факт</th><th>Оплачено</th><th>Борг</th><th>К-сть</th></tr></thead>
+                    <tbody>
+                    <?php if (empty($managerData['clients'])): ?><tr><td colspan="5">Немає клієнтів за місяць.</td></tr><?php endif; ?>
+                    <?php foreach (($managerData['clients'] ?? []) as $client): ?>
+                        <tr>
+                            <td><strong><?= e((string) $client['client_name']) ?></strong></td>
+                            <td class="num"><?= e(money_uah_compact($client['sales_fact'] ?? 0)) ?></td>
+                            <td class="num"><?= e(money_uah_compact($client['paid_by_order'] ?? 0)) ?></td>
+                            <td class="num <?= (float) ($client['unpaid_by_order'] ?? 0) > 0 ? 'danger-text' : '' ?>"><?= e(money_uah_compact($client['unpaid_by_order'] ?? 0)) ?></td>
+                            <td class="num"><?= e((string) ($client['order_count'] ?? 0)) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="cockpit-section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Receivables</p>
+                    <h2>Ваші борги клієнтів</h2>
+                </div>
+                <a class="button-secondary small-button" href="<?= e(base_path('/sales.php?' . http_build_query(['month' => $selectedMonth, 'status' => 'debt']))) ?>">Дебіторка</a>
+            </div>
+            <div class="table-scroll">
+                <table class="data-table">
+                    <thead><tr><th>№</th><th>Дата</th><th>Клієнт</th><th>Сума</th><th>Оплачено</th><th>Борг</th></tr></thead>
+                    <tbody>
+                    <?php if (empty($managerData['debts'])): ?><tr><td colspan="6">Боргів більше 100 UAH немає.</td></tr><?php endif; ?>
+                    <?php foreach (($managerData['debts'] ?? []) as $order): ?>
+                        <tr>
+                            <td><strong><?= e((string) $order['order_number']) ?></strong></td>
+                            <td><?= e(substr((string) ($order['ordered_at'] ?? ''), 0, 10)) ?></td>
+                            <td><?= e((string) (($order['company_name'] ?? '') ?: (($order['buyer_name'] ?? '') ?: 'Без клієнта'))) ?></td>
+                            <td class="num"><?= e(money_uah_compact($order['total_amount_uah'] ?? 0)) ?></td>
+                            <td class="num"><?= e(money_uah_compact($order['paid_amount_uah'] ?? 0)) ?></td>
+                            <td class="num danger-text"><?= e(money_uah_compact($order['unpaid_amount_uah'] ?? 0)) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="cockpit-section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Orders</p>
+                    <h2>Останні ваші замовлення</h2>
+                </div>
+                <a class="button-secondary small-button" href="<?= e(base_path('/sales.php?' . http_build_query(['month' => $selectedMonth]))) ?>">Всі продажі</a>
+            </div>
+            <div class="table-scroll">
+                <table class="data-table">
+                    <thead><tr><th>№</th><th>Дата</th><th>Клієнт</th><th>Сума</th><th>Оплачено</th><th>Борг</th></tr></thead>
+                    <tbody>
+                    <?php if (empty($managerData['orders'])): ?><tr><td colspan="6">Замовлень за місяць немає.</td></tr><?php endif; ?>
+                    <?php foreach (($managerData['orders'] ?? []) as $order): ?>
+                        <tr>
+                            <td><strong><?= e((string) $order['order_number']) ?></strong></td>
+                            <td><?= e(substr((string) ($order['ordered_at'] ?? ''), 0, 10)) ?></td>
+                            <td><?= e((string) (($order['company_name'] ?? '') ?: (($order['buyer_name'] ?? '') ?: 'Без клієнта'))) ?></td>
+                            <td class="num"><?= e(money_uah_compact($order['total_amount_uah'] ?? 0)) ?></td>
+                            <td class="num"><?= e(money_uah_compact($order['paid_amount_uah'] ?? 0)) ?></td>
+                            <td class="num <?= (float) ($order['unpaid_amount_uah'] ?? 0) > 0 ? 'danger-text' : '' ?>"><?= e(money_uah_compact($order['unpaid_amount_uah'] ?? 0)) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    <?php else: ?>
 
     <section class="cockpit-hero">
         <div class="cockpit-hero-main">
@@ -312,6 +593,7 @@ $syncQueued = isset($_GET['sync_queued']);
             </table>
         </div>
     </section>
+    <?php endif; ?>
 </main>
 <?= app_version_badge() ?>
 </body>

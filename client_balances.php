@@ -44,6 +44,12 @@ $clientContactColumns = $hasClientContacts ? finance_columns('db_client_contacts
 $invoiceColumns = $hasInvoices ? finance_columns('db_invoices') : [];
 $managerOptions = [];
 $canManageAnalytics = user_role() === 'ceo';
+$isManagerRole = user_role() === 'manager';
+$managerScopeFilter = $isManagerRole ? cockpit_manager_scope_filter('o', 'current_manager_clients') : ['sql' => '1=1', 'params' => [], 'scope' => []];
+if ($isManagerRole) {
+    $managerFilter = '';
+    $inactiveMode = false;
+}
 
 function client_balances_month_label(string $month): string
 {
@@ -685,9 +691,13 @@ try {
         $orderSearchSql = $searchSql;
         $managerSql = '';
         $searchParams = $searchFilter['params'];
+        if ($isManagerRole) {
+            $managerSql = ' AND ' . (string) $managerScopeFilter['sql'];
+            $searchParams = array_merge($searchParams, $managerScopeFilter['params']);
+        }
         $matchedCompanyIds = [];
         $matchedCompanyNames = [];
-        if ($hasClientCompanies && $search !== '') {
+        if (!$isManagerRole && $hasClientCompanies && $search !== '') {
             $companyNameParts = [];
             foreach (['display_name', 'keycrm_name', 'name', 'keycrm_title', 'title'] as $column) {
                 if (in_array($column, $clientCompanyColumns, true)) {
@@ -1215,16 +1225,18 @@ $rows = array_slice($filteredRows, 0, 200);
                 <span>Пошук</span>
                 <input type="search" name="q" value="<?= e($search) ?>" placeholder="компанія, покупець, email, телефон, номер">
             </label>
-            <label>
-                <span>Менеджер</span>
-                <select name="manager">
-                    <option value="">Всі менеджери</option>
-                    <?php foreach ($managerOptions as $managerOption): ?>
-                        <?php $managerName = (string) $managerOption['manager_name']; ?>
-                        <option value="<?= e($managerName) ?>" <?= $managerFilter === $managerName ? 'selected' : '' ?>><?= e($managerName) ?> · <?= e((string) $managerOption['order_count']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
+            <?php if (!$isManagerRole): ?>
+                <label>
+                    <span>Менеджер</span>
+                    <select name="manager">
+                        <option value="">Всі менеджери</option>
+                        <?php foreach ($managerOptions as $managerOption): ?>
+                            <?php $managerName = (string) $managerOption['manager_name']; ?>
+                            <option value="<?= e($managerName) ?>" <?= $managerFilter === $managerName ? 'selected' : '' ?>><?= e($managerName) ?> · <?= e((string) $managerOption['order_count']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+            <?php endif; ?>
             <button type="submit">Показати</button>
         </form>
         <div class="client-filter-groups">
@@ -1258,6 +1270,7 @@ $rows = array_slice($filteredRows, 0, 200);
         </div>
     </section>
 
+    <?php if (!$isManagerRole): ?>
     <section class="panel dashboard-section">
         <div class="section-heading">
             <div>
@@ -1294,6 +1307,7 @@ $rows = array_slice($filteredRows, 0, 200);
             </div>
         </div>
     </section>
+    <?php endif; ?>
 
     <section class="panel dashboard-section client-command-panel">
         <div class="section-heading">

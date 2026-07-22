@@ -6,6 +6,11 @@ require_once __DIR__ . '/financial.php';
 require_once __DIR__ . '/cockpit_layout.php';
 
 require_login();
+if (user_role() === 'manager') {
+    http_response_code(403);
+    include __DIR__ . '/partials_forbidden.php';
+    exit;
+}
 
 $month = cockpit_valid_month((string) ($_GET['month'] ?? date('Y-m')));
 $bounds = finance_filter_month_bounds($month);

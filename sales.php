@@ -37,12 +37,20 @@ $managerOptions = [];
 $summary = cockpit_monthly_summary($month);
 $canSeeCosts = in_array(user_role(), ['ceo', 'accountant'], true);
 $canManageAnalytics = user_role() === 'ceo';
+$isManagerRole = user_role() === 'manager';
+$managerScopeFilter = $isManagerRole ? cockpit_manager_scope_filter('o', 'current_manager_sales') : ['sql' => '1=1', 'params' => [], 'scope' => []];
 $debtThresholdUah = 100.0;
 $rangeMode = $fromMonth !== '' && $toMonth !== '' && $fromMonth <= $toMonth;
 $pageTitle = $rangeMode ? $fromMonth . ' - ' . $toMonth : $month;
 $orderColumns = invoice_table_exists('db_orders') ? finance_columns('db_orders') : [];
 if (!in_array('manager_name', $orderColumns, true)) {
     $managerFilter = '';
+}
+if ($isManagerRole) {
+    $managerFilter = '';
+    if ($statusFilter === 'inactive') {
+        $statusFilter = 'all';
+    }
 }
 $clientExcludedSelect = cockpit_order_client_not_excluded_sql('o') !== '1=1'
     ? "CASE WHEN NOT (" . cockpit_order_client_not_excluded_sql('o') . ") THEN 1 ELSE 0 END AS analytics_client_excluded"
@@ -383,7 +391,12 @@ try {
             sales_redirect_back();
         }
 
-        if (in_array('manager_name', $orderColumns, true)) {
+        if ($isManagerRole) {
+            $managerOptions = [[
+                'manager_name' => (string) ($managerScopeFilter['scope']['display_name'] ?? format_user_name(current_user() ?? [])),
+                'order_count' => 0,
+            ]];
+        } elseif (in_array('manager_name', $orderColumns, true)) {
             $managerStmt = db()->query("
                 SELECT COALESCE(NULLIF(manager_name, ''), 'Без менеджера') AS manager_name, COUNT(*) AS order_count
                 FROM db_orders o
@@ -402,6 +415,10 @@ try {
             : "0 AS item_count, 0 AS items_total,";
         $where = [$statusFilter === 'inactive' ? $notCanceledOnly . ' AND ' . $inactiveOrders : $notCanceled];
         $params = [];
+        if ($isManagerRole) {
+            $where[] = (string) $managerScopeFilter['sql'];
+            $params = array_merge($params, $managerScopeFilter['params']);
+        }
         if ($rangeMode) {
             $where[] = "o.order_month >= :from_month";
             $where[] = "o.order_month <= :to_month";
@@ -477,6 +494,10 @@ try {
                 'payment_period_start' => $periodStart,
                 'payment_period_end' => $periodEnd,
             ];
+            if ($isManagerRole) {
+                $paymentWhere[] = (string) $managerScopeFilter['sql'];
+                $paymentParams = array_merge($paymentParams, $managerScopeFilter['params']);
+            }
             if ($managerFilter !== '') {
                 $paymentWhere[] = "COALESCE(NULLIF(o.manager_name, ''), 'Без менеджера') = :payment_manager";
                 $paymentParams['payment_manager'] = $managerFilter;
@@ -520,6 +541,10 @@ try {
             'chart_period_start' => $periodFromMonth,
             'chart_period_end' => $periodToMonth,
         ];
+        if ($isManagerRole) {
+            $chartWhere[] = (string) $managerScopeFilter['sql'];
+            $chartParams = array_merge($chartParams, $managerScopeFilter['params']);
+        }
         if ($managerFilter !== '') {
             $chartWhere[] = "COALESCE(NULLIF(o.manager_name, ''), 'Без менеджера') = :chart_manager";
             $chartParams['chart_manager'] = $managerFilter;
@@ -581,6 +606,10 @@ try {
                 'chart_payment_start' => $periodStart,
                 'chart_payment_end' => $periodEnd,
             ];
+            if ($isManagerRole) {
+                $chartPaymentWhere[] = (string) $managerScopeFilter['sql'];
+                $chartPaymentParams = array_merge($chartPaymentParams, $managerScopeFilter['params']);
+            }
             if ($managerFilter !== '') {
                 $chartPaymentWhere[] = "COALESCE(NULLIF(o.manager_name, ''), 'Без менеджера') = :chart_payment_manager";
                 $chartPaymentParams['chart_payment_manager'] = $managerFilter;
@@ -645,7 +674,8 @@ $previewOrders = array_slice($orders, 0, $orderPreviewLimit);
 $hiddenOrders = array_slice($orders, $orderPreviewLimit);
 
 if (isset($_GET['debt_pdf'])) {
-    sales_download_debt_summary($debtOrders, $clientTitle, $managerFilter, $periodFromMonth, $periodToMonth);
+    $debtPdfManagerTitle = $isManagerRole ? (string) ($managerScopeFilter['scope']['display_name'] ?? '') : $managerFilter;
+    sales_download_debt_summary($debtOrders, $clientTitle, $debtPdfManagerTitle, $periodFromMonth, $periodToMonth);
 }
 
 ?><!doctype html>
@@ -699,16 +729,18 @@ if (isset($_GET['debt_pdf'])) {
                 <span>Пошук</span>
                 <input type="search" name="q" value="<?= e($searchFilter) ?>" placeholder="номер, товар, клієнт">
             </label>
-            <label>
-                <span>Менеджер</span>
-                <select name="manager">
-                    <option value="">Всі</option>
-                    <?php foreach ($managerOptions as $managerOption): ?>
-                        <?php $managerName = (string) ($managerOption['manager_name'] ?? ''); ?>
-                        <option value="<?= e($managerName) ?>" <?= $managerFilter === $managerName ? 'selected' : '' ?>><?= e($managerName) ?> · <?= e((string) ($managerOption['order_count'] ?? 0)) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
+            <?php if (!$isManagerRole): ?>
+                <label>
+                    <span>Менеджер</span>
+                    <select name="manager">
+                        <option value="">Всі</option>
+                        <?php foreach ($managerOptions as $managerOption): ?>
+                            <?php $managerName = (string) ($managerOption['manager_name'] ?? ''); ?>
+                            <option value="<?= e($managerName) ?>" <?= $managerFilter === $managerName ? 'selected' : '' ?>><?= e($managerName) ?> · <?= e((string) ($managerOption['order_count'] ?? 0)) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+            <?php endif; ?>
             <button type="submit">Показати</button>
         </form>
         <div class="sales-filter-actions">

@@ -3,7 +3,7 @@
 require_once __DIR__ . '/bootstrap.php';
 
 if (is_logged_in()) {
-    redirect_to('/index.php');
+    redirect_to('/dashboard_v2.php');
 }
 
 $error = '';
@@ -14,7 +14,7 @@ if (is_post()) {
     $password = (string) ($_POST['password'] ?? '');
 
     if (csrf_is_valid() && $email !== '' && $password !== '' && attempt_login($email, $password)) {
-        redirect_to('/index.php');
+        redirect_to('/dashboard_v2.php');
     }
 
     $error = 'Invalid email or password.';

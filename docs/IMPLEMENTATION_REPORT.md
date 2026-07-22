@@ -1385,3 +1385,30 @@ After deploy, run `Клієнти Sync` for companies and buyers so the new mana
 - Open `Клієнти`; the page should render client rows again.
 - Change `Від` / `До` and click `Показати`; the page should use exactly that selected period.
 - Confirm the old period arrow links are gone.
+
+## 2026-07-22 — Manager Performance Cockpit
+
+### What Changed
+
+- Added server-side manager scoping helpers.
+- `dashboard_v2.php` now renders a narrow Manager Performance Cockpit for `manager` users.
+- Manager Cockpit shows:
+  - personal sales plan and fact;
+  - progress bar with paid portion;
+  - paid and unpaid amounts;
+  - active clients for the month;
+  - largest own receivables;
+  - latest own orders.
+- Manager navigation now shows only `Cockpit` and `Вийти`.
+- Login now sends users to `dashboard_v2.php`.
+- `index.php` redirects manager users to `dashboard_v2.php` so they cannot land on the legacy full dashboard.
+- `sales.php` and `client_balances.php` now force manager users to their own data, even if a direct URL is opened.
+- Manager users are blocked from company-wide finance pages and dashboard KPI APIs.
+
+### Security Rule
+
+Manager scope is enforced server-side, not only by hiding menu items.
+
+### Open Risk
+
+Manager matching depends on production data quality. Best mapping is `users.keycrm_id = db_orders.manager_id`; name/email fallback exists but should be verified with real manager accounts.

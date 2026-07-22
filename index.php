@@ -4,6 +4,9 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/cockpit.php';
 require_once __DIR__ . '/sync_core.php';
 require_login();
+if (user_role() === 'manager') {
+    redirect_to('/dashboard_v2.php');
+}
 ensure_finance_tables();
 if (function_exists('ensure_analytics_exclusion_columns')) {
     ensure_analytics_exclusion_columns();

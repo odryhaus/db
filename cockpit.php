@@ -141,6 +141,57 @@ function cockpit_active_order_sql(string $alias = ''): string
     return '(' . cockpit_not_canceled_sql($alias) . ') AND ' . cockpit_order_not_excluded_sql($alias) . ' AND ' . cockpit_order_client_not_excluded_sql($alias);
 }
 
+function cockpit_manager_scope(array $user): array
+{
+    $names = [];
+    $fullName = trim((string) (($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')));
+    if ($fullName !== '') {
+        $names[] = $fullName;
+    }
+    if (!empty($user['email'])) {
+        $names[] = (string) $user['email'];
+    }
+
+    return [
+        'keycrm_id' => (int) ($user['keycrm_id'] ?? 0),
+        'email' => trim((string) ($user['email'] ?? '')),
+        'display_name' => $fullName !== '' ? $fullName : (string) ($user['email'] ?? 'Менеджер'),
+        'names' => array_values(array_unique(array_filter($names, static fn($value) => trim((string) $value) !== ''))),
+    ];
+}
+
+function cockpit_manager_scope_filter(string $alias = 'o', string $paramPrefix = 'manager_scope', ?array $user = null): array
+{
+    $scope = cockpit_manager_scope($user ?? (current_user() ?? []));
+    $prefix = rtrim($alias, '.') . '.';
+    $conditions = [];
+    $params = [];
+
+    if ($scope['keycrm_id'] > 0 && cockpit_has_column('db_orders', 'manager_id')) {
+        $key = $paramPrefix . '_keycrm_id';
+        $conditions[] = "{$prefix}manager_id = :{$key}";
+        $params[$key] = $scope['keycrm_id'];
+    }
+    if ($scope['email'] !== '' && cockpit_has_column('db_orders', 'manager_email')) {
+        $key = $paramPrefix . '_email';
+        $conditions[] = "LOWER({$prefix}manager_email) = LOWER(:{$key})";
+        $params[$key] = $scope['email'];
+    }
+    if (cockpit_has_column('db_orders', 'manager_name')) {
+        foreach ($scope['names'] as $index => $name) {
+            $key = $paramPrefix . '_name_' . $index;
+            $conditions[] = "LOWER({$prefix}manager_name) = LOWER(:{$key})";
+            $params[$key] = $name;
+        }
+    }
+
+    return [
+        'sql' => $conditions ? '(' . implode(' OR ', $conditions) . ')' : '1=0',
+        'params' => $params,
+        'scope' => $scope,
+    ];
+}
+
 function cockpit_client_company_not_excluded_sql(string $alias = ''): string
 {
     if (!cockpit_has_column('db_client_companies', 'analytics_excluded')) {
