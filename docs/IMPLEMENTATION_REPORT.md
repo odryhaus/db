@@ -1412,3 +1412,22 @@ Manager scope is enforced server-side, not only by hiding menu items.
 ### Open Risk
 
 Manager matching depends on production data quality. Best mapping is `users.keycrm_id = db_orders.manager_id`; name/email fallback exists but should be verified with real manager accounts.
+
+## 2026-07-22 — Manager Cockpit Data Loading Fix
+
+### What Changed
+
+- Made the Manager Cockpit SQL tolerant of optional `db_orders` columns.
+- Split SQL parameters by query so production PDO does not receive unused placeholders.
+- Made the central "not canceled" order filter safe when optional status columns are missing.
+- Added server-side error logging for Manager Cockpit data load failures.
+
+### How To Test
+
+- Log in as a manager and open `dashboard_v2.php`.
+- The page should render the Manager Cockpit instead of showing only `Manager Cockpit data is not available yet`.
+- If all numbers are `0`, verify that the manager user has `users.keycrm_id` matching `db_orders.manager_id`.
+
+### Open Risk
+
+The manager can only see data that matches their local user record. `users.keycrm_id` is the reliable mapping; name/email fallback is only a temporary safety net.

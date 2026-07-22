@@ -60,27 +60,83 @@ function manager_cockpit_data(string $month, array $user): array
         return $zero;
     }
 
+    $orderColumns = finance_columns('db_orders');
+    $has = static fn(string $column): bool => in_array($column, $orderColumns, true);
+    $amountExpr = static fn(string $column): string => in_array($column, $orderColumns, true) ? "COALESCE(SUM(o.{$column}), 0)" : '0';
+    $valueExpr = static fn(string $column): string => in_array($column, $orderColumns, true) ? "o.{$column}" : '0';
+    $nullTextExpr = static fn(string $column): string => in_array($column, $orderColumns, true) ? "NULLIF(o.{$column}, '')" : 'NULL';
+
+    $monthParams = ['month' => $month];
+    if ($has('order_month')) {
+        $monthWhere = 'o.order_month = :month';
+    } elseif ($has('ordered_at')) {
+        $bounds = cockpit_month_bounds($month);
+        $monthWhere = 'o.ordered_at >= :month_start AND o.ordered_at <= :month_end';
+        $monthParams = [
+            'month_start' => $bounds['start']->format('Y-m-d H:i:s'),
+            'month_end' => $bounds['end']->format('Y-m-d H:i:s'),
+        ];
+    } else {
+        $monthWhere = '1=0';
+        $monthParams = [];
+    }
+
+    $clientNameParts = array_filter([
+        $nullTextExpr('company_name'),
+        $nullTextExpr('client_name'),
+        $nullTextExpr('buyer_name'),
+    ], static fn(string $expr): bool => $expr !== 'NULL');
+    $clientNameExpr = $clientNameParts ? 'COALESCE(' . implode(', ', $clientNameParts) . ", 'Без клієнта')" : "'Без клієнта'";
+
+    $clientIdentityParts = [];
+    foreach (['company_id', 'buyer_id', 'client_id', 'keycrm_id', 'id'] as $column) {
+        if ($has($column)) {
+            $clientIdentityParts[] = "NULLIF(CAST(o.{$column} AS CHAR), '0')";
+        }
+    }
+    foreach (['company_name', 'client_name', 'buyer_name', 'order_number'] as $column) {
+        if ($has($column)) {
+            $clientIdentityParts[] = "NULLIF(o.{$column}, '')";
+        }
+    }
+    $clientIdentityExpr = $clientIdentityParts ? 'COALESCE(' . implode(', ', $clientIdentityParts) . ')' : 'NULL';
+
+    $managerNameExpr = $has('manager_name')
+        ? "COALESCE(NULLIF(MAX(o.manager_name), ''), :fallback_manager_name)"
+        : ':fallback_manager_name';
+    $orderNumberExpr = $has('order_number') ? 'o.order_number' : ($has('keycrm_id') ? 'CAST(o.keycrm_id AS CHAR)' : "''");
+    $orderedAtExpr = $has('ordered_at') ? 'o.ordered_at' : ($has('order_month') ? "CONCAT(o.order_month, '-01 00:00:00')" : "''");
+    $companyNameExpr = $has('company_name') ? 'o.company_name' : "''";
+    $buyerNameExpr = $has('buyer_name') ? 'o.buyer_name' : "''";
+    $unpaidColumnExpr = $valueExpr('unpaid_amount_uah');
+    $debtWhere = $has('unpaid_amount_uah') ? 'o.unpaid_amount_uah > :debt_threshold' : '1=0';
+    $debtOrderBy = $has('unpaid_amount_uah') ? 'o.unpaid_amount_uah DESC' : '1';
+    $recentOrderBy = $has('ordered_at') ? 'o.ordered_at DESC' : ($has('order_month') ? 'o.order_month DESC' : '1');
+    if ($has('id')) {
+        $recentOrderBy .= ', o.id DESC';
+    }
+
     $activeOrder = cockpit_active_order_sql('o');
     $scopeFilter = cockpit_manager_scope_filter('o', 'manager_cockpit', $user);
-    $params = array_merge([
-        'month' => $month,
+    $monthScopeParams = array_merge($monthParams, $scopeFilter['params']);
+    $summaryParams = array_merge($monthParams, [
         'fallback_manager_name' => $scopeFilter['scope']['display_name'],
     ], $scopeFilter['params']);
 
     $stmt = db()->prepare("
         SELECT
-            COALESCE(NULLIF(MAX(o.manager_name), ''), :fallback_manager_name) AS manager_name,
+            {$managerNameExpr} AS manager_name,
             COUNT(*) AS order_count,
-            COUNT(DISTINCT COALESCE(NULLIF(CAST(o.company_id AS CHAR), ''), NULLIF(CAST(o.buyer_id AS CHAR), ''), NULLIF(o.company_name, ''), NULLIF(o.buyer_name, ''), o.order_number)) AS client_count,
-            COALESCE(SUM(o.total_amount_uah), 0) AS sales_fact,
-            COALESCE(SUM(o.paid_amount_uah), 0) AS paid_by_order,
-            COALESCE(SUM(o.unpaid_amount_uah), 0) AS unpaid_by_order
+            COUNT(DISTINCT {$clientIdentityExpr}) AS client_count,
+            {$amountExpr('total_amount_uah')} AS sales_fact,
+            {$amountExpr('paid_amount_uah')} AS paid_by_order,
+            {$amountExpr('unpaid_amount_uah')} AS unpaid_by_order
         FROM db_orders o
-        WHERE o.order_month = :month
+        WHERE {$monthWhere}
           AND {$activeOrder}
           AND {$scopeFilter['sql']}
     ");
-    $stmt->execute($params);
+    $stmt->execute($summaryParams);
     $data = array_merge($zero, $stmt->fetch() ?: []);
     $data['sales_fact'] = (float) ($data['sales_fact'] ?? 0);
     $data['paid_by_order'] = (float) ($data['paid_by_order'] ?? 0);
@@ -104,11 +160,11 @@ function manager_cockpit_data(string $month, array $user): array
     $debtParams = array_merge(['debt_threshold' => 100.0], $scopeFilter['params']);
     $debtStmt = db()->prepare("
         SELECT
-            COALESCE(SUM(o.unpaid_amount_uah), 0) AS receivables_total,
+            {$amountExpr('unpaid_amount_uah')} AS receivables_total,
             COUNT(*) AS receivables_count,
-            COALESCE(MAX(o.unpaid_amount_uah), 0) AS largest_receivable
+            COALESCE(MAX({$unpaidColumnExpr}), 0) AS largest_receivable
         FROM db_orders o
-        WHERE o.unpaid_amount_uah > :debt_threshold
+        WHERE {$debtWhere}
           AND {$activeOrder}
           AND {$scopeFilter['sql']}
     ");
@@ -120,44 +176,58 @@ function manager_cockpit_data(string $month, array $user): array
 
     $clientsStmt = db()->prepare("
         SELECT
-            COALESCE(NULLIF(o.company_name, ''), NULLIF(o.buyer_name, ''), 'Без клієнта') AS client_name,
+            {$clientNameExpr} AS client_name,
             COUNT(*) AS order_count,
-            COALESCE(SUM(o.total_amount_uah), 0) AS sales_fact,
-            COALESCE(SUM(o.paid_amount_uah), 0) AS paid_by_order,
-            COALESCE(SUM(o.unpaid_amount_uah), 0) AS unpaid_by_order
+            {$amountExpr('total_amount_uah')} AS sales_fact,
+            {$amountExpr('paid_amount_uah')} AS paid_by_order,
+            {$amountExpr('unpaid_amount_uah')} AS unpaid_by_order
         FROM db_orders o
-        WHERE o.order_month = :month
+        WHERE {$monthWhere}
           AND {$activeOrder}
           AND {$scopeFilter['sql']}
-        GROUP BY COALESCE(NULLIF(o.company_name, ''), NULLIF(o.buyer_name, ''), 'Без клієнта')
+        GROUP BY {$clientNameExpr}
         ORDER BY sales_fact DESC
         LIMIT 8
     ");
-    $clientsStmt->execute($params);
+    $clientsStmt->execute($monthScopeParams);
     $data['clients'] = $clientsStmt->fetchAll();
 
     $debtsStmt = db()->prepare("
-        SELECT o.order_number, o.ordered_at, o.company_name, o.buyer_name, o.total_amount_uah, o.paid_amount_uah, o.unpaid_amount_uah
+        SELECT
+            {$orderNumberExpr} AS order_number,
+            {$orderedAtExpr} AS ordered_at,
+            {$companyNameExpr} AS company_name,
+            {$buyerNameExpr} AS buyer_name,
+            {$valueExpr('total_amount_uah')} AS total_amount_uah,
+            {$valueExpr('paid_amount_uah')} AS paid_amount_uah,
+            {$valueExpr('unpaid_amount_uah')} AS unpaid_amount_uah
         FROM db_orders o
-        WHERE o.unpaid_amount_uah > :debt_threshold
+        WHERE {$debtWhere}
           AND {$activeOrder}
           AND {$scopeFilter['sql']}
-        ORDER BY o.unpaid_amount_uah DESC, o.ordered_at ASC
+        ORDER BY {$debtOrderBy}, {$recentOrderBy}
         LIMIT 8
     ");
     $debtsStmt->execute($debtParams);
     $data['debts'] = $debtsStmt->fetchAll();
 
     $ordersStmt = db()->prepare("
-        SELECT o.order_number, o.ordered_at, o.company_name, o.buyer_name, o.total_amount_uah, o.paid_amount_uah, o.unpaid_amount_uah
+        SELECT
+            {$orderNumberExpr} AS order_number,
+            {$orderedAtExpr} AS ordered_at,
+            {$companyNameExpr} AS company_name,
+            {$buyerNameExpr} AS buyer_name,
+            {$valueExpr('total_amount_uah')} AS total_amount_uah,
+            {$valueExpr('paid_amount_uah')} AS paid_amount_uah,
+            {$valueExpr('unpaid_amount_uah')} AS unpaid_amount_uah
         FROM db_orders o
-        WHERE o.order_month = :month
+        WHERE {$monthWhere}
           AND {$activeOrder}
           AND {$scopeFilter['sql']}
-        ORDER BY o.ordered_at DESC, o.id DESC
+        ORDER BY {$recentOrderBy}
         LIMIT 8
     ");
-    $ordersStmt->execute($params);
+    $ordersStmt->execute($monthScopeParams);
     $data['orders'] = $ordersStmt->fetchAll();
 
     return $data;
@@ -175,7 +245,26 @@ if ($isManagerCockpit) {
     try {
         $managerData = manager_cockpit_data($selectedMonth, $user ?? []);
     } catch (Throwable $e) {
-        $managerData = [];
+        error_log('Manager Cockpit data failed: ' . $e->getMessage());
+        $scope = cockpit_manager_scope($user ?? []);
+        $managerData = [
+            'manager_name' => $scope['display_name'],
+            'target' => 0.0,
+            'sales_fact' => 0.0,
+            'paid_by_order' => 0.0,
+            'unpaid_by_order' => 0.0,
+            'remaining_to_target' => null,
+            'progress_percent' => null,
+            'paid_percent' => 0.0,
+            'order_count' => 0,
+            'client_count' => 0,
+            'receivables_total' => 0.0,
+            'receivables_count' => 0,
+            'largest_receivable' => 0.0,
+            'clients' => [],
+            'debts' => [],
+            'orders' => [],
+        ];
         $dashboardError = 'Manager Cockpit data is not available yet.';
     }
 } else {

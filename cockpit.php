@@ -18,14 +18,21 @@ function cockpit_month_bounds(string $month): array
 function cockpit_not_canceled_sql(string $alias = ''): string
 {
     $prefix = $alias !== '' ? rtrim($alias, '.') . '.' : '';
-    return "
-        LOWER(COALESCE({$prefix}status_name, '')) NOT LIKE '%cancel%'
-        AND LOWER(COALESCE({$prefix}status_name, '')) NOT LIKE '%deleted%'
-        AND LOWER(COALESCE({$prefix}status_name, '')) NOT LIKE '%скас%'
-        AND LOWER(COALESCE({$prefix}payment_status, '')) NOT LIKE '%cancel%'
-        AND LOWER(COALESCE({$prefix}payment_status, '')) NOT LIKE '%deleted%'
-        AND LOWER(COALESCE({$prefix}payment_status, '')) NOT LIKE '%скас%'
-    ";
+    $clauses = [];
+
+    if (cockpit_has_column('db_orders', 'status_name')) {
+        $clauses[] = "LOWER(COALESCE({$prefix}status_name, '')) NOT LIKE '%cancel%'";
+        $clauses[] = "LOWER(COALESCE({$prefix}status_name, '')) NOT LIKE '%deleted%'";
+        $clauses[] = "LOWER(COALESCE({$prefix}status_name, '')) NOT LIKE '%скас%'";
+    }
+
+    if (cockpit_has_column('db_orders', 'payment_status')) {
+        $clauses[] = "LOWER(COALESCE({$prefix}payment_status, '')) NOT LIKE '%cancel%'";
+        $clauses[] = "LOWER(COALESCE({$prefix}payment_status, '')) NOT LIKE '%deleted%'";
+        $clauses[] = "LOWER(COALESCE({$prefix}payment_status, '')) NOT LIKE '%скас%'";
+    }
+
+    return $clauses ? implode(' AND ', $clauses) : '1=1';
 }
 
 function cockpit_has_column(string $table, string $column): bool
