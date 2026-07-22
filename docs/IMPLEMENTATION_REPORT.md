@@ -565,6 +565,31 @@ The clients page was centered on one selected month. When the CEO searched for a
 
 Validate the 100 UAH threshold with accounting after a few real cases. The threshold only affects the debt workspace and debt PDF, not the raw order amounts.
 
+## 2026-07-22 — Clients Search And Toolbar Cleanup
+
+### Files Changed
+
+- `client_balances.php`
+- `assets/app.css`
+- documentation files
+
+### Problem Found
+
+The clients search still depended too much on `db_orders`. If a company name existed in `db_client_companies` but did not match the order-side search text exactly, the page showed zero results. The filter area was also visually heavy and duplicated the selected period.
+
+### What Changed
+
+- Search now seeds matching rows directly from `db_client_companies`.
+- If a local company is found, order metrics can also match by `keycrm_company_id` or local company name.
+- Client rows with the same normalized company name are merged before rendering to reduce source duplicates.
+- The long Health explanation is collapsed by default.
+- The duplicated large period block was removed.
+- Period controls are now compact `Від` / `До` fields with small previous/next period links.
+
+### Open Check
+
+Test search with company names that exist only in synced client data or have different spelling between KeyCRM company and order buyer fields.
+
 ## 2026-07-17 — Sync Debt Refresh Fix
 
 ### Files Changed

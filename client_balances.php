@@ -261,6 +261,30 @@ function client_balances_search_filter(string $search, string $haystack): array
     ];
 }
 
+function client_balances_company_search_filter(string $search, string $haystack): array
+{
+    $normalizedSearch = function_exists('mb_strtolower')
+        ? mb_strtolower(trim($search), 'UTF-8')
+        : strtolower(trim($search));
+    $tokens = preg_split('/\s+/u', $normalizedSearch, -1, PREG_SPLIT_NO_EMPTY);
+    if (!$tokens) {
+        return ['sql' => '', 'params' => []];
+    }
+
+    $parts = [];
+    $params = [];
+    foreach (array_values($tokens) as $index => $token) {
+        $key = 'company_search_' . $index;
+        $parts[] = "{$haystack} LIKE :{$key}";
+        $params[$key] = '%' . $token . '%';
+    }
+
+    return [
+        'sql' => ' AND (' . implode(' AND ', $parts) . ')',
+        'params' => $params,
+    ];
+}
+
 function client_balances_blank_row(string $key, string $name = ''): array
 {
     return [
@@ -308,6 +332,64 @@ function client_balances_take_row(array &$rowsByKey, array $row): void
     if ($rowsByKey[$key]['manager_name'] === '' && !empty($row['manager_name'])) {
         $rowsByKey[$key]['manager_name'] = (string) $row['manager_name'];
     }
+}
+
+function client_balances_normalized_name(string $name): string
+{
+    $name = trim(preg_replace('/\s+/u', ' ', $name) ?: $name);
+    return function_exists('mb_strtolower') ? mb_strtolower($name, 'UTF-8') : strtolower($name);
+}
+
+function client_balances_merge_rows_by_name(array $rows): array
+{
+    $merged = [];
+    foreach ($rows as $row) {
+        $nameKey = client_balances_normalized_name((string) ($row['client_name'] ?? ''));
+        if ($nameKey === '') {
+            $nameKey = (string) ($row['client_key'] ?? uniqid('client_', true));
+        }
+        if (!isset($merged[$nameKey])) {
+            $merged[$nameKey] = $row;
+            continue;
+        }
+
+        foreach (['order_count', 'buyers_count', 'scope_active_month_count', 'active_month_count', 'lifetime_order_count', 'receivable_count', 'cash_count', 'undefined_payment_due_count'] as $field) {
+            $merged[$nameKey][$field] = (int) ($merged[$nameKey][$field] ?? 0) + (int) ($row[$field] ?? 0);
+        }
+        foreach (['sales_month', 'paid_by_order', 'unpaid_by_order', 'total_purchases', 'scope_purchases', 'receivable_total', 'cash_received'] as $field) {
+            $merged[$nameKey][$field] = (float) ($merged[$nameKey][$field] ?? 0) + (float) ($row[$field] ?? 0);
+        }
+        $merged[$nameKey]['largest_receivable'] = max((float) ($merged[$nameKey]['largest_receivable'] ?? 0), (float) ($row['largest_receivable'] ?? 0));
+        foreach (['manager_name', 'payment_due_date'] as $field) {
+            if ((string) ($merged[$nameKey][$field] ?? '') === '' && (string) ($row[$field] ?? '') !== '') {
+                $merged[$nameKey][$field] = (string) $row[$field];
+            }
+        }
+        foreach (['first_order_month'] as $field) {
+            $current = (string) ($merged[$nameKey][$field] ?? '');
+            $incoming = (string) ($row[$field] ?? '');
+            if ($current === '' || ($incoming !== '' && $incoming < $current)) {
+                $merged[$nameKey][$field] = $incoming;
+            }
+        }
+        foreach (['last_order_month', 'last_before_month'] as $field) {
+            $current = (string) ($merged[$nameKey][$field] ?? '');
+            $incoming = (string) ($row[$field] ?? '');
+            if ($incoming > $current) {
+                $merged[$nameKey][$field] = $incoming;
+            }
+        }
+        $merged[$nameKey]['buyers'] = array_values(array_unique(array_merge((array) ($merged[$nameKey]['buyers'] ?? []), (array) ($row['buyers'] ?? []))));
+        $dates = array_filter(array_merge(
+            explode('|||', (string) ($merged[$nameKey]['order_dates'] ?? '')),
+            explode('|||', (string) ($row['order_dates'] ?? ''))
+        ), static fn($date) => trim((string) $date) !== '');
+        $dates = array_values(array_unique($dates));
+        sort($dates);
+        $merged[$nameKey]['order_dates'] = implode('|||', $dates);
+    }
+
+    return array_values($merged);
 }
 
 function client_balances_split_buyers(?string $buyers): array
@@ -574,8 +656,116 @@ try {
         }
         $searchFilter = client_balances_search_filter($search, (string) $expr['search_haystack']);
         $searchSql = (string) $searchFilter['sql'];
+        $orderSearchSql = $searchSql;
         $managerSql = '';
         $searchParams = $searchFilter['params'];
+        $matchedCompanyIds = [];
+        $matchedCompanyNames = [];
+        if ($hasClientCompanies && $search !== '') {
+            $companyNameParts = [];
+            foreach (['display_name', 'keycrm_name', 'name', 'keycrm_title', 'title'] as $column) {
+                if (in_array($column, $clientCompanyColumns, true)) {
+                    $companyNameParts[] = "NULLIF(cc.{$column}, '')";
+                }
+            }
+            $companyNameExpr = $companyNameParts ? 'COALESCE(' . implode(', ', $companyNameParts) . ", CONCAT('Company #', cc.id))" : "CONCAT('Company #', cc.id)";
+            $companySearchFields = $companyNameParts;
+            foreach (['edrpou', 'phone', 'email'] as $column) {
+                if (in_array($column, $clientCompanyColumns, true)) {
+                    $companySearchFields[] = "cc.{$column}";
+                }
+            }
+            if (in_array('raw_json', $clientCompanyColumns, true)) {
+                $companySearchFields[] = 'cc.raw_json';
+            }
+            $companySearchFields[] = $companyNameExpr;
+            $companySearchHaystack = "LOWER(CONCAT_WS(' ', " . implode(', ', array_map(static fn($field) => "COALESCE(CAST({$field} AS CHAR), '')", $companySearchFields)) . "))";
+            $companySearchFilter = client_balances_company_search_filter($search, $companySearchHaystack);
+            $companyManagerParts = [];
+            foreach (['assigned_manager_name', 'keycrm_manager_name'] as $column) {
+                if (in_array($column, $clientCompanyColumns, true)) {
+                    $companyManagerParts[] = "NULLIF(cc.{$column}, '')";
+                }
+            }
+            foreach (['assigned_manager_keycrm_id', 'keycrm_manager_id'] as $column) {
+                if (in_array($column, $clientCompanyColumns, true)) {
+                    $companyManagerParts[] = "NULLIF(CONCAT('KeyCRM #', cc.{$column}), 'KeyCRM #')";
+                }
+            }
+            $companyManagerExpr = $companyManagerParts ? 'COALESCE(' . implode(', ', $companyManagerParts) . ", 'Без менеджера')" : "'Без менеджера'";
+            $companyScopeSql = '';
+            if (in_array('analytics_excluded', $clientCompanyColumns, true)) {
+                $companyScopeSql = $inactiveMode
+                    ? ' AND COALESCE(cc.analytics_excluded, 0) = 1'
+                    : ' AND COALESCE(cc.analytics_excluded, 0) = 0';
+            } elseif ($inactiveMode) {
+                $companyScopeSql = ' AND 1=0';
+            }
+            if ($companySearchFilter['sql'] !== '') {
+                $companyStmt = db()->prepare("
+                    SELECT
+                        cc.id,
+                        " . (in_array('keycrm_company_id', $clientCompanyColumns, true) ? 'cc.keycrm_company_id' : 'NULL') . " AS keycrm_company_id,
+                        {$companyNameExpr} AS client_name,
+                        {$companyManagerExpr} AS manager_name
+                    FROM db_client_companies cc
+                    WHERE 1=1
+                      {$companyScopeSql}
+                      {$companySearchFilter['sql']}
+                    ORDER BY {$companyNameExpr} ASC
+                    LIMIT 40
+                ");
+                $companyStmt->execute($companySearchFilter['params']);
+                foreach ($companyStmt->fetchAll() as $companyRow) {
+                    $companyName = trim((string) ($companyRow['client_name'] ?? ''));
+                    if ($companyName === '') {
+                        continue;
+                    }
+                    $companyKeycrmId = (int) ($companyRow['keycrm_company_id'] ?? 0);
+                    $companyKey = $companyKeycrmId > 0 ? 'company:' . $companyKeycrmId : 'company-name:' . $companyName;
+                    if ($companyKeycrmId > 0) {
+                        $matchedCompanyIds[] = $companyKeycrmId;
+                    }
+                    $matchedCompanyNames[] = $companyName;
+                    if (!isset($rowsByKey[$companyKey])) {
+                        $rowsByKey[$companyKey] = client_balances_blank_row($companyKey, $companyName);
+                    }
+                    $rowsByKey[$companyKey]['manager_name'] = (string) ($companyRow['manager_name'] ?? '');
+                }
+            }
+        }
+        if ($searchSql !== '' && ($matchedCompanyIds || $matchedCompanyNames)) {
+            $companyMatchParts = [];
+            if ($matchedCompanyIds && in_array('company_id', $orderColumns, true)) {
+                $idPlaceholders = [];
+                foreach (array_values(array_unique($matchedCompanyIds)) as $idx => $companyId) {
+                    $key = 'matched_company_id_' . $idx;
+                    $idPlaceholders[] = ':' . $key;
+                    $searchParams[$key] = (int) $companyId;
+                }
+                $companyMatchParts[] = 'o.company_id IN (' . implode(',', $idPlaceholders) . ')';
+            }
+            if ($matchedCompanyNames) {
+                $orderNameFields = [];
+                foreach (['company_name', 'client_name', 'buyer_name'] as $column) {
+                    if (in_array($column, $orderColumns, true)) {
+                        $orderNameFields[] = "NULLIF(o.{$column}, '')";
+                    }
+                }
+                if ($orderNameFields) {
+                    $namePlaceholders = [];
+                    foreach (array_values(array_unique($matchedCompanyNames)) as $idx => $companyName) {
+                        $key = 'matched_company_name_' . $idx;
+                        $namePlaceholders[] = ':' . $key;
+                        $searchParams[$key] = $companyName;
+                    }
+                    $companyMatchParts[] = 'COALESCE(' . implode(', ', $orderNameFields) . ') IN (' . implode(',', $namePlaceholders) . ')';
+                }
+            }
+            if ($companyMatchParts) {
+                $orderSearchSql = ' AND ((' . substr($searchSql, 5) . ') OR ' . implode(' OR ', $companyMatchParts) . ')';
+            }
+        }
         $orderDateExpr = in_array('ordered_at', $orderColumns, true) ? 'DATE(o.ordered_at)' : "CONCAT(o.order_month, '-01')";
         $hasOrderKeycrmId = in_array('keycrm_id', $orderColumns, true);
         $canJoinInvoiceDue = $hasInvoices
@@ -615,7 +805,7 @@ try {
               AND o.order_month <= :period_to_month
               AND {$notCanceled}
               {$clientScopeSql}
-              {$searchSql}
+              {$orderSearchSql}
               {$managerSql}
             GROUP BY client_key, client_name
         ");
@@ -666,7 +856,7 @@ try {
             {$expr['joins']}
             WHERE {$notCanceled}
               {$clientScopeSql}
-              {$searchSql}
+              {$orderSearchSql}
               {$managerSql}
             GROUP BY client_key, client_name
         ");
@@ -701,7 +891,7 @@ try {
             WHERE o.unpaid_amount_uah > 0
               AND {$notCanceled}
               {$clientScopeSql}
-              {$searchSql}
+              {$orderSearchSql}
               {$managerSql}
             GROUP BY client_key, client_name
         ");
@@ -727,7 +917,7 @@ try {
             {$expr['joins']}
             WHERE {$notCanceled}
               {$clientScopeSql}
-              {$searchSql}
+              {$orderSearchSql}
               {$managerSql}
             GROUP BY client_key, client_name
         ");
@@ -758,7 +948,7 @@ try {
             WHERE o.order_month IN ({$trendMonthPlaceholders})
               AND {$notCanceled}
               {$clientScopeSql}
-              {$searchSql}
+              {$orderSearchSql}
               {$managerSql}
             GROUP BY client_key, client_name, o.order_month
         ");
@@ -791,7 +981,7 @@ try {
                   AND {$activePayment}
                   AND {$notCanceled}
                   {$clientScopeSql}
-                  {$searchSql}
+                  {$orderSearchSql}
                   {$managerSql}
                 GROUP BY client_key, client_name
             ");
@@ -835,7 +1025,7 @@ try {
     $rowsByKey = [];
 }
 
-$allRows = array_values($rowsByKey);
+$allRows = client_balances_merge_rows_by_name(array_values($rowsByKey));
 foreach ($allRows as &$rowRef) {
     $trendInfo = client_balances_trend(
         $trend,
@@ -953,33 +1143,24 @@ $rows = array_slice($filteredRows, 0, 200);
     <?php endif; ?>
 
     <section class="panel dashboard-section client-command-toolbar">
-        <div class="client-work-note client-work-note--top">
-            <strong>Як читати клієнтів:</strong>
+        <details class="client-work-note client-work-note--top">
+            <summary>Як читати Health і сегменти</summary>
             <span>Health 80-100 - здорові відносини; 60-79 - потребує уваги; 40-59 - ризик; 0-39 - критичний стан.</span>
             <span>Health рахує стан відносин, а не історичну цінність. VIP не отримує бонус у Health автоматично.</span>
-            <span>Наприклад, 49 / 100 ризик означає: клієнт суттєво відхилився від звичного циклу або є невирішена проблема.</span>
             <span>VIP / ключові / основні / стартові рахуються за всі покупки за весь час.</span>
             <span>Борг не штрафує Health, якщо строк оплати не настав або строк не визначено.</span>
-        </div>
-        <div class="client-month-nav">
-            <a class="quarter-arrow" href="<?= e($prevMonthUrl) ?>" aria-label="Попередній період">‹</a>
-            <div>
-                <span class="label">Період</span>
-                <strong><?= e($periodFromMonth) ?> → <?= e($periodToMonth) ?></strong>
-            </div>
-            <a class="quarter-arrow" href="<?= e($nextMonthUrl) ?>" aria-label="Наступний період">›</a>
-        </div>
+        </details>
         <form class="client-balance-toolbar client-balance-toolbar--clients" method="get" action="<?= e(base_path('/client_balances.php')) ?>">
             <input type="hidden" name="scope" value="<?= e($valueScope) ?>">
             <input type="hidden" name="trend" value="<?= e($trendFilter) ?>">
             <input type="hidden" name="segment" value="<?= e($segmentFilter) ?>">
             <?php if ($inactiveMode): ?><input type="hidden" name="inactive" value="1"><?php endif; ?>
             <label>
-                <span>З місяця</span>
+                <span>Від</span>
                 <input type="month" name="from_month" value="<?= e($periodFromMonth) ?>">
             </label>
             <label>
-                <span>По місяць</span>
+                <span>До</span>
                 <input type="month" name="to_month" value="<?= e($periodToMonth) ?>">
             </label>
             <label class="client-balance-search">
@@ -998,6 +1179,11 @@ $rows = array_slice($filteredRows, 0, 200);
             </label>
             <button type="submit">Показати</button>
         </form>
+        <div class="client-period-shift">
+            <a href="<?= e($prevMonthUrl) ?>">← попередній період</a>
+            <span><?= e($periodFromMonth) ?> → <?= e($periodToMonth) ?></span>
+            <a href="<?= e($nextMonthUrl) ?>">наступний період →</a>
+        </div>
         <div class="client-filter-groups">
             <?php if ($canManageAnalytics): ?>
                 <div class="segmented-scroll client-trend-filter">

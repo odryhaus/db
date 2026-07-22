@@ -476,6 +476,8 @@ Decision:
 
 - The clients page uses a period (`from_month` → `to_month`) instead of a single month.
 - Company search must not depend on the company having orders in the final month of the period.
+- Company search should use local `db_client_companies` first, then enrich metrics from `db_orders`.
+- Client rows with the same normalized company name may be merged for CEO readability.
 - Health/trend calculations use the final month of the selected period as the reference point.
 - Sales and cash KPIs use the whole selected period.
 

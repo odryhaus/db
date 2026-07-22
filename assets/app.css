@@ -1728,7 +1728,8 @@ tr:last-child td {
 }
 
 .client-balance-toolbar--clients {
-    grid-template-columns: minmax(320px, 1fr) minmax(220px, 280px) auto;
+    grid-template-columns: minmax(130px, 160px) minmax(130px, 160px) minmax(260px, 1fr) minmax(200px, 260px) auto;
+    grid-column: 1 / -1;
 }
 
 .client-balance-toolbar label {
@@ -1778,16 +1779,15 @@ tr:last-child td {
 
 .client-command-toolbar {
     display: grid;
-    grid-template-columns: minmax(220px, auto) minmax(0, 1fr);
-    gap: 16px;
-    align-items: center;
+    gap: 12px;
+    align-items: stretch;
 }
 
 .client-filter-groups {
     grid-column: 1 / -1;
     display: grid;
-    gap: 6px;
-    margin-top: 10px;
+    gap: 8px;
+    margin-top: 2px;
 }
 
 .client-trend-filter {
@@ -1843,6 +1843,27 @@ tr:last-child td {
     background: var(--accent);
     border-color: var(--accent);
     color: #fff;
+}
+
+.client-period-shift {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: flex-end;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.client-period-shift a {
+    color: var(--text);
+    text-decoration: none;
+}
+
+.client-period-shift a:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
 }
 
 .client-command-list {
@@ -2155,9 +2176,7 @@ tr:last-child td {
 
 
 .client-work-note {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
+    display: block;
     margin-top: 14px;
     border-top: 1px solid var(--line);
     padding-top: 12px;
@@ -2166,20 +2185,24 @@ tr:last-child td {
     line-height: 1.35;
 }
 
+.client-work-note summary {
+    cursor: pointer;
+    color: var(--text);
+    font-weight: 800;
+}
+
 .client-work-note span {
-    border-radius: 0;
-    background: transparent;
-    padding: 0;
+    display: inline;
+    margin-right: 14px;
 }
 
 .client-work-note--top {
     grid-column: 1 / -1;
     margin-top: 0;
-    margin-bottom: 2px;
+    margin-bottom: 0;
     border-top: 0;
-    border-bottom: 1px solid var(--line);
     padding-top: 0;
-    padding-bottom: 12px;
+    padding-bottom: 0;
 }
 
 
