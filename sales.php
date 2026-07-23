@@ -119,7 +119,7 @@ function sales_redirect_back(): void
     exit;
 }
 
-function sales_debt_summary_html(array $orders, string $clientTitle, string $managerTitle, string $fromMonth, string $toMonth): string
+function sales_debt_summary_html(array $orders, array $orderItems, string $clientTitle, string $managerTitle, string $fromMonth, string $toMonth): string
 {
     $total = array_sum(array_map(static fn($order) => (float) ($order['unpaid_amount_uah'] ?? 0), $orders));
     $paid = array_sum(array_map(static fn($order) => (float) ($order['paid_amount_uah'] ?? 0), $orders));
@@ -135,7 +135,7 @@ function sales_debt_summary_html(array $orders, string $clientTitle, string $man
     <meta charset="utf-8">
     <style>
         @page { margin: 22mm 16mm; }
-        body { font-family: DejaVu Sans, Arial, sans-serif; color: #111; font-size: 11px; line-height: 1.35; }
+        body { font-family: DejaVu Sans, Arial, sans-serif; color: #111; font-size: 10.5px; line-height: 1.35; }
         h1 { font-size: 24px; margin: 0; letter-spacing: 0; }
         .top { display: table; width: 100%; margin-bottom: 22px; }
         .top-left, .top-right { display: table-cell; vertical-align: top; }
@@ -147,7 +147,7 @@ function sales_debt_summary_html(array $orders, string $clientTitle, string $man
         .metric span { display: block; color: #6b7280; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
         .metric strong { display: block; margin-top: 3px; font-size: 16px; }
         table { width: 100%; border-collapse: collapse; }
-        th, td { border-bottom: 1px solid #e5e7eb; padding: 8px 6px; text-align: left; vertical-align: top; }
+        th, td { border-bottom: 1px solid #e5e7eb; padding: 7px 6px; text-align: left; vertical-align: top; }
         th { color: #6b7280; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
         td:first-child, th:first-child { padding-left: 0; }
         td:last-child, th:last-child { padding-right: 0; }
@@ -155,6 +155,21 @@ function sales_debt_summary_html(array $orders, string $clientTitle, string $man
         .danger { color: #d92d20; font-weight: 800; }
         .muted { color: #6b7280; }
         .client { font-weight: 700; }
+        .order-block { page-break-inside: avoid; margin-top: 13px; border-top: 2px solid #111; }
+        .order-head { display: table; width: 100%; padding: 9px 0 7px; }
+        .order-head > div { display: table-cell; vertical-align: top; }
+        .order-head-right { text-align: right; }
+        .order-no { display: inline-block; padding: 3px 8px; border-radius: 999px; background: #f3f4f6; color: #111; font-weight: 800; }
+        .order-title { margin-top: 6px; font-size: 13px; font-weight: 800; }
+        .order-meta { margin-top: 2px; color: #6b7280; }
+        .order-totals { width: auto; margin-left: auto; }
+        .order-totals td { border: 0; padding: 1px 0 1px 14px; }
+        .order-totals td:first-child { color: #6b7280; text-align: right; }
+        .items-table th { border-top: 1px solid #111; }
+        .items-table td { font-size: 10px; }
+        .item-title { font-weight: 800; }
+        .item-note { margin-top: 2px; color: #6b7280; font-size: 9.5px; }
+        .empty-items { padding: 8px 0; color: #6b7280; border-top: 1px solid #e5e7eb; }
     </style>
 </head>
 <body>
@@ -176,47 +191,77 @@ function sales_debt_summary_html(array $orders, string $clientTitle, string $man
         <div class="metric"><span>Оплачено</span><strong><?= e(finance_money($paid)) ?></strong></div>
         <div class="metric"><span>Найбільший</span><strong><?= e(finance_money($largest)) ?></strong></div>
     </div>
-    <table>
-        <thead>
-        <tr>
-            <th>№</th>
-            <th>Дата</th>
-            <th>Клієнт / покупець</th>
-            <th>Менеджер</th>
-            <th class="num">Сума</th>
-            <th class="num">Оплачено</th>
-            <th class="num">Борг</th>
-        </tr>
-        </thead>
-        <tbody>
-        <?php foreach ($orders as $order): ?>
-            <?php
-            $companyName = trim((string) ($order['company_name'] ?? ''));
-            $buyerName = trim((string) ($order['buyer_name'] ?? ''));
-            $clientName = $companyName !== '' && $buyerName !== '' && $buyerName !== $companyName
-                ? $companyName . ' / ' . $buyerName
-                : ($companyName !== '' ? $companyName : ($buyerName !== '' ? $buyerName : ''));
-            ?>
-            <tr>
-                <td><?= e((string) $order['order_number']) ?></td>
-                <td><?= e(substr((string) $order['ordered_at'], 0, 10)) ?></td>
-                <td class="client"><?= e($clientName) ?></td>
-                <td class="muted"><?= e((string) (($order['manager_name'] ?? '') ?: 'Без менеджера')) ?></td>
-                <td class="num"><?= e(finance_money($order['total_amount_uah'])) ?></td>
-                <td class="num"><?= e(finance_money($order['paid_amount_uah'])) ?></td>
-                <td class="num danger"><?= e(finance_money($order['unpaid_amount_uah'])) ?></td>
-            </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
+    <?php foreach ($orders as $order): ?>
+        <?php
+        $companyName = trim((string) ($order['company_name'] ?? ''));
+        $buyerName = trim((string) ($order['buyer_name'] ?? ''));
+        $clientName = $companyName !== '' && $buyerName !== '' && $buyerName !== $companyName
+            ? $companyName . ' / ' . $buyerName
+            : ($companyName !== '' ? $companyName : ($buyerName !== '' ? $buyerName : 'Без клієнта'));
+        $items = $orderItems[(int) ($order['keycrm_id'] ?? 0)] ?? [];
+        ?>
+        <section class="order-block">
+            <div class="order-head">
+                <div>
+                    <span class="order-no">№ <?= e((string) $order['order_number']) ?></span>
+                    <div class="order-title"><?= e($clientName) ?></div>
+                    <div class="order-meta">
+                        <?= e(substr((string) ($order['ordered_at'] ?? ''), 0, 10)) ?>
+                        · <?= e((string) (($order['manager_name'] ?? '') ?: 'Без менеджера')) ?>
+                        · <?= e((string) ($order['status_name'] ?? '')) ?>
+                    </div>
+                </div>
+                <div class="order-head-right">
+                    <table class="order-totals">
+                        <tr><td>Сума</td><td class="num"><strong><?= e(finance_money($order['total_amount_uah'])) ?></strong></td></tr>
+                        <tr><td>Оплачено</td><td class="num"><?= e(finance_money($order['paid_amount_uah'])) ?></td></tr>
+                        <tr><td>Борг</td><td class="num danger"><?= e(finance_money($order['unpaid_amount_uah'])) ?></td></tr>
+                    </table>
+                </div>
+            </div>
+            <?php if ($items): ?>
+                <table class="items-table">
+                    <thead>
+                    <tr>
+                        <th>Позиція / опис</th>
+                        <th class="num">К-сть</th>
+                        <th class="num">Ціна</th>
+                        <th class="num">Сума</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($items as $item): ?>
+                        <?php
+                        $descriptionParts = array_filter([
+                            trim((string) ($item['properties_text'] ?? '')),
+                            trim((string) ($item['comment'] ?? '')),
+                        ], static fn(string $value): bool => $value !== '');
+                        ?>
+                        <tr>
+                            <td>
+                                <div class="item-title"><?= e((string) (($item['name'] ?? '') ?: 'Позиція')) ?></div>
+                                <?php if ($descriptionParts): ?><div class="item-note"><?= e(implode(' · ', $descriptionParts)) ?></div><?php endif; ?>
+                            </td>
+                            <td class="num"><?= e((string) ($item['quantity'] ?? '0')) ?> <?= e((string) (($item['unit'] ?? '') ?: 'шт')) ?></td>
+                            <td class="num"><?= e(finance_money($item['sale_price'] ?? $item['product_price'] ?? 0)) ?></td>
+                            <td class="num"><strong><?= e(finance_money($item['total_amount'] ?? 0)) ?></strong></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php else: ?>
+                <div class="empty-items">Позиції для цього замовлення ще не завантажені в локальну базу.</div>
+            <?php endif; ?>
+        </section>
+    <?php endforeach; ?>
 </body>
 </html><?php
     return (string) ob_get_clean();
 }
 
-function sales_download_debt_summary(array $orders, string $clientTitle, string $managerTitle, string $fromMonth, string $toMonth): void
+function sales_download_debt_summary(array $orders, array $orderItems, string $clientTitle, string $managerTitle, string $fromMonth, string $toMonth): void
 {
-    $html = sales_debt_summary_html($orders, $clientTitle, $managerTitle, $fromMonth, $toMonth);
+    $html = sales_debt_summary_html($orders, $orderItems, $clientTitle, $managerTitle, $fromMonth, $toMonth);
     $scopeForName = $managerTitle !== '' ? 'manager_' . $managerTitle : ($clientTitle !== '' ? $clientTitle : 'all');
     $safeScope = preg_replace('/[^A-Za-z0-9А-Яа-яЇїІіЄєҐґ_-]+/u', '_', $scopeForName);
     $fileName = 'DEBT_' . trim((string) $safeScope, '_') . '_' . $fromMonth . '_' . $toMonth . '.pdf';
@@ -675,7 +720,7 @@ $hiddenOrders = array_slice($orders, $orderPreviewLimit);
 
 if (isset($_GET['debt_pdf'])) {
     $debtPdfManagerTitle = $isManagerRole ? (string) ($managerScopeFilter['scope']['display_name'] ?? '') : $managerFilter;
-    sales_download_debt_summary($debtOrders, $clientTitle, $debtPdfManagerTitle, $periodFromMonth, $periodToMonth);
+    sales_download_debt_summary($debtOrders, $orderItems, $clientTitle, $debtPdfManagerTitle, $periodFromMonth, $periodToMonth);
 }
 
 ?><!doctype html>
@@ -751,7 +796,7 @@ if (isset($_GET['debt_pdf'])) {
                     <a class="<?= $statusFilter === 'inactive' ? 'active' : '' ?>" href="<?= e(base_path('/sales.php?' . sales_current_query(['status' => 'inactive', 'debt_pdf' => null]))) ?>">Виключені</a>
                 <?php endif; ?>
             </div>
-            <a class="button-secondary" href="<?= e(base_path('/sales.php?' . sales_current_query(['status' => 'debt', 'debt_pdf' => '1']))) ?>">PDF боргу</a>
+            <a class="button-secondary" href="<?= e(base_path('/sales.php?' . sales_current_query(['status' => 'debt', 'debt_pdf' => '1']))) ?>">PDF звірки з позиціями</a>
         </div>
     </section>
 

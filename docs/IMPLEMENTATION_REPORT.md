@@ -1431,3 +1431,24 @@ Manager matching depends on production data quality. Best mapping is `users.keyc
 ### Open Risk
 
 The manager can only see data that matches their local user record. `users.keycrm_id` is the reliable mapping; name/email fallback is only a temporary safety net.
+
+## 2026-07-23 — Detailed Debt Reconciliation PDF
+
+### What Changed
+
+- Updated `Продажі / Дебіторка` debt export button to `PDF звірки з позиціями`.
+- Debt reconciliation PDF now groups data by order and shows product/order item details:
+  - product name;
+  - CRM description/properties/comment if available;
+  - quantity and unit;
+  - unit price;
+  - line amount.
+- Kept the debt summary totals at the top: total debt, order count, order total, paid amount, largest debt.
+
+### Data Source
+
+The export reads order totals from `db_orders` and item lines from `db_order_items`.
+
+### Open Risk
+
+If a historical order was synced before product-item sync existed, the PDF will still show the order totals but will display a note that item positions are not yet loaded locally.
